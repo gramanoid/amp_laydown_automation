@@ -1,0 +1,358 @@
+﻿{
+  "_comment": "AMP Laydowns Automation - Master Configuration",
+  "_version": "2.0.0",
+  "_last_updated": "2025-10-07",
+  "_description": "Consolidated configuration file for all AMP automation settings",
+
+  "project": {
+    "name": "AMP Laydowns Automation",
+    "version": "1.0.0",
+    "description": "Excel to PowerPoint automation for Annual Marketing Plan presentations",
+    "author": "AMP Development Team",
+    "last_updated": "2025-10-07"
+  },
+
+  "paths": {
+    "input": {
+      "base": "input",
+      "excel": "input/excel",
+      "templates": "template",
+      "auto_create": true
+    },
+    "output": {
+      "base": "output",
+      "presentations": "output/presentations",
+      "reports": "output/reports",
+      "create_timestamped_folders": true,
+      "folder_pattern": "run_{timestamp}",
+      "timestamp_format": "%Y%m%d_%H%M%S",
+      "auto_create": true,
+      "max_runs_to_keep": 20
+    },
+    "logs": {
+      "base": "logs",
+      "production": "logs/production",
+      "errors": "logs/errors",
+      "performance": "logs/performance",
+      "auto_create": true,
+      "max_log_age_days": 30,
+      "auto_cleanup": true
+    },
+    "backup": {
+      "base": ".backup",
+      "auto_create": true,
+      "enabled": false
+    },
+    "temp": {
+      "base": "temp",
+      "auto_create": true,
+      "auto_cleanup_on_exit": true
+    }
+  },
+
+  "script": {
+    "name": "excel_to_ppt_v1_071025.py",
+    "location": "scripts/excel_to_ppt_v1_071025.py",
+    "description": "Main production script for Excel to PowerPoint conversion"
+  },
+
+  "template": {
+    "current": "Template_V4_FINAL_071025.pptx",
+    "location": "template/Template_V4_FINAL_071025.pptx",
+    "version": "v4",
+    "slide_size": {
+      "width_inches": 10.0,
+      "height_inches": 5.625,
+      "aspect_ratio": "16:9"
+    },
+    "validation": {
+      "check_exists": true,
+      "check_structure": true,
+      "required_shapes": ["Table Placeholder 1"]
+    }
+  },
+
+  "presentation": {
+    "table": {
+      "max_rows_per_slide": 17,
+      "split_strategy": "by_campaign",
+      "show_charts_on_splits": "all",
+      "show_carried_subtotal": true,
+      "continuation_indicator": " (Continued)",
+      "row_heights": {
+        "header_inches": 0.139,
+        "body_inches": 0.118,
+        "subtotal_inches": 0.139
+      },
+      "positioning": {
+        "left_inches": 0.184,
+        "top_inches": 0.812,
+        "width_inches": 9.299,
+        "height_inches": 2.338
+      }
+    },
+    "fonts": {
+      "default_family": "Calibri",
+      "fallback_family": "Arial",
+      "sizes_pt": {
+        "title": 11,
+        "header": 7.5,
+        "body": 7,
+        "chart_title": 8,
+        "chart_labels": 6,
+        "legend": 6,
+        "comments": 9
+      },
+      "validation": {
+        "check_availability": true,
+        "use_fallback_if_missing": true
+      }
+    },
+    "colors": {
+      "media_types": {
+        "television": {"rgb": [113, 212, 141], "hex": "#71D48D"},
+        "digital": {"rgb": [253, 242, 183], "hex": "#FDF2B7"},
+        "ooh": {"rgb": [255, 191, 0], "hex": "#FFBF00"},
+        "other": {"rgb": [176, 211, 255], "hex": "#B0D3FF"}
+      },
+      "ui_elements": {
+        "header_green": {"rgb": [56, 236, 4], "hex": "#38EC04"},
+        "table_gray": {"rgb": [191, 191, 191], "hex": "#BFBFBF"},
+        "subtotal_gray": {"rgb": [217, 217, 217], "hex": "#D9D9D9"},
+        "comments_gray": {"rgb": [242, 242, 242], "hex": "#F2F2F2"}
+      }
+    },
+    "charts": {
+      "positioning": {
+        "funnel_chart": {"left": 2.650, "top": 3.300, "width": 2.466, "height": 2.000},
+        "media_type_chart": {"left": 4.725, "top": 3.300, "width": 2.647, "height": 2.000},
+        "campaign_type_chart": {"left": 6.985, "top": 3.300, "width": 2.647, "height": 2.000}
+      },
+      "types": ["funnel_stage", "media_type", "campaign_type"],
+      "show_on_all_slides": true
+    },
+    "title": {
+      "positioning": {
+        "left_inches": 0.184,
+        "top_inches": 0.308,
+        "width_inches": 2.952,
+        "height_inches": 0.370
+      },
+      "format": "{market} - {brand}"
+    },
+    "comments": {
+      "title_positioning": {"left": 1.097, "top": 3.697, "width": 0.640, "height": 0.151},
+      "box_positioning": {"left": 0.184, "top": 3.886, "width": 2.466, "height": 1.489},
+      "default_text": "COMMENTS",
+      "enabled": true
+    }
+  },
+
+  "data": {
+    "excel": {
+      "required_columns": {
+        "geography": 10,
+        "brand": 17,
+        "media_type": 20,
+        "campaign_names": 83,
+        "campaign_type": 84,
+        "funnel_stage": 95,
+        "net_cost": 71,
+        "national_grp": 55,
+        "reach_1plus": 104,
+        "frequency": 105,
+        "year": 15,
+        "flight_start_date": 110
+      },
+      "column_mapping_notes": {
+        "_comment": "Column indices corrected on 2025-08-28",
+        "changes": [
+          "Campaign Names: 85 -> 83",
+          "Campaign Type: 86 -> 84",
+          "Funnel Stage: 97 -> 95",
+          "Net Cost: 73 -> 71",
+          "National GRP: 56 -> 55",
+          "Reach 1+: 106 -> 104",
+          "Frequency: 107 -> 105"
+        ]
+      },
+      "validation": {
+        "check_required_columns": true,
+        "min_rows": 1,
+        "max_file_size_mb": 500
+      }
+    },
+    "geography": {
+      "extraction_method": "hierarchical",
+      "separator": " | ",
+      "extract_position": "last",
+      "example": "Global | EMEA | MEA | Pakistan -> Pakistan"
+    },
+    "media_types": {
+      "recognized": ["Television", "TV", "Digital", "OOH", "Other", "Print", "Radio", "Cinema"],
+      "mapping": {
+        "Television": "TV",
+        "TV": "TV",
+        "Digital": "Digital",
+        "OOH": "OOH",
+        "Other": "Other",
+        "Print": "Other",
+        "Radio": "Other",
+        "Cinema": "Other"
+      }
+    },
+    "sorting": {
+      "slides_by": "total_investment",
+      "campaigns_by": "net_cost",
+      "order": "descending"
+    }
+  },
+
+  "processing": {
+    "max_errors": 15,
+    "continue_on_error": false,
+    "zero_threshold": 0.01,
+    "validation": {
+      "enabled": true,
+      "min_data_rows": 1,
+      "required_data_percentage": 40
+    }
+  },
+
+  "performance": {
+    "execution_time_limits_seconds": {
+      "data_loading": 30,
+      "data_processing": 60,
+      "presentation_generation": 120,
+      "chart_creation": 30,
+      "table_formatting": 45,
+      "slide_creation": 10,
+      "total_execution": 1800
+    },
+    "memory": {
+      "max_memory_mb": 2048,
+      "warning_threshold_mb": 1500,
+      "critical_threshold_mb": 2000,
+      "growth_threshold_mb": 500,
+      "leak_detection_mb": 100
+    },
+    "cpu": {
+      "max_cpu_percent": 85.0,
+      "warning_threshold_percent": 70.0,
+      "sustained_duration_seconds": 300.0
+    },
+    "monitoring": {
+      "enabled": true,
+      "log_to_file": true,
+      "track_operations": ["data_loading", "data_processing", "presentation_generation", "full_processing"]
+    },
+    "optimization": {
+      "enable_gc": true,
+      "gc_threshold": 100,
+      "enable_chunking": false,
+      "chunk_size": 10000
+    }
+  },
+
+  "logging": {
+    "level": "INFO",
+    "levels": {
+      "production": "INFO",
+      "development": "DEBUG",
+      "testing": "DEBUG"
+    },
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "console_output": true,
+    "file_output": true,
+    "filename_pattern": "amp_automation_{timestamp}.log",
+    "max_log_file_size_mb": 50,
+    "backup_count": 5,
+    "log_to_separate_files": {
+      "errors": true,
+      "performance": true
+    }
+  },
+
+  "output": {
+    "filename": {
+      "pattern": "AMP_Presentation_{market}_{brand}_{timestamp}.pptx",
+      "timestamp_format": "%Y%m%d_%H%M%S",
+      "sanitize_names": true,
+      "max_length": 255
+    },
+    "location": {
+      "use_timestamped_folders": true,
+      "create_subfolder_per_run": true,
+      "organize_by_date": false
+    },
+    "backup": {
+      "create_backup": false,
+      "backup_existing": false
+    },
+    "metadata": {
+      "save_metadata_json": true,
+      "include_processing_stats": true,
+      "include_data_summary": true
+    }
+  },
+
+  "error_handling": {
+    "continue_on_non_critical_errors": true,
+    "max_consecutive_errors": 5,
+    "log_full_traceback": true,
+    "create_error_report": true,
+    "error_report_location": "logs/errors"
+  },
+
+  "features": {
+    "table_splitting": true,
+    "geography_processing": true,
+    "tv_metrics": true,
+    "chart_generation": true,
+    "investment_sorting": true,
+    "continuation_slides": true,
+    "comments_section": true,
+    "legend_generation": true
+  },
+
+  "platform": {
+    "current": "windows",
+    "font_fallback_enabled": true,
+    "path_normalization": true,
+    "case_sensitive": false,
+    "max_path_length": 260,
+    "long_path_support_required": true
+  },
+
+  "defaults": {
+    "encoding": "utf-8",
+    "decimal_precision": 2,
+    "date_format": "%Y-%m-%d",
+    "currency_symbol": "$",
+    "thousands_separator": ",",
+    "decimal_separator": "."
+  },
+
+  "startup": {
+    "verify_dependencies": true,
+    "check_paths": true,
+    "create_missing_folders": true,
+    "validate_template": true,
+    "cleanup_temp_on_start": false,
+    "show_banner": true
+  },
+
+  "shutdown": {
+    "cleanup_temp_files": true,
+    "save_session_log": true,
+    "create_final_report": false
+  },
+
+  "development": {
+    "debug_mode": false,
+    "verbose_output": false,
+    "save_intermediate_data": false,
+    "skip_validation": false,
+    "dry_run_mode": false
+  }
+}
