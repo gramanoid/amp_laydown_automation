@@ -14,18 +14,224 @@ import traceback
 from datetime import datetime
 import pandas as pd
 import numpy as np
+import ast, pathlib, inspect, textwrap
+from pathlib import Path
+
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR, MSO_AUTO_SIZE, MSO_VERTICAL_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE_TYPE, PP_PLACEHOLDER
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_COLOR_TYPE, MSO_FILL, MSO_FILL_TYPE
-from pptx.chart.data import CategoryChartData
-from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_LABEL_POSITION
-import argparse
-import sys
-import ast, pathlib, inspect, textwrap
-from pathlib import Path
+
+from amp_automation.config import Config, load_master_config
+from amp_automation.data import (
+    get_month_specific_tv_metrics,
+    load_and_prepare_data as modular_load_and_prepare_data,
+)
+from amp_automation.presentation.charts import (
+    ChartStyleContext,
+    add_pie_chart as presentation_add_pie_chart,
+    prepare_campaign_type_chart_data,
+    prepare_funnel_chart_data,
+    prepare_media_type_chart_data,
+)
+from amp_automation.presentation.tables import (
+    CellStyleContext,
+    TableLayout,
+    add_and_style_table as presentation_add_and_style_table,
+    ensure_font_consistency as _ensure_font_consistency,
+)
+from amp_automation.utils.media import normalize_media_type
+
+def _rgb_color(config_value, fallback):
+    try:
+        r, g, b = config_value
+        return RGBColor(int(r), int(g), int(b))
+    except (TypeError, ValueError):  # pragma: no cover - defensive fallback
+        return RGBColor(*fallback)
+
+
+def _coord_from_config(config_mapping, fallback):
+    return {
+        "left": float(config_mapping.get("left_inches", config_mapping.get("left", fallback["left"]))),
+        "top": float(config_mapping.get("top_inches", config_mapping.get("top", fallback["top"]))),
+        "width": float(config_mapping.get("width_inches", config_mapping.get("width", fallback["width"]))),
+        "height": float(config_mapping.get("height_inches", config_mapping.get("height", fallback["height"]))),
+}
+
+
+MARGIN_EMU_LR = 45720  # Approx Pt(3.6), from template analysis for left/right cell margins
+ZERO_THRESHOLD = 0.01  # Values below this (absolute) are treated as zero for display/coloring
+
+
+def _initialize_from_config(config: Config) -> None:
+    global MASTER_CONFIG
+    global presentation_config, fonts_config, font_sizes
+    global colors_config, media_colors_config, ui_colors_config
+    global table_config, row_heights_config, table_position_config
+    global comments_config, comments_title_pos_config, comments_box_pos_config
+    global title_position_config, charts_config, chart_positions_config
+    global TABLE_PLACEHOLDER_NAME
+    global CLR_BLACK, CLR_WHITE, CLR_LIGHT_GRAY_TEXT, CLR_TABLE_GRAY, CLR_HEADER_GREEN
+    global CLR_COMMENTS_GRAY, CLR_SUBTOTAL_GRAY
+    global CLR_TELEVISION, CLR_DIGITAL, CLR_OOH, CLR_OTHER
+    global DEFAULT_FONT_NAME, FONT_SIZE_HEADER, FONT_SIZE_BODY
+    global FONT_SIZE_CHART_TITLE, FONT_SIZE_CHART_LABELS
+    global FONT_SIZE_TITLE, FONT_SIZE_LEGEND, FONT_SIZE_COMMENTS
+    global TABLE_ROW_HEIGHT_HEADER, TABLE_ROW_HEIGHT_BODY, TABLE_ROW_HEIGHT_SUBTOTAL
+    global TABLE_COLUMN_WIDTHS, TABLE_TOP_OVERRIDE
+    global TABLE_CELL_STYLE_CONTEXT
+    global CHART_STYLE_CONTEXT, CHART_COLOR_MAPPING, CHART_COLOR_CYCLE
+    global MAX_ROWS_PER_SLIDE, SPLIT_STRATEGY, SHOW_CHARTS_ON_SPLITS, SHOW_CARRIED_SUBTOTAL, CONTINUATION_INDICATOR
+    global ELEMENT_COORDINATES
+
+    MASTER_CONFIG = config
+
+    presentation_config = MASTER_CONFIG.section("presentation")
+    fonts_config = presentation_config.get("fonts", {})
+    font_sizes = fonts_config.get("sizes_pt", {})
+    colors_config = presentation_config.get("colors", {})
+    media_colors_config = colors_config.get("media_types", {})
+    ui_colors_config = colors_config.get("ui_elements", {})
+    table_config = presentation_config.get("table", {})
+    row_heights_config = table_config.get("row_heights", {})
+    table_position_config = table_config.get("positioning", {})
+    comments_config = presentation_config.get("comments", {})
+    comments_title_pos_config = comments_config.get("title_positioning", {})
+    comments_box_pos_config = comments_config.get("box_positioning", {})
+    title_position_config = presentation_config.get("title", {}).get("positioning", {})
+    charts_config = presentation_config.get("charts", {})
+    chart_positions_config = charts_config.get("positioning", {})
+
+    TABLE_PLACEHOLDER_NAME = table_config.get("placeholder_name", "Table Placeholder 1")
+
+    CLR_BLACK = RGBColor(0, 0, 0)
+    CLR_WHITE = RGBColor(255, 255, 255)
+    CLR_LIGHT_GRAY_TEXT = _rgb_color(ui_colors_config.get("light_gray_text", {}).get("rgb"), (191, 191, 191))
+    CLR_TABLE_GRAY = _rgb_color(ui_colors_config.get("table_gray", {}).get("rgb"), (191, 191, 191))
+    CLR_HEADER_GREEN = _rgb_color(ui_colors_config.get("header_green", {}).get("rgb"), (56, 236, 4))
+    CLR_COMMENTS_GRAY = _rgb_color(ui_colors_config.get("comments_gray", {}).get("rgb"), (242, 242, 242))
+    CLR_SUBTOTAL_GRAY = _rgb_color(ui_colors_config.get("subtotal_gray", {}).get("rgb"), (217, 217, 217))
+
+    CLR_TELEVISION = _rgb_color(media_colors_config.get("television", {}).get("rgb"), (113, 212, 141))
+    CLR_DIGITAL = _rgb_color(media_colors_config.get("digital", {}).get("rgb"), (253, 242, 183))
+    CLR_OOH = _rgb_color(media_colors_config.get("ooh", {}).get("rgb"), (255, 191, 0))
+    CLR_OTHER = _rgb_color(media_colors_config.get("other", {}).get("rgb"), (176, 211, 255))
+
+    DEFAULT_FONT_NAME = fonts_config.get("default_family", "Calibri")
+    FONT_SIZE_HEADER = Pt(float(font_sizes.get("header", 7.5)))
+    FONT_SIZE_BODY = Pt(float(font_sizes.get("body", 7.0)))
+    FONT_SIZE_CHART_TITLE = Pt(float(font_sizes.get("chart_title", 8.0)))
+    FONT_SIZE_CHART_LABELS = Pt(float(font_sizes.get("chart_labels", 6.0)))
+    FONT_SIZE_TITLE = Pt(float(font_sizes.get("title", 11.0)))
+    FONT_SIZE_LEGEND = Pt(float(font_sizes.get("legend", 6.0)))
+    FONT_SIZE_COMMENTS = Pt(float(font_sizes.get("comments", 9.0)))
+
+    TABLE_ROW_HEIGHT_HEADER = Pt(float(row_heights_config.get("header_inches", 0.139)) * 72)
+    TABLE_ROW_HEIGHT_BODY = Pt(float(row_heights_config.get("body_inches", 0.118)) * 72)
+    TABLE_ROW_HEIGHT_SUBTOTAL = Pt(float(row_heights_config.get("subtotal_inches", 0.139)) * 72)
+    TABLE_COLUMN_WIDTHS = [
+        Inches(0.65),
+        Inches(0.50),
+        Inches(0.35),
+        Inches(0.43),
+        Inches(0.35),
+        Inches(0.40),
+        Inches(0.72),
+    ] + [Inches(0.375)] * 16
+    TABLE_TOP_OVERRIDE = Inches(float(table_position_config.get("top_inches", 0.812)))
+
+    TABLE_CELL_STYLE_CONTEXT = CellStyleContext(
+        margin_left_right_pt=3.6,
+        margin_emu_lr=MARGIN_EMU_LR,
+        default_font_name=DEFAULT_FONT_NAME,
+        font_size_header=FONT_SIZE_HEADER,
+        font_size_body=FONT_SIZE_BODY,
+        color_black=CLR_BLACK,
+        color_light_gray_text=CLR_LIGHT_GRAY_TEXT,
+        color_table_gray=CLR_TABLE_GRAY,
+        color_header_green=CLR_HEADER_GREEN,
+        color_subtotal_gray=CLR_SUBTOTAL_GRAY,
+        color_tv=CLR_TELEVISION,
+        color_digital=CLR_DIGITAL,
+        color_ooh=CLR_OOH,
+        color_other=CLR_OTHER,
+    )
+
+    CHART_STYLE_CONTEXT = ChartStyleContext(
+        font_name=DEFAULT_FONT_NAME,
+        title_font_size=FONT_SIZE_CHART_TITLE,
+        label_font_size=FONT_SIZE_CHART_LABELS,
+        font_color=CLR_BLACK,
+    )
+
+    CHART_COLOR_MAPPING = {
+        "Television": CLR_TELEVISION,
+        "Digital": CLR_DIGITAL,
+        "OOH": CLR_OOH,
+        "Other": CLR_OTHER,
+        "Awareness": CLR_TELEVISION,
+        "Consideration": CLR_BLACK,
+        "Purchase": CLR_OOH,
+        "Always On": CLR_TELEVISION,
+        "Brand": CLR_DIGITAL,
+        "Product": CLR_OOH,
+    }
+
+    CHART_COLOR_CYCLE = [CLR_TELEVISION, CLR_DIGITAL, CLR_OOH, CLR_OTHER]
+
+    MAX_ROWS_PER_SLIDE = int(table_config.get("max_rows_per_slide", 17))
+    SPLIT_STRATEGY = table_config.get("split_strategy", "by_campaign")
+    SHOW_CHARTS_ON_SPLITS = table_config.get("show_charts_on_splits", "all")
+    SHOW_CARRIED_SUBTOTAL = bool(table_config.get("show_carried_subtotal", True))
+    CONTINUATION_INDICATOR = table_config.get("continuation_indicator", " (Continued)")
+
+    ELEMENT_COORDINATES = {
+        "title": _coord_from_config(
+            title_position_config,
+            {"left": 0.184, "top": 0.308, "width": 2.952, "height": 0.370},
+        ),
+        "main_table": _coord_from_config(
+            table_position_config,
+            {"left": 0.184, "top": 0.812, "width": 9.299, "height": 2.338},
+        ),
+        "comments_title": _coord_from_config(
+            comments_title_pos_config,
+            {"left": 1.097, "top": 3.697, "width": 0.640, "height": 0.151},
+        ),
+        "comments_box": _coord_from_config(
+            comments_box_pos_config,
+            {"left": 0.184, "top": 3.886, "width": 2.466, "height": 1.489},
+        ),
+        "chart_1": _coord_from_config(
+            chart_positions_config.get("funnel_chart", {}),
+            {"left": 2.650, "top": 3.300, "width": 2.466, "height": 2.000},
+        ),
+        "chart_2": _coord_from_config(
+            chart_positions_config.get("media_type_chart", {}),
+            {"left": 4.725, "top": 3.300, "width": 2.647, "height": 2.000},
+        ),
+        "chart_3": _coord_from_config(
+            chart_positions_config.get("campaign_type_chart", {}),
+            {"left": 6.985, "top": 3.300, "width": 2.647, "height": 2.000},
+        ),
+        "tv_legend_color": {"left": 6.645, "top": 0.438, "width": 0.259, "height": 0.139},
+        "tv_legend_text": {"left": 6.841, "top": 0.416, "width": 0.612, "height": 0.219},
+        "digital_legend_color": {"left": 7.463, "top": 0.449, "width": 0.259, "height": 0.139},
+        "digital_legend_text": {"left": 7.658, "top": 0.416, "width": 0.467, "height": 0.219},
+        "ooh_legend_color": {"left": 8.196, "top": 0.449, "width": 0.259, "height": 0.139},
+        "ooh_legend_text": {"left": 8.392, "top": 0.416, "width": 0.393, "height": 0.219},
+        "other_legend_color": {"left": 8.866, "top": 0.449, "width": 0.259, "height": 0.139},
+        "other_legend_text": {"left": 9.061, "top": 0.416, "width": 0.439, "height": 0.219},
+    }
+
+
+def configure(config: Config) -> None:
+    _initialize_from_config(config)
+
+
+_initialize_from_config(load_master_config())
 
 # Define the constant we need (EXACTLY = 1 is the standard value)
 class WD_ROW_HEIGHT_RULE:
@@ -33,10 +239,6 @@ class WD_ROW_HEIGHT_RULE:
     EXACTLY = 1
 
 TABLE_HEIGHT_RULE_AVAILABLE = True
-
-# --- OXML-derived Constants for Cell Styling ---
-MARGIN_EMU_LR = 45720  # Approx Pt(3.6), from template analysis for left/right cell margins
-ZERO_THRESHOLD = 0.01  # Values below this (absolute) are treated as zero for display/coloring
 
 # --- Constants for Named Shapes (from Template_Refactoring_Guide.md) ---
 SHAPE_NAME_TITLE = "TitlePlaceholder"
@@ -59,66 +261,135 @@ SHAPE_NAME_OTHER_LEGEND_TEXT = "OtherLegendText"
 TABLE_PLACEHOLDER_NAME = "Table Placeholder 1"
 
 # --- Color Constants (QA checklist verified RGB values) ---
-CLR_TELEVISION = RGBColor(113, 212, 141)      # #71D48D - TV swatch/rows
-CLR_DIGITAL = RGBColor(253, 242, 183)         # #FDF2B7 - Digital swatch/rows  
-CLR_OOH = RGBColor(255, 191, 0)               # #FFBF00 - OOH swatch/rows
-CLR_OTHER = RGBColor(176, 211, 255)           # #B0D3FF - Other swatch/rows
-CLR_TABLE_GRAY = RGBColor(191, 191, 191)      # Light grey for headers
-CLR_HEADER_GREEN = RGBColor(56, 236, 4)       # #38EC04 - Title bar bright green
-CLR_COMMENTS_GRAY = RGBColor(242, 242, 242)   # #F2F2F2 - Comments box fill
-CLR_SUBTOTAL_GRAY = RGBColor(217, 217, 217)   # #D9D9D9 - Subtotal row
 CLR_BLACK = RGBColor(0, 0, 0)
 CLR_WHITE = RGBColor(255, 255, 255)
-CLR_LIGHT_GRAY_TEXT = RGBColor(191, 191, 191)  # Light grey for empty cell dashes
+CLR_LIGHT_GRAY_TEXT = _rgb_color(ui_colors_config.get("light_gray_text", {}).get("rgb"), (191, 191, 191))
+CLR_TABLE_GRAY = _rgb_color(ui_colors_config.get("table_gray", {}).get("rgb"), (191, 191, 191))
+CLR_HEADER_GREEN = _rgb_color(ui_colors_config.get("header_green", {}).get("rgb"), (56, 236, 4))
+CLR_COMMENTS_GRAY = _rgb_color(ui_colors_config.get("comments_gray", {}).get("rgb"), (242, 242, 242))
+CLR_SUBTOTAL_GRAY = _rgb_color(ui_colors_config.get("subtotal_gray", {}).get("rgb"), (217, 217, 217))
+
+CLR_TELEVISION = _rgb_color(media_colors_config.get("television", {}).get("rgb"), (113, 212, 141))
+CLR_DIGITAL = _rgb_color(media_colors_config.get("digital", {}).get("rgb"), (253, 242, 183))
+CLR_OOH = _rgb_color(media_colors_config.get("ooh", {}).get("rgb"), (255, 191, 0))
+CLR_OTHER = _rgb_color(media_colors_config.get("other", {}).get("rgb"), (176, 211, 255))
 
 # --- PIXEL-PERFECT FONT CONSTANTS ---
-DEFAULT_FONT_NAME = "Calibri"           # Standard font for all text
-FONT_SIZE_HEADER = Pt(7.5)             # Header rows - 7.5pt as requested
-FONT_SIZE_BODY = Pt(7)                 # Body rows - 7pt as requested
-FONT_SIZE_CHART_TITLE = Pt(8)          # Chart titles - small, non-bold
-FONT_SIZE_CHART_LABELS = Pt(6)         # Chart data labels - minimum 6pt
+DEFAULT_FONT_NAME = fonts_config.get("default_family", "Calibri")
+FONT_SIZE_HEADER = Pt(float(font_sizes.get("header", 7.5)))
+FONT_SIZE_BODY = Pt(float(font_sizes.get("body", 7.0)))
+FONT_SIZE_CHART_TITLE = Pt(float(font_sizes.get("chart_title", 8.0)))
+FONT_SIZE_CHART_LABELS = Pt(float(font_sizes.get("chart_labels", 6.0)))
+
+TABLE_ROW_HEIGHT_HEADER = Pt(float(row_heights_config.get("header_inches", 0.139)) * 72)
+TABLE_ROW_HEIGHT_BODY = Pt(float(row_heights_config.get("body_inches", 0.118)) * 72)
+TABLE_ROW_HEIGHT_SUBTOTAL = Pt(float(row_heights_config.get("subtotal_inches", 0.139)) * 72)
+TABLE_COLUMN_WIDTHS = [
+    Inches(0.65),
+    Inches(0.50),
+    Inches(0.35),
+    Inches(0.43),
+    Inches(0.35),
+    Inches(0.40),
+    Inches(0.72),
+] + [Inches(0.375)] * 16
+TABLE_TOP_OVERRIDE = Inches(float(table_position_config.get("top_inches", 0.812)))
+
+TABLE_CELL_STYLE_CONTEXT = CellStyleContext(
+    margin_left_right_pt=3.6,
+    margin_emu_lr=MARGIN_EMU_LR,
+    default_font_name=DEFAULT_FONT_NAME,
+    font_size_header=FONT_SIZE_HEADER,
+    font_size_body=FONT_SIZE_BODY,
+    color_black=CLR_BLACK,
+    color_light_gray_text=CLR_LIGHT_GRAY_TEXT,
+    color_table_gray=CLR_TABLE_GRAY,
+    color_header_green=CLR_HEADER_GREEN,
+    color_subtotal_gray=CLR_SUBTOTAL_GRAY,
+    color_tv=CLR_TELEVISION,
+    color_digital=CLR_DIGITAL,
+    color_ooh=CLR_OOH,
+    color_other=CLR_OTHER,
+)
+
+CHART_STYLE_CONTEXT = ChartStyleContext(
+    font_name=DEFAULT_FONT_NAME,
+    title_font_size=FONT_SIZE_CHART_TITLE,
+    label_font_size=FONT_SIZE_CHART_LABELS,
+    font_color=CLR_BLACK,
+)
+
+CHART_COLOR_MAPPING = {
+    "Television": CLR_TELEVISION,
+    "Digital": CLR_DIGITAL,
+    "OOH": CLR_OOH,
+    "Other": CLR_OTHER,
+    "Awareness": CLR_TELEVISION,
+    "Consideration": CLR_BLACK,
+    "Purchase": CLR_OOH,
+    "Always On": CLR_TELEVISION,
+    "Brand": CLR_DIGITAL,
+    "Product": CLR_OOH,
+}
+
+CHART_COLOR_CYCLE = [CLR_TELEVISION, CLR_DIGITAL, CLR_OOH, CLR_OTHER]
+
+FONT_SIZE_TITLE = Pt(float(font_sizes.get("title", 11.0)))
+FONT_SIZE_LEGEND = Pt(float(font_sizes.get("legend", 6.0)))
+FONT_SIZE_COMMENTS = Pt(float(font_sizes.get("comments", 9.0)))
 
 # --- TABLE SPLITTING CONSTANTS ---
 # Calculate based on available height: 2.34" total height, with header at 0.139" and body rows at 0.118"
 # Available for body rows: 2.34 - 0.139 = 2.201"
 # Number of body rows that fit: 2.201 / 0.118 = ~18.6, so 18 body rows + 1 header = 19 total
 # Reduced to 17 to ensure proper fit with margins and prevent overflow
-MAX_ROWS_PER_SLIDE = 17                # Maximum rows per slide (including header and total)
-SPLIT_STRATEGY = "by_campaign"         # Split by complete campaigns
-SHOW_CHARTS_ON_SPLITS = "all"          # Show charts on all split slides
-SHOW_CARRIED_SUBTOTAL = True           # Show carried forward subtotal on continuation slides
-CONTINUATION_INDICATOR = " (Continued)" # Text to append to campaign names on split slides
+MAX_ROWS_PER_SLIDE = int(table_config.get("max_rows_per_slide", 17))
+SPLIT_STRATEGY = table_config.get("split_strategy", "by_campaign")
+SHOW_CHARTS_ON_SPLITS = table_config.get("show_charts_on_splits", "all")
+SHOW_CARRIED_SUBTOTAL = bool(table_config.get("show_carried_subtotal", True))
+CONTINUATION_INDICATOR = table_config.get("continuation_indicator", " (Continued)")
 
 # --- GEOSPATIAL 2D COORDINATE SYSTEM ---
 # Precise positioning for 10" × 5.625" PowerPoint slide (FINAL QA VERIFIED)
 # Canvas: 16:9 aspect ratio with origin (0,0) at top-left corner
 # All coordinates verified against "Egypt - Centrum" reference slide + Final QA checklist
 ELEMENT_COORDINATES = {
-    # Title bar - FINAL QA: exactly 2.952 in width (ends at X=3.136)
-    'title': {'left': 0.184, 'top': 0.308, 'width': 2.952, 'height': 0.370},
-    
-    # Main data table - Height limited to stay above COMMENTS/charts (Y=3.300 - 0.15" gap = 3.150 max bottom)
-    # With top at 0.812, max height = 3.150 - 0.812 = 2.338"
-    'main_table': {'left': 0.184, 'top': 0.812, 'width': 9.299, 'height': 2.338},
-    
-    # Comments block - coordinates verified
-    'comments_title': {'left': 1.097, 'top': 3.697, 'width': 0.640, 'height': 0.151},
-    'comments_box': {'left': 0.184, 'top': 3.886, 'width': 2.466, 'height': 1.489},
-    
-    # Pie charts - FINAL QA: Y=3.300 (moved up 0.20" from 3.500), titles clear table by ≥0.15"
-    'chart_1': {'left': 2.650, 'top': 3.300, 'width': 2.466, 'height': 2.000},  # Funnel
-    'chart_2': {'left': 4.725, 'top': 3.300, 'width': 2.647, 'height': 2.000},  # Media Type
-    'chart_3': {'left': 6.985, 'top': 3.300, 'width': 2.647, 'height': 2.000},  # Campaign Type
-    
-    # Legend strip - FINAL QA: labels baseline Y=0.416 (nudged up 0.02"), first swatch X=6.645
-    'tv_legend_color': {'left': 6.645, 'top': 0.438, 'width': 0.259, 'height': 0.139},
-    'tv_legend_text': {'left': 6.841, 'top': 0.416, 'width': 0.612, 'height': 0.219},  # FINAL QA: Y=0.416 exact
-    'digital_legend_color': {'left': 7.463, 'top': 0.449, 'width': 0.259, 'height': 0.139},
-    'digital_legend_text': {'left': 7.658, 'top': 0.416, 'width': 0.467, 'height': 0.219},  # FINAL QA: Y=0.416 exact
-    'ooh_legend_color': {'left': 8.196, 'top': 0.449, 'width': 0.259, 'height': 0.139},
-    'ooh_legend_text': {'left': 8.392, 'top': 0.416, 'width': 0.393, 'height': 0.219},  # FINAL QA: Y=0.416 exact
-    'other_legend_color': {'left': 8.866, 'top': 0.449, 'width': 0.259, 'height': 0.139},
-    'other_legend_text': {'left': 9.061, 'top': 0.416, 'width': 0.439, 'height': 0.219}  # FINAL QA: Y=0.416 exact
+    "title": _coord_from_config(
+        title_position_config,
+        {"left": 0.184, "top": 0.308, "width": 2.952, "height": 0.370},
+    ),
+    "main_table": _coord_from_config(
+        table_position_config,
+        {"left": 0.184, "top": 0.812, "width": 9.299, "height": 2.338},
+    ),
+    "comments_title": _coord_from_config(
+        comments_title_pos_config,
+        {"left": 1.097, "top": 3.697, "width": 0.640, "height": 0.151},
+    ),
+    "comments_box": _coord_from_config(
+        comments_box_pos_config,
+        {"left": 0.184, "top": 3.886, "width": 2.466, "height": 1.489},
+    ),
+    "chart_1": _coord_from_config(
+        chart_positions_config.get("funnel_chart", {}),
+        {"left": 2.650, "top": 3.300, "width": 2.466, "height": 2.000},
+    ),
+    "chart_2": _coord_from_config(
+        chart_positions_config.get("media_type_chart", {}),
+        {"left": 4.725, "top": 3.300, "width": 2.647, "height": 2.000},
+    ),
+    "chart_3": _coord_from_config(
+        chart_positions_config.get("campaign_type_chart", {}),
+        {"left": 6.985, "top": 3.300, "width": 2.647, "height": 2.000},
+    ),
+    "tv_legend_color": {"left": 6.645, "top": 0.438, "width": 0.259, "height": 0.139},
+    "tv_legend_text": {"left": 6.841, "top": 0.416, "width": 0.612, "height": 0.219},
+    "digital_legend_color": {"left": 7.463, "top": 0.449, "width": 0.259, "height": 0.139},
+    "digital_legend_text": {"left": 7.658, "top": 0.416, "width": 0.467, "height": 0.219},
+    "ooh_legend_color": {"left": 8.196, "top": 0.449, "width": 0.259, "height": 0.139},
+    "ooh_legend_text": {"left": 8.392, "top": 0.416, "width": 0.393, "height": 0.219},
+    "other_legend_color": {"left": 8.866, "top": 0.449, "width": 0.259, "height": 0.139},
+    "other_legend_text": {"left": 9.061, "top": 0.416, "width": 0.439, "height": 0.219},
 }
 
 def get_element_position(element_name):
@@ -143,54 +414,7 @@ def get_element_position(element_name):
         'height': Inches(coords['height'])
     }
 
-# --- Font Constants (FINAL QA-verified specifications) ---
-FONT_SIZE_TITLE = Pt(11)      # Updated: Calibri 11pt bold for title
-FONT_SIZE_LEGEND = Pt(6)      # FINAL QA: Calibri 6pt for legend labels (was 7pt)
-FONT_SIZE_COMMENTS = Pt(9)    # FINAL QA: Calibri 9pt bold for "COMMENTS" heading
-
-# PRIORITY 3: Enhanced Font System with validation and fallbacks
-FALLBACK_FONT_NAME = "Arial"  # Fallback if Calibri unavailable
-FONT_VALIDATION_ENABLED = True  # Enable font validation checks
-
-# --- Logging Setup ---
-def setup_logging(log_path_base="excel_to_ppt_v2_log"):
-    """Sets up logging to file and console."""
-    # Create a timestamped log file name
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = f"{log_path_base}_{timestamp}.log"
-
-    # Get the root logger
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)  # Set root logger to DEBUG
-
-    # Clear existing handlers (if any from previous runs in the same session, e.g. in a notebook)
-    if logger.hasHandlers():
-        logger.handlers.clear()
-
-    # File Handler - logs INFO and up (reduced from DEBUG for smaller log files)
-    fh = logging.FileHandler(log_file)
-    fh.setLevel(logging.INFO)
-    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s')
-    fh.setFormatter(file_formatter)
-    logger.addHandler(fh)
-
-    # Console Handler - logs INFO and up (or change to DEBUG for more console verbosity)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO) # Keep console less verbose, or set to DEBUG if needed
-    console_formatter = logging.Formatter('%(levelname)s - %(filename)s:%(lineno)d - %(message)s')
-    ch.setFormatter(console_formatter)
-    logger.addHandler(ch)
-
-    # Get a specific logger for this module if preferred, to avoid impacting other library loggers
-    # For simplicity, we're using the root logger configured above.
-    # module_logger = logging.getLogger(__name__)
-    # module_logger.setLevel(logging.DEBUG) # Ensure this module's logger is also at DEBUG
-
-    logger.info(f"Logging setup complete. Log file: {log_file}")
-    return logger # Though typically we use logging.getLogger(__name__) in modules
-
-# Initialize logger variable but don't set it up yet
-logger = None
+logger = logging.getLogger("amp_automation.legacy")
 
 # --- CORRECTED Excel Column Indices for YOUR ACTUAL FILE ---
 # Updated to match YOUR BULK_PLAN_EXPORT_2025_08_25.xlsx structure
@@ -353,22 +577,6 @@ def _copy_shape(source_shape, target_slide, new_name=None):
     logger.debug(f"Copied shape '{source_shape.name}' to '{new_shape.name}' on target slide.")
     return new_shape
 
-def normalize_media_type(media_type):
-    """
-    Standardize media type strings for consistent comparison.
-    Converts various TV/Television representations to a standard format.
-    """
-    if not media_type:
-        return ""
-    
-    media_type_str = str(media_type).strip().upper()
-    if media_type_str in ['TV', 'TELEVISION']:
-        return "Television"
-    elif media_type_str == 'DIGITAL':
-        return "Digital"
-    else:
-        return media_type_str
-
 def is_empty_formatted_value(formatted_value):
     """Check if a formatted value represents empty/zero data that should not be displayed"""
     if not formatted_value:
@@ -482,379 +690,10 @@ def format_number(value, is_budget=False, is_percentage=False, is_grp=False, is_
     formatted_str = f"{formatted_val:.1f}{suffix}"
     return formatted_str
 
-def get_month_specific_tv_metrics(raw_excel_path, country, brand, campaign, year, month):
-    """
-    Get month-specific TV metrics (GRP, Frequency, Reach) for a specific campaign and month.
-    This function aggregates raw data on-the-fly for the requested month.
-    """
-    
-    # Cache the raw data to avoid reloading for each call
-    if not hasattr(get_month_specific_tv_metrics, '_cached_data'):
-        df = pd.read_excel(raw_excel_path, header=0)
-        
-        # Check if Month column exists, if not extract from Flight Start Date
-        if 'Month' not in df.columns or df['Month'].isna().all():
-            if '**Flight Start Date' in df.columns:
-                # Convert to datetime and extract month name
-                df['**Flight Start Date'] = pd.to_datetime(df['**Flight Start Date'])
-                df['Month'] = df['**Flight Start Date'].dt.strftime('%b')  # Short month names (Jan, Feb, etc.)
-        
-        get_month_specific_tv_metrics._cached_data = df
-    else:
-        df = get_month_specific_tv_metrics._cached_data
-    
-    # Extract country from hierarchical format
-    def extract_country(country_str):
-        if pd.isna(country_str):
-            return None
-        parts = str(country_str).split(' | ')
-        return parts[-1].strip()
-    
-    # Clean brand name
-    def clean_brand(brand_str):
-        if pd.isna(brand_str):
-            return ""
-        brand = str(brand_str)
-        if " | " in brand:
-            return brand.split(" | ")[-1].strip()
-        return brand.strip()
-    
-    # Month name mapping (handle both upper and proper case)
-    month_mapping = {
-        'Jan': 'Jan', 'Feb': 'Feb', 'Mar': 'Mar', 'Apr': 'Apr', 
-        'May': 'May', 'Jun': 'Jun', 'Jul': 'Jul', 'Aug': 'Aug',
-        'Sep': 'Sep', 'Sept': 'Sep', 'Oct': 'Oct', 'Nov': 'Nov', 'Dec': 'Dec',
-        'JAN': 'Jan', 'FEB': 'Feb', 'MAR': 'Mar', 'APR': 'Apr',
-        'MAY': 'May', 'JUN': 'Jun', 'JUL': 'Jul', 'AUG': 'Aug',
-        'SEP': 'Sep', 'SEPT': 'Sep', 'OCT': 'Oct', 'NOV': 'Nov', 'DEC': 'Dec'
-    }
-    
-    # Normalize month name
-    month = month_mapping.get(month, month)
-    
-    # Filter data for this specific country/brand/campaign/year/month combination
-    filtered_data = df[
-        (df['Plan - Geography'].apply(extract_country) == country) &
-        (df['Plan - Brand'].apply(clean_brand) == brand) &
-        (df['**Campaign Name(s)'] == campaign) &
-        (df['Plan - Year'] == year) &
-        (df['Month'] == month) &
-        (df['Media Type'] == 'Television')
-    ]
-    
-    # Apply GNE Television filter - exclude "Pan Asian TV" from Flight Comments
-    # Check if this is a GNE campaign (GNE in the raw geography string)
-    gne_mask = filtered_data['Plan - Geography'].astype(str).str.contains('GNE', na=False)
-    pan_asian_mask = filtered_data['Flight Comments'].astype(str).str.contains('Pan Asian TV', na=False)
-    
-    if len(filtered_data[gne_mask & pan_asian_mask]) > 0:
-        filtered_data = filtered_data[~(gne_mask & pan_asian_mask)]
-    
-    if len(filtered_data) == 0:
-        return {
-            'grp_sum': 0,
-            'frequency_avg': np.nan,
-            'reach1_avg': np.nan,
-            'reach3_avg': np.nan
-        }
-    
-    # Aggregate the data for this month
-    available_cols = filtered_data.columns.tolist()
-    tv_metric_columns = ['National GRP', 'Frequency', 'Reach 1+', 'Reach 3+']
-    missing_cols = [col for col in tv_metric_columns if col not in available_cols]
-    if missing_cols:
-        logger.warning(f"Missing TV metric columns in month-specific function: {missing_cols}")
-    
-    grp_sum = filtered_data['National GRP'].dropna().sum() if 'National GRP' in available_cols else 0
-    
-    freq_values = filtered_data['Frequency'].dropna() if 'Frequency' in available_cols else pd.Series(dtype=float)
-    frequency_avg = freq_values.mean() if len(freq_values) > 0 else np.nan
-    
-    reach1_values = filtered_data['Reach 1+'].dropna() if 'Reach 1+' in available_cols else pd.Series(dtype=float)
-    reach1_avg = reach1_values.mean() if len(reach1_values) > 0 else np.nan
-    
-    reach3_values = filtered_data['Reach 3+'].dropna() if 'Reach 3+' in available_cols else pd.Series(dtype=float)
-    reach3_avg = reach3_values.mean() if len(reach3_values) > 0 else np.nan
-    
-    return {
-        'grp_sum': grp_sum,
-        'frequency_avg': frequency_avg,
-        'reach1_avg': reach1_avg,
-        'reach3_avg': reach3_avg
-    }
-
-def load_and_prepare_data(excel_path):
-    """Load raw Lumina data and prepare it in the format expected by the presentation generator."""
-    logger.info(f"Loading raw Lumina data from: {excel_path}")
-    try:
-        # Load raw data
-        raw_df = pd.read_excel(excel_path, header=0)
-        logger.info(f"Loaded {len(raw_df)} rows from raw data")
-        
-        # Check if Month column exists, if not extract from Plan Start Date
-        if 'Month' not in raw_df.columns or raw_df['Month'].isna().all():
-            if '**Flight Start Date' in raw_df.columns:
-                logger.info("Month column missing or empty. Extracting month from Flight Start Date...")
-                # Convert to datetime and extract month name
-                raw_df['**Flight Start Date'] = pd.to_datetime(raw_df['**Flight Start Date'])
-                raw_df['Month'] = raw_df['**Flight Start Date'].dt.strftime('%b')  # Short month names (Jan, Feb, etc.)
-                logger.info(f"Successfully extracted months from {len(raw_df[raw_df['Month'].notna()])} rows")
-            else:
-                logger.error("No Month column or Flight Start Date column found")
-                return None
-        
-        # Media Type column should already exist - no need to create it
-        if 'Media Type' in raw_df.columns:
-            logger.info(f"Media Type column found with values: {dict(raw_df['Media Type'].value_counts())}")
-        else:
-            logger.error("Media Type column not found in data")
-            return None
-        
-        # Extract country from hierarchical format
-        def extract_country(country_str):
-            if pd.isna(country_str):
-                return None
-            parts = str(country_str).split(' | ')
-            return parts[-1].strip()  # Take last part
-        
-        # Clean brand name (remove "Haleon | " prefix)
-        def clean_brand(brand_str):
-            if pd.isna(brand_str):
-                return ""
-            brand = str(brand_str)
-            if " | " in brand:
-                return brand.split(" | ")[-1].strip()
-            return brand.strip()
-        
-        # Month name mapping
-        month_mapping = {
-            'Jan': 'Jan', 'Feb': 'Feb', 'Mar': 'Mar', 'Apr': 'Apr', 
-            'May': 'May', 'Jun': 'Jun', 'Jul': 'Jul', 'Aug': 'Aug',
-            'Sep': 'Sep', 'Sept': 'Sep', 'Oct': 'Oct', 'Nov': 'Nov', 'Dec': 'Dec'
-        }
-        
-        # Process data
-        processed_data = []
-        
-        # Filter out GNE Television rows with "Pan Asian TV" in Flight Comments
-        def should_exclude_row(row):
-            geography_raw = str(row['Plan - Geography'])
-            media_type = row['Media Type']
-            flight_comments = str(row.get('Flight Comments', '')).strip()
-            
-            # Exclude GNE Television campaigns with "Pan Asian TV" in Flight Comments
-            # Check for 'GNE' in the raw geography string (e.g., "Global | EMEA | MEA | GNE")
-            if ('GNE' in geography_raw and 
-                media_type == 'Television' and 
-                'Pan Asian TV' in flight_comments):
-                return True
-            return False
-        
-        # Apply filter
-        logger.info(f"Applying GNE Television filter (excluding 'Pan Asian TV' from Flight Comments)...")
-        initial_count = len(raw_df)
-        raw_df = raw_df[~raw_df.apply(should_exclude_row, axis=1)]
-        filtered_count = len(raw_df)
-        logger.info(f"Filtered out {initial_count - filtered_count} rows. Remaining: {filtered_count}")
-        
-        # Group by Geography + Brand + Campaign + Year + Month for initial aggregation
-        group_cols = ['Plan - Geography', 'Plan - Brand', '**Campaign Name(s)', 'Plan - Year', 'Month', 'Media Type']
-        
-        logger.info("Aggregating data by month...")
-        
-        for name, group in raw_df.groupby(group_cols):
-            geography_raw, brand_raw, campaign, year, month_raw, media_type = name
-            
-            # Clean and validate data
-            country = extract_country(geography_raw)
-            brand = clean_brand(brand_raw)
-            
-            # Map month name
-            month = month_mapping.get(month_raw, month_raw)
-            
-            # Skip if essential data is missing
-            if not country or not brand or not campaign:
-                continue
-            
-            # Aggregate financial data (always present)
-            total_cost = group['*Cost to Client'].sum()
-            
-            # Aggregate TV metrics (only for Television)
-            grp_sum = np.nan
-            freq_avg = np.nan
-            reach1_avg = np.nan
-            reach3_avg = np.nan
-            
-            if media_type == 'Television':
-                # Debug: Check if TV metric columns exist
-                available_cols = group.columns.tolist()
-                tv_metric_columns = ['National GRP', 'Frequency', 'Reach 1+', 'Reach 3+']
-                missing_cols = [col for col in tv_metric_columns if col not in available_cols]
-                if missing_cols:
-                    logger.warning(f"Missing TV metric columns for {country}-{brand}-{campaign}: {missing_cols}")
-                    logger.debug(f"Available columns: {[col for col in available_cols if any(keyword in col.lower() for keyword in ['grp', 'reach', 'freq'])]}")
-                
-                # Sum GRPs
-                if 'National GRP' in available_cols:
-                    grp_values = group['National GRP'].dropna()
-                    if len(grp_values) > 0:
-                        grp_sum = grp_values.sum()
-                        logger.debug(f"Found {len(grp_values)} GRP values for {country}-{brand}-{campaign}, sum: {grp_sum}")
-                
-                # Average Frequency and Reach
-                if 'Frequency' in available_cols:
-                    freq_values = group['Frequency'].dropna()
-                    if len(freq_values) > 0:
-                        freq_avg = freq_values.mean()
-                        logger.debug(f"Found {len(freq_values)} Frequency values for {country}-{brand}-{campaign}, avg: {freq_avg}")
-                
-                if 'Reach 1+' in available_cols:
-                    reach1_values = group['Reach 1+'].dropna()
-                    if len(reach1_values) > 0:
-                        reach1_avg = reach1_values.mean()
-                        logger.debug(f"Found {len(reach1_values)} Reach 1+ values for {country}-{brand}-{campaign}, avg: {reach1_avg}")
-                
-                if 'Reach 3+' in available_cols:
-                    reach3_values = group['Reach 3+'].dropna()
-                    if len(reach3_values) > 0:
-                        reach3_avg = reach3_values.mean()
-                        logger.debug(f"Found {len(reach3_values)} Reach 3+ values for {country}-{brand}-{campaign}, avg: {reach3_avg}")
-            
-            # Get other fields (take first non-null value)
-            campaign_type = group['**Campaign Type'].dropna().iloc[0] if not group['**Campaign Type'].dropna().empty else ""
-            funnel_stage = group['**Funnel Stage'].dropna().iloc[0] if not group['**Funnel Stage'].dropna().empty else ""
-            
-            # Store the aggregated row data
-            row_data = {
-                'Country': country,
-                'Brand': brand,
-                'Media Type': media_type,
-                'Campaign Name': campaign,
-                'Campaign Type': campaign_type,
-                'Funnel Stage': funnel_stage,
-                'Year': year,
-                'Month': month,
-                'Total Cost': total_cost if pd.notna(total_cost) else 0,
-                'GRP': grp_sum,
-                'Frequency': freq_avg,
-                'Reach 1+': reach1_avg,
-                'Reach 3+': reach3_avg,
-            }
-            
-            processed_data.append(row_data)
-        
-        # Convert to DataFrame
-        agg_df = pd.DataFrame(processed_data)
-        logger.info(f"Created {len(agg_df)} month-level aggregated rows")
-        
-        if len(agg_df) == 0:
-            logger.error("No data found after processing")
-            return None
-        
-        # Pivot to wide format (months as columns)
-        logger.info("Pivoting to wide format...")
-        
-        result_rows = []
-        
-        # Group by everything except Month to create final campaign rows
-        final_group_cols = ['Country', 'Brand', 'Media Type', 'Campaign Name', 'Campaign Type', 'Funnel Stage', 'Year']
-        
-        for name, group in agg_df.groupby(final_group_cols):
-            country, brand, media_type, campaign, campaign_type, funnel_stage, year = name
-            
-            # Initialize row with campaign info
-            row = {
-                'Country': country,
-                'Brand': brand,
-                'Media Type': media_type,
-                'Campaign Name': campaign,
-                'Campaign Type': campaign_type,
-                'Funnel Stage': funnel_stage,
-                'Year': year
-            }
-            
-            # Initialize all months to 0
-            months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-            for month in months:
-                row[month] = 0
-            
-            # Fill in actual monthly data
-            total_cost = 0
-            total_grp = 0
-            freq_values = []
-            reach1_values = []
-            reach3_values = []
-            
-            for _, month_row in group.iterrows():
-                month = month_row['Month']
-                if month in months:
-                    # Set monthly budget
-                    row[month] = month_row['Total Cost']
-                    total_cost += month_row['Total Cost']
-                    
-                    # Accumulate TV metrics (will be averaged later)
-                    if pd.notna(month_row['GRP']):
-                        total_grp += month_row['GRP']
-                    
-                    if pd.notna(month_row['Frequency']):
-                        freq_values.append(month_row['Frequency'])
-                    if pd.notna(month_row['Reach 1+']):
-                        reach1_values.append(month_row['Reach 1+'])
-                    if pd.notna(month_row['Reach 3+']):
-                        reach3_values.append(month_row['Reach 3+'])
-            
-            # Set totals and campaign-level averages
-            row['Total Cost'] = total_cost
-            row['GRP'] = total_grp if total_grp > 0 else np.nan
-            row['Frequency'] = np.mean(freq_values) if freq_values else np.nan
-            row['Reach 1+'] = np.mean(reach1_values) if reach1_values else np.nan
-            row['Reach 3+'] = np.mean(reach3_values) if reach3_values else np.nan
-            row['Flight Comments'] = ""
-            
-            result_rows.append(row)
-        
-        df = pd.DataFrame(result_rows)
-        logger.info(f"Final result: {len(df)} campaigns")
-        
-        # Ensure columns are in expected order
-        expected_columns = [
-            'Country', 'Brand', 'Media Type', 'Campaign Name', 'Campaign Type', 'Funnel Stage', 'Year',
-            'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-            'Total Cost', 'GRP', 'Frequency', 'Reach 1+', 'Reach 3+', 'Flight Comments'
-        ]
-        
-        # Add missing columns with default values
-        for col in expected_columns:
-            if col not in df.columns:
-                if col in ['GRP', 'Frequency', 'Reach 1+', 'Reach 3+']:
-                    df[col] = np.nan
-                elif col in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Total Cost']:
-                    df[col] = 0
-                else:
-                    df[col] = ""
-        
-        # Reorder columns
-        df = df[expected_columns]
-        
-        # Add Mapped Media Type column for compatibility
-        df['Mapped Media Type'] = df['Media Type']
-        
-        logger.info(f"Data loaded successfully. Shape: {df.shape}")
-        logger.info(f"Media types: {dict(df['Media Type'].value_counts())}")
-        logger.info(f"TV campaigns with metrics: {len(df[(df['Media Type'] == 'Television') & df['GRP'].notna()])}")
-        
-        return df
-        
-    except FileNotFoundError:
-        logger.error(f"Error: Excel file not found at {excel_path}")
-        return None
-    except Exception as e:
-        logger.error(f"Error loading data: {str(e)}")
-        return None
-    except Exception as e:
-        logger.error(f"Error loading or preparing data from {excel_path}: {e}")
-        logger.error(traceback.format_exc())
-        return None
+def load_and_prepare_data(excel_path):  # backward compatibility proxy
+    active_logger = logger if 'logger' in globals() and logger is not None else logging.getLogger("amp_automation.data")
+    data_set = modular_load_and_prepare_data(excel_path, MASTER_CONFIG, active_logger)
+    return data_set.frame
 
 def _prepare_main_table_data_detailed(df, region, masterbrand, year=None, excel_path=None):
     """
@@ -1707,175 +1546,19 @@ def _extract_metadata_for_indices(original_metadata, indices, new_row_count):
 
 
 def _prepare_media_type_chart_data_detailed(df, region, masterbrand, year=None):
-    """
-    Prepare pie chart data for media type budget distribution.
-    
-    Args:
-        df: DataFrame with loaded Excel data
-        region: Region name to filter by
-        masterbrand: Masterbrand name to filter by
-        
-    Returns:
-        dict: Dictionary with media types as keys and budget values as values
-    """
-    try:
-        year_text = f" - {year}" if year is not None else ""
-        logger.info(f"Preparing media type chart data for {region} - {masterbrand}{year_text}")
-        
-        # Filter data for the specific region, masterbrand, and year
-        filter_conditions = [
-            (df['Country'].astype(str).str.strip() == region),
-            (df['Brand'].astype(str).str.strip() == masterbrand)
-        ]
-        
-        if year is not None:
-            filter_conditions.append(df['Year'].astype(str).str.strip() == str(year))
-        
-        filtered_df = df[
-            filter_conditions[0] & filter_conditions[1] & (filter_conditions[2] if len(filter_conditions) > 2 else True)
-        ].copy()
-        
-        if filtered_df.empty:
-            logger.warning(f"No data found for media type chart: {region} - {masterbrand}")
-            return None
-            
-        # Group by mapped media type and sum budgets
-        media_type_budgets = {}
-        
-        # Get media types and their corresponding budgets
-        for media_type_orig in filtered_df['Media Type'].unique():
-            if pd.isna(media_type_orig):
-                continue
-                
-            media_type_normalized = normalize_media_type(str(media_type_orig))
-            media_df = filtered_df[filtered_df['Media Type'] == media_type_orig]
-            total_budget = media_df['Total Cost'].sum()
-            
-            if media_type_normalized in media_type_budgets:
-                media_type_budgets[media_type_normalized] += total_budget
-            else:
-                media_type_budgets[media_type_normalized] = total_budget
-        
-        # Filter out zero budgets
-        media_type_budgets = {k: v for k, v in media_type_budgets.items() if v > 0}
-        
-        logger.info(f"Media type chart data prepared: {media_type_budgets}")
-        return media_type_budgets
-        
-    except Exception as e:
-        logger.error(f"Error preparing media type chart data for {region} - {masterbrand}: {str(e)}")
-        logger.error(traceback.format_exc())
-        return None
+    """Compatibility wrapper for modular media type chart data preparation."""
+
+    return prepare_media_type_chart_data(df, region, masterbrand, year)
 
 def _prepare_funnel_chart_data_detailed(df, region, masterbrand, year=None):
-    """
-    Prepare pie chart data for funnel stage budget distribution.
-    
-    Args:
-        df: DataFrame with loaded Excel data
-        region: Region name to filter by
-        masterbrand: Masterbrand name to filter by
-        
-    Returns:
-        dict: Dictionary with funnel stages as keys and budget values as values
-    """
-    try:
-        year_text = f" - {year}" if year is not None else ""
-        logger.info(f"Preparing funnel chart data for {region} - {masterbrand}{year_text}")
-        
-        # Filter data for the specific region, masterbrand, and year
-        filter_conditions = [
-            (df['Country'].astype(str).str.strip() == region),
-            (df['Brand'].astype(str).str.strip() == masterbrand)
-        ]
-        
-        if year is not None:
-            filter_conditions.append(df['Year'].astype(str).str.strip() == str(year))
-        
-        filtered_df = df[
-            filter_conditions[0] & filter_conditions[1] & (filter_conditions[2] if len(filter_conditions) > 2 else True)
-        ].copy()
-        
-        if filtered_df.empty:
-            logger.warning(f"No data found for funnel chart: {region} - {masterbrand}")
-            return None
-        
-        # Group by funnel stage and sum budgets
-        funnel_budgets = {}
-        
-        if 'Funnel Stage' in df.columns:
-            for funnel_stage in filtered_df['Funnel Stage'].unique():
-                if pd.isna(funnel_stage) or str(funnel_stage).strip() == '':
-                    continue
-                    
-                funnel_df = filtered_df[filtered_df['Funnel Stage'] == funnel_stage]
-                total_budget = funnel_df['Total Cost'].sum()
-                
-                if total_budget > 0:
-                    funnel_budgets[str(funnel_stage)] = total_budget
-        
-        logger.info(f"Funnel chart data prepared: {funnel_budgets}")
-        return funnel_budgets
-        
-    except Exception as e:
-        logger.error(f"Error preparing funnel chart data for {region} - {masterbrand}: {str(e)}")
-        logger.error(traceback.format_exc())
-        return None
+    """Compatibility wrapper for modular funnel chart data preparation."""
+
+    return prepare_funnel_chart_data(df, region, masterbrand, year)
 
 def _prepare_campaign_type_chart_data(df, region, masterbrand, year=None):
-    """
-    Prepare pie chart data for campaign type budget distribution.
-    
-    Args:
-        df: DataFrame with loaded Excel data
-        region: Region name to filter by
-        masterbrand: Masterbrand name to filter by
-        
-    Returns:
-        dict: Dictionary with campaign types as keys and budget values as values
-    """
-    try:
-        year_text = f" - {year}" if year is not None else ""
-        logger.info(f"Preparing campaign type chart data for {region} - {masterbrand}{year_text}")
-        
-        # Filter data for the specific region, masterbrand, and year
-        filter_conditions = [
-            (df['Country'].astype(str).str.strip() == region),
-            (df['Brand'].astype(str).str.strip() == masterbrand)
-        ]
-        
-        if year is not None:
-            filter_conditions.append(df['Year'].astype(str).str.strip() == str(year))
-        
-        filtered_df = df[
-            filter_conditions[0] & filter_conditions[1] & (filter_conditions[2] if len(filter_conditions) > 2 else True)
-        ].copy()
-        
-        if filtered_df.empty:
-            logger.warning(f"No data found for campaign type chart: {region} - {masterbrand}")
-            return None
-        
-        # Group by campaign type and sum budgets
-        campaign_type_budgets = {}
-        
-        if 'Campaign Type' in df.columns:
-            for campaign_type in filtered_df['Campaign Type'].unique():
-                if pd.isna(campaign_type) or str(campaign_type).strip() == '':
-                    continue
-                    
-                campaign_df = filtered_df[filtered_df['Campaign Type'] == campaign_type]
-                total_budget = campaign_df['Total Cost'].sum()
-                
-                if total_budget > 0:
-                    campaign_type_budgets[str(campaign_type)] = total_budget
-        
-        logger.info(f"Campaign type chart data prepared: {campaign_type_budgets}")
-        return campaign_type_budgets
-        
-    except Exception as e:
-        logger.error(f"Error preparing campaign type chart data for {region} - {masterbrand}: {str(e)}")
-        logger.error(traceback.format_exc())
-        return None
+    """Compatibility wrapper for modular campaign type chart data preparation."""
+
+    return prepare_campaign_type_chart_data(df, region, masterbrand, year)
 
 def set_title_text_detailed(title_shape, title_text, template_prs):
     logger.debug(f"Attempting to set title text '{title_text}' for shape '{title_shape.name}' using detailed method.")
@@ -2051,864 +1734,32 @@ def set_title_text_detailed(title_shape, title_text, template_prs):
     logger.debug(f"Finished setting title for shape '{title_shape.name}'. Text frame word_wrap: {title_shape.text_frame.word_wrap}, auto_size: {title_shape.text_frame.auto_size}")
 
 def _add_and_style_table(slide, table_data, cell_metadata, template_slide=None):
-    """
-    Add a table to the slide and apply styling based on template or v1.5 specifications.
-    
-    Args:
-        slide: The PowerPoint slide to add the table to
-        table_data: List of lists representing table rows
-        cell_metadata: Dictionary with metadata for conditional formatting
-        template_slide: Optional template slide to copy table styling from
-        
-    Returns:
-        bool: True if table was created successfully, False otherwise
-    """
-    try:
-        if not table_data or len(table_data) < 2:
-            logger.warning("No table data provided or insufficient data for table creation")
-            return False
-        
-        rows = len(table_data)
-        cols = len(table_data[0])
-        
-        logger.info(f"Creating table with {rows} rows and {cols} columns")
-        
-        # Table positioning using centralized coordinate system
-        table_pos = get_element_position('main_table')
-        if not table_pos:
-            logger.error("Failed to get table position coordinates")
-            return False
-        
-        # Try to drop into our pre-styled placeholder first
-        table_shape = None
-        
-        # ENHANCED DEBUGGING: Commented out to reduce log file size
-        # Uncomment for debugging placeholder issues
-        """
-        logger.info(f"=== PLACEHOLDER DEBUGGING for slide {slide} ===")
-        logger.info(f"Total placeholders found: {len(slide.placeholders)}")
-        
-        for i, ph in enumerate(slide.placeholders):
-            ph_name = getattr(ph, "name", "NO_NAME")
-            ph_type = None
-            ph_idx = None
-            
-            try:
-                ph_type = ph.placeholder_format.type if hasattr(ph, 'placeholder_format') else "NO_FORMAT"
-                ph_idx = ph.placeholder_format.idx if hasattr(ph, 'placeholder_format') else "NO_IDX"
-            except:
-                ph_type = "ERROR_GETTING_TYPE"
-                ph_idx = "ERROR_GETTING_IDX"
-            
-            logger.info(f"  Placeholder {i}: Name='{ph_name}', Type={ph_type}, Idx={ph_idx}")
-            
-            # Check if this matches our criteria
-            name_match = ph_name == TABLE_PLACEHOLDER_NAME
-            type_match = ph_type == PP_PLACEHOLDER.TABLE
-            logger.info(f"    Name match ('{ph_name}' == '{TABLE_PLACEHOLDER_NAME}'): {name_match}")
-            logger.info(f"    Type match ({ph_type} == {PP_PLACEHOLDER.TABLE}): {type_match}")
-        
-        logger.info(f"=== END PLACEHOLDER DEBUGGING ===")
-        """
-        
-        for ph in slide.placeholders:
-            if (ph.placeholder_format.type == PP_PLACEHOLDER.TABLE
-                and getattr(ph, "name", "") == TABLE_PLACEHOLDER_NAME):
-                try:
-                    table_shape = ph.insert_table(rows, cols)
-                    logger.info(f"Inserted table into placeholder '{TABLE_PLACEHOLDER_NAME}'")
-                except Exception as e:
-                    logger.warning(f"Placeholder.insert_table() failed: {e}")
-                break
-
-        if not table_shape:
-            # fallback for slides/layouts without our named placeholder
-            logger.warning(f"Placeholder '{TABLE_PLACEHOLDER_NAME}' missing—using add_table() fallback")
-            table_shape = slide.shapes.add_table(
-                rows, cols,
-                table_pos['left'], table_pos['top'],
-                table_pos['width'], table_pos['height']
-            )
-
-        # rename & grab the Table object
-        table_shape.name = SHAPE_NAME_TABLE
-        table = table_shape.table
-        
-        # CRITICAL FIX: Set proper shape name to match template
-        table_shape.name = SHAPE_NAME_TABLE  # "MainDataTable"
-        
-        # CRITICAL ROW HEIGHT FIX: PRECISION TARGET VALUES for pixel-perfect compliance
-        # Based on diagnostic measurements - applying optimized heights for final compactness
-        ROW_HEIGHT_HEADER = Pt(10.0)    # Target: 0.140" (reduced from 0.167") - 16% reduction
-        ROW_HEIGHT_BODY = Pt(8.5)       # Target: 0.120" (reduced from 0.139") - 14% reduction  
-        ROW_HEIGHT_SUBTOTAL = Pt(10.0)  # Target: 0.140" (reduced from 0.167") - 16% reduction
-        
-        # DIAGNOSTIC LOGGING: Report TARGET row heights for pixel-perfect compliance
-        logger.info(f"=== PRECISION TARGET: Implementing Optimized Row Heights ===")
-        logger.info(f"Header Row Height: {ROW_HEIGHT_HEADER} ({ROW_HEIGHT_HEADER.inches:.3f} inches) - TARGET")
-        logger.info(f"Body Row Height: {ROW_HEIGHT_BODY} ({ROW_HEIGHT_BODY.inches:.3f} inches) - TARGET")
-        logger.info(f"Subtotal Row Height: {ROW_HEIGHT_SUBTOTAL} ({ROW_HEIGHT_SUBTOTAL.inches:.3f} inches) - TARGET")
-        
-        for i, row in enumerate(table.rows):
-            if i == 0:
-                # Header row
-                row.height = ROW_HEIGHT_HEADER
-                logger.debug(f"DIAGNOSTIC: Applied header height {ROW_HEIGHT_HEADER} to row {i}")
-            elif i == len(table_data) - 1:
-                # Subtotal row (last row)
-                row.height = ROW_HEIGHT_SUBTOTAL
-                logger.debug(f"DIAGNOSTIC: Applied subtotal height {ROW_HEIGHT_SUBTOTAL} to row {i}")
-            else:
-                # Body rows (data rows)
-                row.height = ROW_HEIGHT_BODY
-                logger.debug(f"DIAGNOSTIC: Applied body height {ROW_HEIGHT_BODY} to row {i}")
-            
-            # CRITICAL FIX: Use EXACTLY height rule to prevent auto-expansion
-            if TABLE_HEIGHT_RULE_AVAILABLE:
-                try:
-                    row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST # Changed from EXACTLY
-                    logger.debug(f"Applied AT_LEAST height rule to row {i}")
-                except Exception as e:
-                    logger.debug(f"Could not set exact height rule for row {i}: {e}")
-            else:
-                logger.debug(f"Height rule not available - row {i} height set but may auto-expand")
-            
-            # CRITICAL: UNIVERSAL CELL ALIGNMENT & MINIMAL PADDING - Apply to ALL cells
-            for j, cell in enumerate(row.cells):
-                # DISABLE text wrapping and auto-sizing FIRST
-                cell.text_frame.word_wrap = False
-                cell.text_frame.auto_size = MSO_AUTO_SIZE.NONE
-                
-                # CRITICAL: UNIVERSAL VERTICAL CENTERING for ALL cells
-                cell.text_frame.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE
-                
-                # CRITICAL: UNIVERSAL HORIZONTAL CENTERING + MINIMAL PARAGRAPH SPACING for ALL paragraphs in ALL cells
-                for paragraph in cell.text_frame.paragraphs:
-                    paragraph.alignment = PP_ALIGN.CENTER
-                    
-                    # **NEW CRITICAL STEP**: MINIMAL PARAGRAPH SPACING for true vertical compactness
-                    # This controls spacing *within* the text block itself, vital for true vertical compactness
-                    paragraph.line_spacing = 1.0  # Single line spacing (no extra spacing between lines)
-                    paragraph.space_before = Pt(0)  # No space before the paragraph
-                    paragraph.space_after = Pt(0)   # No space after the paragraph
-                    
-                    # **CRITICAL FIX**: FORCE Calibri font on ALL paragraphs/runs during initial setup
-                    # This prevents any default font inheritance that could cause Roboto 18pt issues
-                    if not paragraph.runs:
-                        run = paragraph.add_run()  # Create run if none exists
-                    
-                    for run in paragraph.runs:
-                        run.font.name = DEFAULT_FONT_NAME  # FORCE Calibri
-                        # Set appropriate size based on row type
-                        if i == 0:  # Header row
-                            run.font.size = FONT_SIZE_HEADER   # 8pt
-                        else:  # Body/subtotal rows
-                            run.font.size = FONT_SIZE_BODY    # 7pt
-                        run.font.color.rgb = CLR_BLACK
-                
-                # CRITICAL: ABSOLUTE MINIMAL cell padding (0pt = 0 EMU) for ultra-compact layout
-                absolute_minimal_margin = 0  # 0pt in EMU - absolute minimum for maximum density
-                try:
-                    cell.margin_left = 0
-                    cell.margin_right = 0
-                    cell.margin_top = 0
-                    cell.margin_bottom = 0
-                except Exception as margin_error:
-                    # Fallback to OXML method for margins
-                    try:
-                        cell._tc.tcPr.marL = 0  # Left margin = 0 EMU
-                        cell._tc.tcPr.marR = 0  # Right margin = 0 EMU
-                        cell._tc.tcPr.marT = 0  # Top margin = 0 EMU
-                        cell._tc.tcPr.marB = 0  # Bottom margin = 0 EMU
-                    except Exception as oxml_margin_error:
-                        logger.debug(f"Could not set zero margins for cell ({i},{j}): {oxml_margin_error}")
-        
-        # REMOVED: Fixed table height constraint that was causing oversized rows
-        # table_shape.height = Inches(2.340)   # REMOVED - was forcing fixed height
-        
-        # Ensure exact positioning
-        table_shape.top = Inches(0.812)      # Maintain exact top position
-        
-        logger.info(f"Table created with individual row height constraints (no fixed total height)")
-        
-        # ENHANCED TABLE: Adjust column widths for new TOTAL REACH and TOTAL FREQ columns
-        column_widths = [
-            Inches(0.65),   # Campaign Name (reduced to allow wider key columns)
-            Inches(0.50),   # Budget (increased to fit "BUDGET" on one line)
-            Inches(0.35),   # TV GRPs (reduced)
-            Inches(0.43),   # TOTAL REACH (increased to fit "REACH" on one line)
-            Inches(0.35),   # TOTAL FREQ (reduced)
-            Inches(0.40),   # % (reduced)
-            Inches(0.72),   # Media Type (reduced)
-        ] + [Inches(0.375)] * 16  # 16 months (JAN-DEC + Q1-Q4) - kept for single-line display
-        # Total width calculation: adjusted to maintain table width
-        # NEW Total: 0.65 + 0.50 + 0.35 + 0.43 + 0.35 + 0.40 + 0.72 + (16 × 0.375) = 9.40" (within bounds)
-
-        # Apply column widths if we have enough columns
-        for i, width in enumerate(column_widths[:cols]):
-            table.columns[i].width = width
-        
-        # Populate table with data
-        for row_idx, row_data in enumerate(table_data):
-            for col_idx, cell_value in enumerate(row_data):
-                if col_idx < cols:  # Safety check
-                    cell = table.cell(row_idx, col_idx)
-                    cell.text = str(cell_value) if cell_value is not None else ""
-                    
-                    # Apply cell styling with metadata
-                    _apply_table_cell_styling(cell, row_idx, col_idx, table_data, cell_metadata)
-        
-        # CRITICAL FIX: Apply borders to the entire table after all cells are styled
-        _apply_table_borders(table)
-        
-        # CRITICAL FIX: Apply internal borders for first 7 columns only
-        # _apply_internal_table_borders(table, rows) # Intentionally removed
-        
-        logger.info(f"Table created successfully with individual row height constraints")
-        
-        # DIAGNOSTIC LOGGING: Commented out to reduce log file size
-        # Uncomment for debugging table structure issues
-        """
-        logger.info(f"=== DIAGNOSTIC: Final Table Structure Analysis ===")
-        logger.info(f"Total table rows created: {len(table.rows)}")
-        logger.info(f"Total table columns: {len(table.columns)}")
-        
-        # Sample a few rows to report their actual applied heights
-        sample_rows = min(5, len(table.rows))  # Sample first 5 rows or all if fewer
-        for i in range(sample_rows):
-            row = table.rows[i]
-            row_type = "HEADER" if i == 0 else ("SUBTOTAL" if i == len(table_data) - 1 else "BODY")
-            height_pt = row.height.pt if hasattr(row.height, 'pt') else "Unknown"
-            height_inches = row.height.inches if hasattr(row.height, 'inches') else "Unknown"
-            logger.info(f"Row {i} ({row_type}): Height = {height_pt}pt ({height_inches:.3f}\")")
-            
-            # Report cell alignment for first few cells in this row
-            for j in range(min(3, len(row.cells))):  # Sample first 3 cells
-                cell = row.cells[j]
-                v_anchor = cell.text_frame.vertical_anchor if hasattr(cell.text_frame, 'vertical_anchor') else "Unknown"
-                h_align = cell.text_frame.paragraphs[0].alignment if cell.text_frame.paragraphs else "Unknown"
-                logger.info(f"  Cell ({i},{j}): V_Anchor={v_anchor}, H_Align={h_align}")
-        
-        logger.info(f"=== END DIAGNOSTIC: Table Structure Analysis ===")
-        """
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error creating table: {str(e)}")
-        logger.error(traceback.format_exc())
+    table_pos = get_element_position('main_table')
+    if not table_pos:
+        logger.error("Failed to get table position coordinates")
         return False
 
-def _apply_table_cell_styling(cell, row_idx, col_idx, table_data, cell_metadata):
-    """
-    Apply styling to a table cell based on its position and content.
-    CRITICAL FIX: Ensures ALL cells (including empty ones) get explicit Calibri font to eradicate "Roboto 18pt" defaults.
-    Targets OXML structure from template for vertical centering and margins.
-    
-    Args:
-        cell: The table cell to style
-        row_idx: Row index (0-based)
-        col_idx: Column index (0-based)
-        table_data: Full table data for context
-        cell_metadata: Dictionary with metadata for conditional formatting
-    """
-    # Constants for styling based on template analysis
-    MARGIN_LEFT_RIGHT_PT = 3.6 # Approx 45720 EMU, for API calls
-    # Top/Bottom margins will be omitted to match template behavior
+    table_layout = TableLayout(
+        placeholder_name=TABLE_PLACEHOLDER_NAME,
+        shape_name=SHAPE_NAME_TABLE,
+        position=table_pos,
+        row_height_header=TABLE_ROW_HEIGHT_HEADER,
+        row_height_body=TABLE_ROW_HEIGHT_BODY,
+        row_height_subtotal=TABLE_ROW_HEIGHT_SUBTOTAL,
+        column_widths=TABLE_COLUMN_WIDTHS,
+        top_override=TABLE_TOP_OVERRIDE,
+        height_rule_available=TABLE_HEIGHT_RULE_AVAILABLE,
+        height_rule_value=WD_ROW_HEIGHT_RULE.AT_LEAST,
+    )
 
-    # CRITICAL FIX: Import qn and OxmlElement for direct OXML manipulation
-    from pptx.oxml.ns import qn
-    from pptx.oxml.xmlchemy import OxmlElement
-
-    try:
-        # Import required styling constants (already at module level, but good for clarity if function was standalone)
-        from pptx.enum.text import PP_ALIGN, MSO_ANCHOR, MSO_AUTO_SIZE, MSO_VERTICAL_ANCHOR
-        from pptx.util import Pt
-        
-        original_cell_text = str(table_data[row_idx][col_idx]) if col_idx < len(table_data[row_idx]) else ""
-        logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Original text='{original_cell_text}'")
-
-        # **CRITICAL STEP 1**: CELL-LEVEL VERTICAL ANCHOR (API Attempt)
-        try:
-            cell.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: API cell.vertical_anchor set to MIDDLE. Current: {cell.vertical_anchor}")
-        except Exception as e_cell_anchor:
-            logger.warning(f"CELL STYLING [{row_idx},{col_idx}]: Failed to set cell.vertical_anchor via API: {e_cell_anchor}. Will rely on OXML.")
-
-        # **CRITICAL STEP 2**: CELL MARGINS (API Attempt - L/R only, T/B omitted)
-        try:
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: API setting cell margins: L/R={MARGIN_LEFT_RIGHT_PT}pt, T/B=Default")
-            cell.margin_left = Pt(MARGIN_LEFT_RIGHT_PT)
-            cell.margin_right = Pt(MARGIN_LEFT_RIGHT_PT)
-            # Explicitly DO NOT SET cell.margin_top and cell.margin_bottom via API
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Margins after API set: L={cell.margin_left.pt if cell.margin_left else 'Default'}pt, R={cell.margin_right.pt if cell.margin_right else 'Default'}pt, T(api)='Omitted', B(api)='Omitted'")
-        except Exception as margin_error:
-            logger.warning(f"CELL STYLING [{row_idx},{col_idx}]: Error setting L/R margins via API: {margin_error}. Will rely on OXML for L/R as well.")
-
-        # **CRITICAL STEP 3**: TEXT FRAME BASIC SETUP
-        text_frame = cell.text_frame
-        text_frame.clear()  # Clear existing content AND PARAGRAPHS before adding new
-        text_frame.word_wrap = False
-        text_frame.auto_size = MSO_AUTO_SIZE.NONE
-        
-        # **NEW CRITICAL STEP 3.5**: SET ANCHOR ON BODYPR and ZERO TEXT_FRAME MARGINS
-        try:
-            # Explicitly set text_frame margins to 0 to influence lIns, tIns, rIns, bIns on bodyPr
-            text_frame.margin_left = 0
-            text_frame.margin_right = 0
-            text_frame.margin_top = 0
-            text_frame.margin_bottom = 0
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Text_frame margins set to 0. L={text_frame.margin_left}, T={text_frame.margin_top}, R={text_frame.margin_right}, B={text_frame.margin_bottom}")
-
-            # Access bodyPr (should be created by setting text_frame margins if not present)
-            # and forcefully set its anchor attribute.
-            if hasattr(text_frame._txBody, 'bodyPr') and text_frame._txBody.bodyPr is not None:
-                bodyPr = text_frame._txBody.bodyPr
-            else:
-                # If bodyPr somehow still doesn't exist, we might need to add it.
-                # This is less common if margins were set, but as a fallback:
-                from pptx.oxml.xmlchemy import OxmlElement
-                from pptx.oxml.ns import qn
-                bodyPr = OxmlElement("a:bodyPr")
-                text_frame._txBody.insert_element_before(bodyPr, 'a:lstStyle', 'a:p') # Insert before list style or paragraphs
-                logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: OXML bodyPr element created as it was missing.")
-
-            bodyPr.set('anchor', 'ctr') # Anchor text body itself to center
-            # EXPLICITLY ZERO OUT INSETS on bodyPr to remove any internal padding
-            bodyPr.set('lIns', '0')
-            bodyPr.set('tIns', '0')
-            bodyPr.set('rIns', '0')
-            bodyPr.set('bIns', '0')
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: OXML bodyPr attributes directly set: anchor='ctr', lIns='0', tIns='0', rIns='0', bIns='0'.")
-            
-            # Verify what the text_frame.vertical_anchor API reports now
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: text_frame.vertical_anchor after bodyPr.set: {text_frame.vertical_anchor}")
-
-        except Exception as bodyPr_error:
-            logger.error(f"CELL STYLING [{row_idx},{col_idx}]: Critical error setting OXML bodyPr or text_frame margins: {bodyPr_error} {traceback.format_exc()}")
-
-        # **CRITICAL STEP 4**: OXML DIRECT SETTINGS (tcPr anchor and margins)
-        try:
-            tcPr = cell._tc.get_or_add_tcPr()
-            
-            # Ensure vertical anchor on tcPr is "ctr" by directly setting the attribute
-            # tcPr.anchor = "ctr" # This was causing ValueError due to enum mismatch
-            tcPr.set('anchor', 'ctr') # Direct attribute setting
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: OXML tcPr attribute 'anchor' directly set to 'ctr'.")
-
-            # Add vert="horz" as seen in the template's OXML
-            tcPr.set('vert', 'horz')
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: OXML tcPr attribute 'vert' directly set to 'horz'.")
-
-            # Set specific L/R margins using MARGIN_EMU_LR
-            tcPr.marL = MARGIN_EMU_LR
-            tcPr.marR = MARGIN_EMU_LR
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: OXML tcPr.marL & tcPr.marR set to {MARGIN_EMU_LR}.")
-
-            # Robustly remove marT and marB elements if they exist, using xpath
-            marT_elements = tcPr.xpath('./a:marT') # xpath returns a list of matching elements
-            for el_marT in marT_elements:
-                tcPr.remove(el_marT)
-                logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: OXML removed existing a:marT element.")
-            
-            marB_elements = tcPr.xpath('./a:marB')
-            for el_marB in marB_elements:
-                tcPr.remove(el_marB)
-                logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: OXML removed existing a:marB element.")
-            
-            # Verify final OXML state for margins and anchor
-            final_marL_oxml = tcPr.marL if hasattr(tcPr, 'marL') and tcPr.marL is not None else "NotSet"
-            final_marR_oxml = tcPr.marR if hasattr(tcPr, 'marR') and tcPr.marR is not None else "NotSet"
-            final_marT_oxml_exists = bool(tcPr.xpath('./a:marT'))
-            final_marB_oxml_exists = bool(tcPr.xpath('./a:marB'))
-            final_anchor_oxml = tcPr.anchor if hasattr(tcPr, 'anchor') and tcPr.anchor is not None else "NotSet"
-            final_vert_oxml = tcPr.get('vert') if hasattr(tcPr, 'get') else "NotSet" # Check if .get exists
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Final OXML tcPr: anchor='{final_anchor_oxml}', vert='{final_vert_oxml}', marL='{final_marL_oxml}', marR='{final_marR_oxml}', marT_exists={final_marT_oxml_exists}, marB_exists={final_marB_oxml_exists}")
-
-        except Exception as oxml_error:
-            logger.error(f"CELL STYLING [{row_idx},{col_idx}]: Critical error setting OXML tcPr properties: {oxml_error} {traceback.format_exc()}")
-
-        # **CRITICAL STEP 5**: PARAGRAPH PROPERTIES - ULTRA-COMPACT LINE SPACING FIX
-        paragraphs_before_fix = len(text_frame.paragraphs)
-        
-        if text_frame.paragraphs:
-            # Use the existing paragraph (left by text_frame.clear())
-            p = text_frame.paragraphs[0]
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Reusing existing paragraph after clear(). Paragraphs count: {paragraphs_before_fix}")
-        else:
-            # Fallback: if no paragraphs exist (unexpected), add one
-            p = text_frame.add_paragraph()
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: No paragraphs found after clear(), added new one. Paragraphs count: {len(text_frame.paragraphs)}")
-        
-        p.alignment = PP_ALIGN.CENTER
-        
-        # Get paragraph properties for direct OXML manipulation
-        pPr = p._p.get_or_add_pPr()
-        
-        # CRITICAL FIX 1: Remove ALL existing spacing elements first
-        for spacing_element in ['a:spcBef', 'a:spcAft', 'a:lnSpc']:
-            existing = pPr.find(qn(spacing_element))
-            if existing is not None:
-                pPr.remove(existing)
-                logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Removed existing {spacing_element}")
-        
-        # CRITICAL FIX 2: Remove default paragraph properties that might add space
-        defRPr = pPr.find(qn('a:defRPr'))
-        if defRPr is not None:
-            pPr.remove(defRPr)
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Removed default paragraph properties (a:defRPr)")
-        
-        # CRITICAL FIX 3: Set MINIMAL line spacing using EXACT point measurement
-        # This is the key fix - use point-based line spacing that equals font size
-        lnSpc = OxmlElement('a:lnSpc')
-        spcPts_line = OxmlElement('a:spcPts')
-        
-        # Determine font size for this cell to set line spacing accordingly
-        if row_idx == 0:  # Header row
-            font_size_pt = FONT_SIZE_HEADER.pt  # 8pt
-            line_spacing_pt = int(font_size_pt * 100)  # 800 (8pt in hundredths)
-        else:  # Body/subtotal rows
-            font_size_pt = FONT_SIZE_BODY.pt    # 7pt  
-            line_spacing_pt = int(font_size_pt * 100)  # 700 (7pt in hundredths)
-        
-        spcPts_line.set('val', str(line_spacing_pt))  # Line height = font size
-        lnSpc.append(spcPts_line)
-        pPr.append(lnSpc)
-        
-        # CRITICAL FIX 4: Explicitly zero out before/after spacing
-        spcBef = OxmlElement('a:spcBef')
-        spcPts_before = OxmlElement('a:spcPts')
-        spcPts_before.set('val', '0')
-        spcBef.append(spcPts_before)
-        pPr.append(spcBef)
-        
-        spcAft = OxmlElement('a:spcAft')
-        spcPts_after = OxmlElement('a:spcPts')
-        spcPts_after.set('val', '0')
-        spcAft.append(spcPts_after)
-        pPr.append(spcAft)
-        
-        logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: ULTRA-COMPACT spacing applied: font_size={font_size_pt}pt, line_spacing={line_spacing_pt/100}pt, spcBef=0, spcAft=0")
-        
-        # **CRITICAL STEP 6**: DETERMINE PROCESSED CELL TEXT & APPLY "-" RULE
-        processed_cell_text = ""
-        is_empty_cell = False  # Track if this is an empty cell that needs a dash
-        
-        if row_idx == 0:
-            # HEADER ROW: Calibri 8pt Bold ALL CAPS
-            if original_cell_text and str(original_cell_text).strip() and str(original_cell_text).strip() not in ["0", "0.0", "0.00", "0.000", "£0K", "0K", "-", "–", "0.0%"]:
-                processed_cell_text = str(original_cell_text).upper()
-            else:
-                processed_cell_text = "-"  # Use dash for empty header cells
-                is_empty_cell = True
-            
-        elif row_idx == len(table_data) - 1:
-            # SUBTOTAL ROW: Calibri 7pt Bold ALL CAPS
-            if original_cell_text and str(original_cell_text).strip() and str(original_cell_text).strip() not in ["0", "0.0", "0.00", "0.000", "£0K", "0K", "-", "–", "0.0%"]:
-                processed_cell_text = str(original_cell_text).upper()
-            else:
-                processed_cell_text = "-"  # Use dash for empty subtotal cells
-                is_empty_cell = True
-            
-        else:
-            # BODY ROWS: Apply "-" rule for empty values in ALL columns
-            if (not original_cell_text or 
-                str(original_cell_text).strip() == "" or
-                str(original_cell_text).strip() in ["0", "0.0", "0.00", "0.000", "£0K", "0K", "-", "–", "0.0%"]):
-                processed_cell_text = "-"  # Use regular dash
-                is_empty_cell = True
-            else:
-                # Process non-empty cells
-                if col_idx == 0 and original_cell_text and str(original_cell_text).strip():
-                    # Campaign name: FULL CAPS
-                    processed_cell_text = str(original_cell_text).upper()
-                elif col_idx < 7 and original_cell_text and str(original_cell_text).strip():
-                    # Other first-seven columns: UPPER CASE
-                    processed_cell_text = str(original_cell_text).upper()
-                else:
-                    # Month/quarter columns: keep as is
-                    processed_cell_text = str(original_cell_text)
-        
-        # **CRITICAL STEP 7**: SET TEXT AND IMMEDIATELY APPLY EXPLICIT FONT FORMATTING
-        p.text = processed_cell_text
-        
-        # **CRITICAL STEP 8**: ENSURE RUN EXISTS AND FORCE CALIBRI FONT
-        # After setting text, PowerPoint may recreate runs, so we must ensure proper formatting
-        if not p.runs:
-            run = p.add_run()  # Create run if none exists
-            run.text = processed_cell_text  # Ensure text is in the run
-        else:
-            run = p.runs[0]
-        
-        # **UNIVERSAL FONT ENFORCEMENT** - Apply to ALL cells to eradicate "Roboto 18pt"
-        if row_idx == 0:
-            # HEADER ROW: Calibri 8pt Bold
-            run.font.name = DEFAULT_FONT_NAME  # FORCE Calibri
-            run.font.size = FONT_SIZE_HEADER   # 8pt
-            run.font.bold = True
-            run.font.color.rgb = CLR_BLACK
-            
-        elif row_idx == len(table_data) - 1 or (row_idx > 0 and table_data[row_idx][0] in ['SUBTOTAL', 'CARRIED FORWARD']):
-            # SUBTOTAL/TOTAL/CARRIED FORWARD ROW: Calibri 7pt Bold
-            run.font.name = DEFAULT_FONT_NAME  # FORCE Calibri
-            run.font.size = FONT_SIZE_BODY     # 7pt
-            run.font.bold = True
-            run.font.color.rgb = CLR_BLACK
-            
-        else:
-            # BODY ROWS: Calibri 7pt, Bold for first 7 columns, Normal for months
-            run.font.name = DEFAULT_FONT_NAME  # FORCE Calibri
-            run.font.size = FONT_SIZE_BODY     # 7pt
-            
-            # Apply light grey color for empty cells, black for others
-            if is_empty_cell:
-                run.font.color.rgb = CLR_LIGHT_GRAY_TEXT  # Light grey for dashes
-            else:
-                run.font.color.rgb = CLR_BLACK
-            
-            if col_idx < 7:
-                # First 7 columns: BOLD
-                run.font.bold = True
-            else:
-                # Month/quarter columns: NORMAL weight
-                run.font.bold = False
-        
-        # **CRITICAL STEP 9**: DOUBLE-CHECK AND RE-ENFORCE FONT PROPERTIES
-        # This prevents any inheritance of unwanted defaults
-        if run.font.name != DEFAULT_FONT_NAME:
-            run.font.name = DEFAULT_FONT_NAME
-            logger.debug(f"Re-enforced Calibri font for cell ({row_idx},{col_idx})")
-        
-        if not run.font.size:
-            run.font.size = FONT_SIZE_BODY if row_idx != 0 else FONT_SIZE_HEADER
-            logger.debug(f"Re-enforced font size for cell ({row_idx},{col_idx})")
-        
-        # **CRITICAL STEP 9.5**: RUN-LEVEL OXML FIX for BASELINE SPACING
-        # This addresses potential baseline issues that could cause text to appear too low
-        try:
-            rPr = run._r.get_or_add_rPr()
-            
-            # Remove any default character properties that might affect baseline
-            defRPr_run = rPr.find(qn('a:defRPr'))
-            if defRPr_run is not None:
-                rPr.remove(defRPr_run)
-                logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Removed run-level default properties")
-            
-            # Ensure baseline is at normal position (remove any superscript/subscript offset)
-            baseline = rPr.find(qn('a:baseline'))
-            if baseline is not None:
-                rPr.remove(baseline)
-            
-            # Add explicit baseline of 0 to ensure text sits at true baseline
-            baseline = OxmlElement('a:baseline')
-            baseline.set('val', '0')  # 0 = normal baseline position
-            rPr.append(baseline)
-            
-            # Remove any character spacing adjustments that might affect positioning
-            spc = rPr.find(qn('a:spc'))
-            if spc is not None:
-                rPr.remove(spc)
-                logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Removed character spacing")
-            
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Run-level baseline fix applied")
-            
-        except Exception as run_oxml_error:
-            logger.warning(f"CELL STYLING [{row_idx},{col_idx}]: Error applying run-level OXML fixes: {run_oxml_error}")
-        
-        # **CRITICAL STEP 10**: APPLY CELL BACKGROUND COLORS BASED ON ROW TYPE AND POSITION
-        if row_idx == 0:
-            # Header row - light grey background for first 7 columns and quarterly columns, green for months
-            if col_idx < 7:
-                cell.fill.solid()
-                cell.fill.fore_color.rgb = CLR_TABLE_GRAY
-            elif col_idx in [10, 14, 18, 22]:  # Q1, Q2, Q3, Q4 header cells
-                cell.fill.solid()
-                cell.fill.fore_color.rgb = CLR_TABLE_GRAY
-            else:
-                # Month columns - green background
-                cell.fill.solid()
-                cell.fill.fore_color.rgb = CLR_HEADER_GREEN
-        
-        elif row_idx == len(table_data) - 1:
-            # Total row - QA checklist subtotal grey #D9D9D9
-            cell.fill.solid()
-            cell.fill.fore_color.rgb = CLR_SUBTOTAL_GRAY
-        
-        elif table_data[row_idx][0] in ['SUBTOTAL', 'CARRIED FORWARD']:
-            # Subtotal or carried forward rows - same styling as total row
-            cell.fill.solid()
-            cell.fill.fore_color.rgb = CLR_SUBTOTAL_GRAY
-        
-        else:
-            # Data rows with conditional coloring
-            cell_key = (row_idx, col_idx)
-            
-            if col_idx < 7:
-                # First 7 columns: white background always
-                cell.fill.background()
-                
-            elif col_idx in [10, 14, 18, 22]:  # Q1, Q2, Q3, Q4 columns
-                # Quarter columns get same grey fill as TOTAL row
-                cell.fill.solid()
-                cell.fill.fore_color.rgb = CLR_SUBTOTAL_GRAY
-                
-            else:
-                # Month columns with conditional coloring
-                if cell_key in cell_metadata:
-                    cell_meta = cell_metadata[cell_key]
-                    cell_value = cell_meta.get('value', 0)
-                    has_data = cell_meta.get('has_data', False)
-                    
-                    try:
-                        numeric_value_for_coloring = float(cell_value) if cell_value else 0 
-                    except (ValueError, TypeError):
-                        numeric_value_for_coloring = 0
-                    
-                    # FINAL FIX: Only use has_data flag since it now correctly reflects display status
-                    if has_data:
-                        # Apply media type color based on value
-                        media_type = cell_meta['media_type']
-                        
-                        if media_type == "Television":
-                            cell.fill.solid()
-                            cell.fill.fore_color.rgb = CLR_TELEVISION
-                        elif media_type == "Digital":
-                            cell.fill.solid()
-                            cell.fill.fore_color.rgb = CLR_DIGITAL
-                        elif media_type == "OOH":
-                            cell.fill.solid()
-                            cell.fill.fore_color.rgb = CLR_OOH
-                        elif media_type == "GRPs":
-                            # GRP cells always use TELEVISION color
-                            cell.fill.solid()
-                            cell.fill.fore_color.rgb = CLR_TELEVISION
-                        elif media_type in ["Reach@1+", "OTS@1+", "Reach@3+", "OTS@3+"]:
-                            # New sub-rows use same green as GRP cells
-                            cell.fill.solid()
-                            cell.fill.fore_color.rgb = CLR_TELEVISION
-                        else:
-                            cell.fill.solid()
-                            cell.fill.fore_color.rgb = CLR_OTHER
-                    else:
-                        # No significant data: white background
-                        cell.fill.background()
-                else:
-                    # No metadata: white background
-                    cell.fill.background()
-        
-        # **FINAL ENFORCEMENT**: Re-apply ALL centering and spacing controls
-        # This ensures nothing gets overridden by PowerPoint defaults
-        # text_frame.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE # Old: text_frame level
-        cell.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE # New: cell-level anchor
-        logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Final enforcement - cell.vertical_anchor: {cell.vertical_anchor}")
-        
-        text_frame.word_wrap = False
-        text_frame.auto_size = MSO_AUTO_SIZE.NONE
-        
-        # logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Final enforcement - text_frame.vertical_anchor: {text_frame.vertical_anchor}") # Old log
-
-        # Apply final enforcement to ALL paragraphs in the cell
-        for para_idx, paragraph in enumerate(text_frame.paragraphs):
-            paragraph.alignment = PP_ALIGN.CENTER
-            paragraph.line_spacing = 1.0
-            # paragraph.space_before = Pt(0) # API call replaced by OXML
-            # paragraph.space_after = Pt(0)  # API call replaced by OXML
-
-            # OXML: Ensure zero paragraph spacing for final enforcement
-            pPr_final = paragraph._p.get_or_add_pPr()
-            spcBef_final = pPr_final.find(qn('a:spcBef'))
-            if spcBef_final is not None:
-                pPr_final.remove(spcBef_final)
-            spcBef_final = OxmlElement('a:spcBef')
-            spcPts_before_final = OxmlElement('a:spcPts')
-            spcPts_before_final.set('val', '0')
-            spcBef_final.append(spcPts_before_final)
-            pPr_final.append(spcBef_final)
-
-            spcAft_final = pPr_final.find(qn('a:spcAft'))
-            if spcAft_final is not None:
-                pPr_final.remove(spcAft_final)
-            spcAft_final = OxmlElement('a:spcAft')
-            spcPts_after_final = OxmlElement('a:spcPts')
-            spcPts_after_final.set('val', '0')
-            spcAft_final.append(spcPts_after_final)
-            pPr_final.append(spcAft_final)
-            
-            logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Final enforcement - Paragraph {para_idx} properties: Alignment={paragraph.alignment}, LineSpacing={paragraph.line_spacing}. OXML spcBef/spcAft forced to 0.")
-            
-            # Ensure all runs in all paragraphs have proper font (final check)
-            for run_idx, cell_run in enumerate(paragraph.runs):
-                # Determine expected font properties based on row_idx and col_idx again
-                expected_font_name = DEFAULT_FONT_NAME
-                expected_bold = False
-                expected_color_rgb = CLR_BLACK # Default to black
-
-                if row_idx == 0: # Header
-                    expected_font_size = FONT_SIZE_HEADER
-                    expected_bold = True
-                elif row_idx == len(table_data) - 1: # Subtotal
-                    expected_font_size = FONT_SIZE_BODY 
-                    expected_bold = True
-                else: # Body
-                    expected_font_size = FONT_SIZE_BODY
-                    if col_idx < 5: # First 5 columns bold
-                        expected_bold = True
-                    
-                    # Color for dashes
-                    # Re-check if the processed_cell_text (which should be in the run now) is a dash
-                    if cell_run.text == "-": # Check the actual run text
-                         expected_color_rgb = CLR_LIGHT_GRAY_TEXT
-                
-                if cell_run.font.name != expected_font_name:
-                    cell_run.font.name = expected_font_name
-                    logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Final run {run_idx} font name re-enforced to {expected_font_name}")
-                if cell_run.font.size != expected_font_size:
-                    cell_run.font.size = expected_font_size
-                    logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Final run {run_idx} font size re-enforced to {expected_font_size}")
-                if cell_run.font.bold != expected_bold:
-                    cell_run.font.bold = expected_bold
-                    logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Final run {run_idx} font bold re-enforced to {expected_bold}")
-                
-                # Check and set color, carefully
-                current_run_color_rgb = None
-                if cell_run.font.color.type == MSO_COLOR_TYPE.RGB:
-                    current_run_color_rgb = cell_run.font.color.rgb
-                
-                if current_run_color_rgb != expected_color_rgb:
-                    cell_run.font.color.rgb = expected_color_rgb
-                    logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Final run {run_idx} font color re-enforced to RGB({expected_color_rgb.r},{expected_color_rgb.g},{expected_color_rgb.b})")
-
-        # One last time for the text_frame itself
-        # text_frame.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE # Old: text_frame level
-        cell.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE # New: cell-level anchor
-        logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Absolutely final re-assertion of cell.vertical_anchor: {cell.vertical_anchor}")
-        
-        # **CRITICAL FINAL STEP**: Clean up any stray empty paragraphs and log final count
-        paragraphs_final_count = len(text_frame.paragraphs)
-        if paragraphs_final_count > 1:
-            # Remove any extra empty paragraphs beyond the first one
-            paragraphs_to_remove = []
-            for i in range(1, len(text_frame.paragraphs)):
-                para = text_frame.paragraphs[i]
-                if not para.text.strip():  # Empty paragraph
-                    paragraphs_to_remove.append(i)
-            
-            # Remove from highest index to lowest to avoid index shifting
-            for para_idx in reversed(paragraphs_to_remove):
-                # Note: Direct paragraph removal from text_frame.paragraphs is not supported
-                # This is a safety check - the fix should prevent multiple paragraphs
-                logger.warning(f"CELL STYLING [{row_idx},{col_idx}]: Found {len(paragraphs_to_remove)} extra empty paragraphs - this should not happen with the reuse fix")
-        
-        logger.debug(f"CELL STYLING [{row_idx},{col_idx}]: Final paragraph count: {len(text_frame.paragraphs)} (should be 1 for pixel-perfect alignment)")
-        
-        logger.debug(f"UNIVERSAL FORMATTING: Applied explicit Calibri font, centering, and spacing to cell ({row_idx},{col_idx}) - Text: '{processed_cell_text}'")
-        
-    except Exception as e:
-        logger.error(f"Error styling cell ({row_idx},{col_idx}): {e}")
-        logger.error(traceback.format_exc())
-
-def _apply_table_borders(table):
-    """
-    Apply consistent borders to all table cells.
-    Uses #BFBFBF color with 0.75pt width for all internal and external borders.
-    
-    Args:
-        table: The PowerPoint table object to apply borders to
-    """
-    try:
-        from pptx.oxml.ns import qn
-        from pptx.dml.color import RGBColor
-        from pptx.util import Pt
-        
-        # Border specifications from QA checklist
-        border_color = CLR_TABLE_GRAY  # #BFBFBF (191, 191, 191)
-        border_width = Pt(0.75)       # 0.75pt width
-        
-        logger.debug(f"Applying borders to table with {len(table.rows)} rows and {len(table.columns)} columns")
-        
-        # Apply borders to all cells
-        for row_idx, row in enumerate(table.rows):
-            for col_idx, cell in enumerate(row.cells):
-                try:
-                    # Access the cell's border properties
-                    tc = cell._tc  # Access the underlying table cell element
-                    tcPr = tc.get_or_add_tcPr()  # Table cell properties
-                    
-                    # Create border elements if they don't exist
-                    borders = ['top', 'left', 'bottom', 'right']
-                    
-                    for border_name in borders:
-                        border_element_name = f'{border_name}Border'
-                        border_element = tcPr.find(qn(f'a:{border_element_name}'))
-                        
-                        if border_element is None:
-                            border_element = tcPr.add(qn(f'a:{border_element_name}'))
-                        
-                        # Set border width (in EMUs - English Metric Units)
-                        # 0.75pt = 0.75 * 12700 EMUs
-                        border_width_emu = int(0.75 * 12700)
-                        border_element.set('w', str(border_width_emu))
-                        
-                        # Set border color
-                        solidFill = border_element.find(qn('a:solidFill'))
-                        if solidFill is None:
-                            solidFill = border_element.add(qn('a:solidFill'))
-                        
-                        srgbClr = solidFill.find(qn('a:srgbClr'))
-                        if srgbClr is None:
-                            srgbClr = solidFill.add(qn('a:srgbClr'))
-                        
-                        # Convert RGB to hex format
-                        hex_color = f"{border_color.r:02X}{border_color.g:02X}{border_color.b:02X}"
-                        srgbClr.set('val', hex_color)
-                        
-                except Exception as cell_border_error:
-                    logger.debug(f"Could not apply borders to cell ({row_idx}, {col_idx}): {cell_border_error}")
-                    # Fallback: try using the newer border API if available
-                    try:
-                        from pptx.table import _Cell
-                        if hasattr(cell, 'border'):
-                            # This is for newer python-pptx versions
-                            cell.border.top.color.rgb = border_color
-                            cell.border.left.color.rgb = border_color  
-                            cell.border.bottom.color.rgb = border_color
-                            cell.border.right.color.rgb = border_color
-                            cell.border.top.width = border_width
-                            cell.border.left.width = border_width
-                            cell.border.bottom.width = border_width
-                            cell.border.right.width = border_width
-                    except Exception as fallback_error:
-                        logger.debug(f"Fallback border method also failed for cell ({row_idx}, {col_idx}): {fallback_error}")
-        
-        logger.info(f"Table borders applied successfully with #BFBFBF color and 0.75pt width")
-        return True
-        
-    except Exception as e:
-        logger.warning(f"Error applying table borders: {str(e)}")
-        return False
-
-def _ensure_font_consistency(font, target_font_name, target_size, target_bold, target_color):
-    """
-    Ensure font consistency by applying target properties.
-    
-    Args:
-        font: The font object to modify
-        target_font_name: Target font name (e.g., 'Calibri')
-        target_size: Target font size (e.g., Pt(7))
-        target_bold: Target bold setting (True/False)
-        target_color: Target color (RGB)
-    """
-    try:
-        if target_font_name:
-            font.name = target_font_name
-        if target_size:
-            font.size = target_size
-        if target_bold is not None:
-            font.bold = target_bold
-        if target_color:
-            font.color.rgb = target_color
-    except Exception as e:
-        logger.debug(f"Error setting font properties: {e}")
+    return presentation_add_and_style_table(
+        slide,
+        table_data,
+        cell_metadata,
+        table_layout,
+        TABLE_CELL_STYLE_CONTEXT,
+        logger,
+    )
 
 def _prepare_main_table_data(df, region, masterbrand):
     """
@@ -3113,167 +1964,22 @@ def _prepare_brand_chart_data(df, region, masterbrand):
         return None
 
 def _add_pie_chart(slide, chart_data, chart_title, position_info, chart_name=None):
-    """
-    Add a pie chart to the slide at the specified position.
-    
-    Args:
-        slide: The PowerPoint slide to add the chart to
-        chart_data: Dictionary with labels as keys and values as values
-        chart_title: Title for the chart
-        position_info: Dictionary with 'left', 'top', 'width', 'height' in inches
-        chart_name: Optional name for the chart shape (for template compliance)
-        
-    Returns:
-        bool: True if chart was created successfully, False otherwise
-    """
-    try:
-        if not chart_data:
-            logger.warning(f"No chart data provided for {chart_title}")
-            return False
-        
-        logger.info(f"Creating pie chart: {chart_title}")
-        
-        # Calculate total for percentages
-        total_value = sum(chart_data.values())
-        if total_value <= 0:
-            logger.warning(f"Invalid total value for chart {chart_title}: {total_value}")
-            return False
-        
-        # Create chart data
-        chart_data_obj = CategoryChartData()
-        chart_data_obj.categories = list(chart_data.keys())
-        chart_data_obj.add_series('Budget', list(chart_data.values()))
-        
-        # Position and size (position_info already contains Inches objects from get_element_position)
-        left = position_info['left']
-        top = position_info['top']
-        width = position_info['width']
-        height = position_info['height']
-        
-        # Add chart to slide
-        chart_shape = slide.shapes.add_chart(
-            XL_CHART_TYPE.PIE, left, top, width, height, chart_data_obj
-        )
-        
-        # CRITICAL FIX: Set proper shape name to match template (fixes "Chart 14" issue)
-        if chart_name:
-            chart_shape.name = chart_name
-            logger.debug(f"Chart shape name set to: {chart_name}")
-        
-        chart = chart_shape.chart
-        
-        # Set chart title
-        chart.has_title = True
-        chart.chart_title.text_frame.text = chart_title
-        
-        # PIXEL-PERFECT: Style the title with Calibri 8pt non-bold (smaller than before)
-        title_font = chart.chart_title.text_frame.paragraphs[0].runs[0].font
-        
-        # PIXEL-PERFECT: Use enhanced font consistency enforcement for smaller chart titles
-        _ensure_font_consistency(
-            title_font, 
-            target_font_name=DEFAULT_FONT_NAME,
-            target_size=FONT_SIZE_CHART_TITLE,  # 8pt for chart titles
-            target_bold=False,  # NON-BOLD for pixel-perfect compliance
-            target_color=CLR_BLACK
-        )
-        
-        # FINAL QA: Disable AutoFit for chart title
-        chart.chart_title.text_frame.auto_size = MSO_AUTO_SIZE.NONE
-        
-        # Configure chart appearance
-        chart.has_legend = True
-        chart.legend.position = XL_LEGEND_POSITION.BOTTOM
-        
-        # PIXEL-PERFECT: Enhanced legend font consistency - smaller font
-        try:
-            legend_font = chart.legend.font
-            _ensure_font_consistency(
-                legend_font,
-                target_font_name=DEFAULT_FONT_NAME,
-                target_size=FONT_SIZE_CHART_LABELS,  # 6pt for legend
-                target_bold=False,
-                target_color=CLR_BLACK
-            )
-            logger.debug(f"Chart legend font consistency applied for '{chart_title}'")
-        except Exception as legend_font_error:
-            logger.debug(f"Could not apply legend font consistency: {legend_font_error}")
-        
-        # Apply colors based on data type
-        series = chart.series[0]
-        
-        # Color mapping for different chart types
-        color_mapping = {
-            # Media type colors
-            'Television': CLR_TELEVISION,
-            'Digital': CLR_DIGITAL, 
-            'OOH': CLR_OOH,
-            'Other': CLR_OTHER,
-            # Funnel stage colors (using existing palette)
-            'Awareness': CLR_TELEVISION,
-            'Consideration': CLR_BLACK,
-            'Purchase': CLR_OOH,
-            # Campaign type colors (using existing palette)
-            'Always On': CLR_TELEVISION,
-            'Brand': CLR_DIGITAL,
-            'Product': CLR_OOH
-        }
-        
-        # Apply colors to pie slices
-        for i, (label, value) in enumerate(chart_data.items()):
-            if i < len(series.points):
-                point = series.points[i]
-                
-                # Get color for this label, default to a rotation of existing colors
-                if label in color_mapping:
-                    color = color_mapping[label]
-                else:
-                    # Default color rotation
-                    colors = [CLR_TELEVISION, CLR_DIGITAL, CLR_OOH, CLR_OTHER]
-                    color = colors[i % len(colors)]
-                
-                point.format.fill.solid()
-                point.format.fill.fore_color.rgb = color
-        
-        # Enable data labels with percentages
-        series.has_data_labels = True
-        data_labels = series.data_labels
-        data_labels.show_percentage = True
-        data_labels.show_value = False
-        
-        # PIXEL-PERFECT: Set percentage format to one decimal place (e.g., "45.2%")
-        try:
-            data_labels.number_format = "0.0%"  # One decimal place format
-            logger.debug(f"Applied one decimal place format to chart data labels for '{chart_title}'")
-        except Exception as format_error:
-            logger.debug(f"Could not set decimal format for data labels: {format_error}")
-        
-        # PRIORITY 3: Enhanced data labels font consistency
-        try:
-            data_labels_font = data_labels.font
-            _ensure_font_consistency(
-                data_labels_font,
-                target_font_name=DEFAULT_FONT_NAME,
-                target_size=FONT_SIZE_CHART_LABELS,  # 6pt for data labels
-                target_bold=False,
-                target_color=CLR_BLACK
-            )
-            logger.debug(f"Chart data labels font consistency applied for '{chart_title}'")
-        except Exception as data_labels_font_error:
-            logger.debug(f"Could not apply data labels font consistency: {data_labels_font_error}")
-        
-        data_labels.font.name = DEFAULT_FONT_NAME  # Force Calibri
-        data_labels.font.size = FONT_SIZE_CHART_LABELS    # 6pt as per FINAL QA specification (was 7pt)
-        data_labels.font.color.rgb = CLR_BLACK
-        data_labels.font.bold = False
-        
-        logger.info(f"Chart '{chart_title}' created successfully with {len(chart_data)} data points")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error creating pie chart '{chart_title}': {str(e)}")
-        logger.error(traceback.format_exc())
+    """Compatibility wrapper for modular pie chart generation."""
+
+    if not position_info:
+        logger.error("Failed to get chart position coordinates")
         return False
+
+    return presentation_add_pie_chart(
+        slide,
+        chart_data,
+        chart_title,
+        position_info,
+        CHART_STYLE_CONTEXT,
+        CHART_COLOR_MAPPING,
+        CHART_COLOR_CYCLE,
+        chart_name=chart_name,
+    )
 
 def _populate_slide_content(new_slide, prs, combination_row, slide_title_suffix, 
                           split_table_data, split_metadata, split_idx, df, excel_path):
@@ -3330,7 +2036,6 @@ def _populate_slide_content(new_slide, prs, combination_row, slide_title_suffix,
     # Create and populate the main data table
     logger.info(f"Creating table for {combination_row[0]} - {combination_row[1]} - {combination_row[2]}{slide_title_suffix}")
     
-    # Use the split table data
     table_success = _add_and_style_table(new_slide, split_table_data, split_metadata, prs.slides[0])
     if table_success:
         logger.info(f"Table created successfully for slide")
@@ -3815,113 +2520,8 @@ def _unit_test__no_orphan_self():
 
 _unit_test__no_orphan_self()
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Generate PowerPoint presentation from Excel data using a template.')
-    parser.add_argument('--excel', help='Path to the input Excel file (absolute or relative, must exist).')
-    parser.add_argument('--template', help='Path to the PowerPoint template file (absolute or relative, must exist).')
-    parser.add_argument('--output', help='Path for the output PowerPoint file. Defaults to Output_Presentation_v2_[timestamp].pptx')
-    parser.add_argument('--log', help='Path for the log file. Defaults to logs/excel_to_ppt_v2_log_[timestamp].log')
-    parser.add_argument("--list-templates", action="store_true",
-        help="Show all *.pptx files in 'data/input/templates/', 'templates/', ., or .. directories and exit")
 
-    args = parser.parse_args()
+def build_presentation(template_path, excel_path, output_path):
+    """Backward-compatible wrapper around ``create_presentation``."""
 
-    # Handle --list-templates flag
-    if args.list_templates:
-        from glob import glob
-        here = Path(__file__).parent.parent.parent  # project root
-        TEMPLATE_FALLBACK_DIRS = ("input/templates", "data/input/templates", ".", "..")
-        print("Available template files:")
-        found_any = False
-        for d in TEMPLATE_FALLBACK_DIRS:
-            for f in glob(str(here / d / "*.pptx")):
-                print(f"  {Path(f).relative_to(here)}")
-                found_any = True
-        if not found_any:
-            print("  No .pptx files found in data/input/templates/, templates/, ., or .. directories")
-        sys.exit(0)
-
-    # Check required arguments for normal operation
-    if not args.excel or not args.template:
-        parser.error("--excel and --template are required when not using --list-templates")
-
-    # Initialize logging later after we create output directory
-    # logger = setup_logging()
-    logger = None  # Will be set up after output directory is created
-
-    # --- Path Validation and Logging --- 
-    excel_input_path_str = args.excel # No longer .name, and no .close() needed
-    
-    TEMPLATE_FALLBACK_DIRS = ("input/templates", "data/input/templates", ".", "..")
-
-    try:
-        template_path = _verify_file_exists("Template", args.template, TEMPLATE_FALLBACK_DIRS)
-        excel_path    = _verify_file_exists("Excel", excel_input_path_str)  # no fallbacks; XLSX is user-supplied
-    except FileNotFoundError as e:
-        # Log the error using the existing logger setup if available, or print to stderr
-        if 'logger' in globals() and logger is not None:
-            logger.error(f"File validation failed: {str(e)}")
-        else:
-            print(f"Pre-logging ERROR: File validation failed: {str(e)}", file=sys.stderr)
-        print(f"FATAL ERROR: {str(e)}", file=sys.stderr) # Ensure message goes to console
-        sys.exit(2) # Exit code 2 for "bad invocation" distinct from "script bug"
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    # Create timestamped output subfolder
-    output_subfolder = os.path.join("output", f"run_{timestamp}")
-    os.makedirs(output_subfolder, exist_ok=True)
-    
-    # Configure File Handler for logging in the output subfolder
-    if args.log:
-        log_file_path = args.log
-    else:
-        log_file_path = os.path.join(output_subfolder, f"automation_log_{timestamp}.log")
-    
-    # Ensure logger is fully configured before first use post-validation
-    # If setup_logging() was called earlier, this might reconfigure or add handlers.
-    # Assuming logger is configured by setup_logging() called near the top or on first use.
-    # The critical part is the print to stderr and sys.exit(2).
-
-    # Log validated paths (logger should be configured by now if setup_logging is called early)
-    # If setup_logging is called after arg parsing, these specific logs might only go to console if logger isn't ready.
-    # Best practice: Initialize logger once, early. Assuming 'logger = setup_logging()' is effective globally.
-    
-    # Initialize logging with the log file in the output subfolder
-    logger = setup_logging(log_path_base=os.path.join(output_subfolder, "automation_log"))
-
-    logger.info(f"Script execution started with arguments: {args}") # Moved this log after path validation
-    logger.info(f"Using template: {template_path}")
-    logger.info(f"Using Excel   : {excel_path}")
-
-    # File logging is already configured in setup_logging()
-    logger.info(f"Logging to: {log_file_path}")
-
-    # Set output filename in the timestamped subfolder
-    if args.output:
-        # If user specified output, use their filename but in our subfolder
-        output_filename = os.path.join(output_subfolder, os.path.basename(args.output))
-    else:
-        output_filename = os.path.join(output_subfolder, f"AMP_Presentation_{timestamp}.pptx")
-    
-    logger.info(f"Output will be saved to: {output_filename}")
-    logger.info(f"Log file will be saved to: {log_file_path}")
-
-    success = create_presentation(
-        template_path=template_path, # Use validated absolute path
-        excel_path=excel_path,       # Use validated absolute path
-        output_path=output_filename
-    )
-
-    if success:
-        logger.info(f"Presentation generation completed successfully. Output: {output_filename}")
-        # Display the location prominently for easy access
-        print("\n" + "="*80)
-        print("✅ PRESENTATION GENERATED SUCCESSFULLY!")
-        print("="*80)
-        print(f"📁 LOCATION: {output_filename}")
-        print("="*80 + "\n")
-        sys.exit(0)
-    else:
-        logger.error("Presentation generation failed.")
-        sys.exit(1)
+    return create_presentation(template_path, excel_path, output_path)
