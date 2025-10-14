@@ -50,7 +50,10 @@ def apply_table_borders(table, border_color: RGBColor, border_width_pt: float = 
     try:
         border_width = Pt(border_width_pt)
         border_width_emu = int(border_width_pt * 12700)
-        hex_color = f"{int(border_color):06X}"
+        hex_color = str(border_color)
+        if hex_color.startswith("0x"):
+            hex_color = hex_color[2:]
+        hex_color = hex_color.upper().zfill(6)
 
         for row_idx, row in enumerate(table.rows):
             for col_idx, cell in enumerate(row.cells):
@@ -434,9 +437,7 @@ def style_table_cell(
                 processed_cell_text = "-"
                 is_empty_cell = True
             else:
-                if col_idx == 0 and original_cell_text and str(original_cell_text).strip():
-                    processed_cell_text = str(original_cell_text).upper()
-                elif col_idx < 7 and original_cell_text and str(original_cell_text).strip():
+                if col_idx in (0, 1) and str(original_cell_text).strip():
                     processed_cell_text = str(original_cell_text).upper()
                 else:
                     processed_cell_text = str(original_cell_text)
@@ -456,7 +457,7 @@ def style_table_cell(
             run.font.color.rgb = CLR_BLACK
 
         elif row_idx == len(table_data) - 1 or (
-            row_idx > 0 and table_data[row_idx][0] in ["SUBTOTAL", "CARRIED FORWARD"]
+            row_idx > 0 and table_data[row_idx][0] in ["SUBTOTAL", "CARRIED FORWARD", "MONTHLY TOTAL (£ 000)"]
         ):
             run.font.name = DEFAULT_FONT_NAME
             run.font.size = FONT_SIZE_BODY
@@ -472,7 +473,7 @@ def style_table_cell(
             else:
                 run.font.color.rgb = CLR_BLACK
 
-            if col_idx < 7:
+            if col_idx < 3:
                 run.font.bold = True
             else:
                 run.font.bold = False
@@ -516,10 +517,7 @@ def style_table_cell(
             )
 
         if row_idx == 0:
-            if col_idx < 7:
-                cell.fill.solid()
-                cell.fill.fore_color.rgb = CLR_TABLE_GRAY
-            elif col_idx in [10, 14, 18, 22]:
+            if col_idx < 3:
                 cell.fill.solid()
                 cell.fill.fore_color.rgb = CLR_TABLE_GRAY
             else:
@@ -530,19 +528,15 @@ def style_table_cell(
             cell.fill.solid()
             cell.fill.fore_color.rgb = CLR_SUBTOTAL_GRAY
 
-        elif table_data[row_idx][0] in ["SUBTOTAL", "CARRIED FORWARD"]:
+        elif table_data[row_idx][0] in ["SUBTOTAL", "CARRIED FORWARD", "MONTHLY TOTAL (£ 000)"]:
             cell.fill.solid()
             cell.fill.fore_color.rgb = CLR_SUBTOTAL_GRAY
 
         else:
             cell_key = (row_idx, col_idx)
 
-            if col_idx < 7:
+            if col_idx < 3 or col_idx >= 16:
                 cell.fill.background()
-
-            elif col_idx in [10, 14, 18, 22]:
-                cell.fill.solid()
-                cell.fill.fore_color.rgb = CLR_SUBTOTAL_GRAY
 
             else:
                 if cell_key in cell_metadata:
@@ -567,15 +561,14 @@ def style_table_cell(
                         elif media_type == "OOH":
                             cell.fill.solid()
                             cell.fill.fore_color.rgb = CLR_OOH
-                        elif media_type == "GRPs":
-                            cell.fill.solid()
-                            cell.fill.fore_color.rgb = CLR_TELEVISION
-                        elif media_type in ["Reach@1+", "OTS@1+", "Reach@3+", "OTS@3+"]:
-                            cell.fill.solid()
-                            cell.fill.fore_color.rgb = CLR_TELEVISION
-                        else:
+                        elif media_type in ("Radio", "Cinema", "Print", "Other"):
                             cell.fill.solid()
                             cell.fill.fore_color.rgb = CLR_OTHER
+                        elif media_type == "Subtotal":
+                            cell.fill.solid()
+                            cell.fill.fore_color.rgb = CLR_SUBTOTAL_GRAY
+                        else:
+                            cell.fill.background()
                     else:
                         cell.fill.background()
                 else:
@@ -637,7 +630,7 @@ def style_table_cell(
                     expected_bold = True
                 else:
                     expected_font_size = FONT_SIZE_BODY
-                    if col_idx < 5:
+                    if col_idx < 3:
                         expected_bold = True
                     if cell_run.text == "-":
                         expected_color_rgb = CLR_LIGHT_GRAY_TEXT

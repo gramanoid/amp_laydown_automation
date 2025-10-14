@@ -1,3 +1,229 @@
+def _populate_summary_tiles(slide, template_slide, df, combination_row, excel_path):
+    if not SUMMARY_TILE_CONFIG:
+        return
+
+    market, brand, year = combination_row
+    combo_filter = (
+        (df["Country"].astype(str).str.strip() == str(market).strip())
+        & (df["Brand"].astype(str).str.strip() == str(brand).strip())
+        & (df["Year"].astype(str).str.strip() == str(year).strip())
+    )
+    subset = df.loc[combo_filter].copy()
+    if subset.empty:
+        logger.warning("Summary tiles: no data for %s - %s (%s)", market, brand, year)
+        return
+
+    total_cost = subset["Total Cost"].sum()
+
+    _populate_quarter_tiles(slide, template_slide, subset)
+    _populate_media_share_tiles(slide, template_slide, subset, total_cost)
+    _populate_funnel_share_tiles(slide, template_slide, subset, total_cost)
+    _populate_footer(slide, template_slide, excel_path)
+
+
+def _populate_quarter_tiles(slide, template_slide, subset):
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    month_values = {month: float(subset[month].sum()) for month in months}
+
+    for quarter_key, config in SUMMARY_TILE_CONFIG.get("quarter_budgets", {}).items():
+        shape_name = config.get("shape")
+        if not shape_name:
+            continue
+        shape = _ensure_shape_on_slide(slide, template_slide, shape_name)
+        if not shape:
+            logger.warning("Quarter tile shape '%s' missing", shape_name)
+            continue
+
+        quarter_months = {
+            "q1": ("Jan", "Feb", "Mar"),
+            "q2": ("Apr", "May", "Jun"),
+            "q3": ("Jul", "Aug", "Sep"),
+            "q4": ("Oct", "Nov", "Dec"),
+        }.get(quarter_key.lower(), ())
+        value = sum(month_values.get(month, 0.0) for month in quarter_months)
+        formatted = _format_tile_value(config, value)
+        prefix = config.get("prefix", "")
+
+        shape.text_frame.text = f"{prefix}{formatted}"
+
+
+def _populate_media_share_tiles(slide, template_slide, subset, total_cost):
+    media_group = subset.groupby("Mapped Media Type")["Total Cost"].sum()
+
+    for media_key, config in SUMMARY_TILE_CONFIG.get("media_share", {}).items():
+        shape_name = config.get("shape")
+        if not shape_name:
+            continue
+
+        shape = _ensure_shape_on_slide(slide, template_slide, shape_name)
+        if not shape:
+            logger.warning("Media share shape '%s' missing", shape_name)
+            continue
+
+        normalized_label = media_key.capitalize()
+        if media_key.lower() == "television":
+            lookup_key = "Television"
+        elif media_key.lower() == "digital":
+            lookup_key = "Digital"
+        else:
+            lookup_key = "Other"
+
+        value = float(media_group.get(lookup_key, 0.0))
+        formatted = _format_percentage_tile(config, value, total_cost)
+        label = config.get("label", normalized_label)
+
+        shape.text_frame.text = f"{label}: {formatted}"
+
+
+def _populate_funnel_share_tiles(slide, template_slide, subset, total_cost):
+    funnel_group = subset.groupby("Funnel Stage")["Total Cost"].sum()
+
+    for funnel_key, config in SUMMARY_TILE_CONFIG.get("funnel_share", {}).items():
+        shape_name = config.get("shape")
+        if not shape_name:
+            continue
+
+        shape = _ensure_shape_on_slide(slide, template_slide, shape_name)
+        if not shape:
+            logger.warning("Funnel share shape '%s' missing", shape_name)
+            continue
+
+        lookup_key = {
+            "awareness": "Awareness",
+            "consideration": "Consideration",
+            "purchase": "Purchase",
+        }.get(funnel_key.lower(), funnel_key)
+
+        value = float(funnel_group.get(lookup_key, 0.0))
+        formatted = _format_percentage_tile(config, value, total_cost)
+        label = config.get("label", lookup_key[:3].upper())
+
+        shape.text_frame.text = f"{label}: {formatted}"
+
+
+def _populate_footer(slide, template_slide, excel_path):
+    config = SUMMARY_TILE_CONFIG.get("footer_notes", {})
+    shape_name = config.get("shape")
+    if not shape_name:
+        return
+
+    shape = _ensure_shape_on_slide(slide, template_slide, shape_name)
+    if not shape:
+        logger.warning("Footer shape '%s' missing", shape_name)
+        return
+
+    text = config.get("default_text", "")
+    if config.get("append_date"):
+        stamp = _extract_export_date(excel_path, config.get("append_date_format", "%d_%m_%y"))
+        text = f"{text}\nData as of {stamp}"
+
+    shape.text_frame.text = text
+
+
+def _extract_export_date(excel_path, output_format):
+    from datetime import datetime
+    import re
+
+    path_str = str(excel_path)
+    match = re.search(r"(\d{4})_(\d{2})_(\d{2})", path_str)
+    if match:
+        year, month, day = match.groups()
+        try:
+            dt = datetime(int(year), int(month), int(day))
+            return dt.strftime(output_format)
+        except ValueError:
+            logger.debug("Failed to parse export date from filename '%s'", path_str)
+
+    try:
+        file_time = datetime.fromtimestamp(Path(excel_path).stat().st_mtime)
+        return file_time.strftime(output_format)
+    except Exception as exc:
+        logger.debug("Falling back to current timestamp for export date: %s", exc)
+        return datetime.now().strftime(output_format)
+
+
+def _format_tile_value(config, value):
+    scale = float(config.get("scale", 1.0))
+    fmt = config.get("number_format", "{value}")
+    try:
+        return fmt.format(value=value * scale)
+    except Exception as exc:
+        logger.warning("Failed to format tile value %s with format %s: %s", value, fmt, exc)
+        return str(value * scale)
+
+
+def _format_percentage_tile(config, value, total):
+    if total <= 0:
+        pct = 0.0
+    else:
+        pct = value / total
+    return _format_tile_value(dict(config, scale=config.get("scale", 100)), pct)
+def _ensure_shape_on_slide(slide, template_slide, shape_name):
+    shape = _get_shape_by_name(slide, shape_name)
+    if shape:
+        logger.debug("Shape '%s' already present on slide", shape_name)
+        return shape
+
+    template_shape = _get_shape_by_name(template_slide, shape_name)
+    if not template_shape:
+        logger.warning("Template missing shape '%s'", shape_name)
+        return None
+
+    if template_shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE:
+        new_shape = _copy_shape(template_shape, slide, new_name=shape_name)
+    elif template_shape.has_text_frame:
+        new_shape = _copy_text_box(template_shape, slide, new_name=shape_name)
+    else:
+        logger.warning("Unable to clone shape '%s' of unsupported type %s", shape_name, template_shape.shape_type)
+        new_shape = None
+    if new_shape:
+        logger.debug("Cloned shape '%s' onto slide", shape_name)
+    return new_shape
+
+
+def _apply_title(slide, template_slide, combination_row, slide_title_suffix):
+    shape_name = presentation_config.get("title", {}).get("shape") or SHAPE_NAME_TITLE
+    title_shape = _ensure_shape_on_slide(slide, template_slide, shape_name)
+
+    market, brand, year = combination_row
+    market_display = _normalize_market_name(market)
+    title_format = presentation_config.get("title", {}).get("format", "{market} - {brand}")
+    title_text = title_format.format(market=market_display, brand=brand, year=year) + slide_title_suffix
+
+    if not title_shape:
+        logger.warning("Title shape '%s' not available on slide", shape_name)
+        return
+
+    text_frame = title_shape.text_frame
+    text_frame.clear()
+    paragraph = text_frame.paragraphs[0]
+    paragraph.text = title_text
+
+    if paragraph.runs:
+        run = paragraph.runs[0]
+        _ensure_font_consistency(
+            run.font,
+            DEFAULT_FONT_NAME,
+            FONT_SIZE_TITLE,
+            True,
+            CLR_WHITE,
+        )
+
+
+def _normalize_market_name(raw_market: str) -> str:
+    if raw_market == "MOR":
+        return "Morocco"
+    return raw_market
+
+
+def _clear_comments(slide):
+    if not comments_config.get("enabled", False):
+        return
+
+    for shape_name in (SHAPE_NAME_COMMENTS_TITLE, SHAPE_NAME_COMMENTS_BOX):
+        shape = _get_shape_by_name(slide, shape_name)
+        if shape and shape.has_text_frame:
+            shape.text_frame.text = ""
 """
 Excel to PowerPoint Automation Script - GEOGRAPHY VERSION
 This version uses the 'Plan - Geography' column instead of '**Country' column
@@ -44,6 +270,8 @@ from amp_automation.presentation.tables import (
 )
 from amp_automation.utils.media import normalize_media_type
 
+REQUIRED_SHAPE_NAMES: set[str] = set()
+
 def _rgb_color(config_value, fallback):
     try:
         r, g, b = config_value
@@ -63,6 +291,428 @@ def _coord_from_config(config_mapping, fallback):
 
 MARGIN_EMU_LR = 45720  # Approx Pt(3.6), from template analysis for left/right cell margins
 ZERO_THRESHOLD = 0.01  # Values below this (absolute) are treated as zero for display/coloring
+_TABLE_PLACEHOLDER_WARNING_EMITTED = False
+
+TABLE_MONTH_ORDER = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+]
+TABLE_MONTH_HEADERS = [month.upper() for month in TABLE_MONTH_ORDER]
+TABLE_HEADER_COLUMNS = [
+    "CAMPAIGN",
+    "MEDIA",
+    "METRICS",
+    *TABLE_MONTH_HEADERS,
+    "TOTAL",
+    "GRPs",
+    "%",
+]
+
+MEDIA_DISPLAY_ORDER = [
+    "Television",
+    "Digital",
+    "OOH",
+    "Radio",
+    "Cinema",
+    "Print",
+    "Other",
+]
+
+MEDIA_DISPLAY_LABELS = {
+    "Television": "TELEVISION",
+    "Digital": "DIGITAL",
+    "OOH": "OOH",
+    "Radio": "RADIO",
+    "Cinema": "CINEMA",
+    "Print": "PRINT",
+    "Other": "OTHER",
+}
+
+_CAMPAIGN_BOUNDARIES: list[tuple[int, int]] = []
+
+
+def _normalized_media_value(raw_media: str) -> str:
+    if not raw_media:
+        return "Other"
+    normalized = normalize_media_type(str(raw_media))
+    if normalized not in MEDIA_DISPLAY_LABELS:
+        return "Other"
+    return normalized
+
+
+def _media_display_label(media_key: str) -> str:
+    return MEDIA_DISPLAY_LABELS.get(media_key, media_key.upper())
+
+
+def _set_cell_metadata(
+    metadata: dict[tuple[int, int], dict[str, object]],
+    row_idx: int,
+    col_idx: int,
+    value: float | int | None,
+    media_type: str,
+    has_data: bool,
+) -> None:
+    metadata[(row_idx, col_idx)] = {
+        "has_data": has_data,
+        "media_type": media_type,
+        "value": value or 0,
+    }
+
+
+def _format_budget_cell(value: float) -> str:
+    formatted = format_number(value, is_budget=True, is_monthly_column=True)
+    return formatted if formatted else "-"
+
+
+def _format_total_budget(value: float) -> str:
+    formatted = format_number(value, is_budget=True)
+    return formatted if formatted else "-"
+
+
+def _format_percentage_cell(value: float) -> str:
+    formatted = format_number(value, is_percentage=True)
+    return formatted if formatted else "0.0%"
+
+
+def _collect_monthly_values(media_df: pd.DataFrame) -> list[float]:
+    values: list[float] = []
+    for month in TABLE_MONTH_ORDER:
+        if month in media_df.columns:
+            values.append(float(media_df[month].sum()))
+        else:
+            values.append(0.0)
+    return values
+
+
+def _build_campaign_monthly_total_row(
+    row_idx: int,
+    month_totals: list[float],
+    cell_metadata: dict[tuple[int, int], dict[str, object]],
+) -> list[str]:
+    row: list[str] = ["MONTHLY TOTAL (£ 000)", "", ""]
+    for month_idx, value in enumerate(month_totals):
+        formatted = _format_budget_cell(value)
+        col_idx = 3 + month_idx
+        row.append(formatted)
+        _set_cell_metadata(cell_metadata, row_idx, col_idx, value, "Subtotal", not is_empty_formatted_value(formatted))
+
+    total_value = sum(month_totals)
+    total_col_idx = 3 + len(TABLE_MONTH_ORDER)
+    total_formatted = _format_total_budget(total_value)
+    row.append(total_formatted)
+    _set_cell_metadata(
+        cell_metadata,
+        row_idx,
+        total_col_idx,
+        total_value,
+        "Subtotal",
+        not is_empty_formatted_value(total_formatted),
+    )
+
+    row.extend(["", ""])
+    return row
+
+
+def _build_digital_metric_rows(
+    start_row_idx: int,
+    cell_metadata: dict[tuple[int, int], dict[str, object]],
+) -> list[list[str]]:
+    metric_labels = ["YT Reach", "META Reach", "TT Reach"]
+    rows: list[list[str]] = []
+
+    for label in metric_labels:
+        row_idx = start_row_idx + len(rows)
+        row: list[str] = ["-", "-", label]
+        for month_idx in range(len(TABLE_MONTH_ORDER)):
+            col_idx = 3 + month_idx
+            row.append("-")
+            _set_cell_metadata(cell_metadata, row_idx, col_idx, 0.0, "Digital", False)
+
+        total_col_idx = 3 + len(TABLE_MONTH_ORDER)
+        row.append("-")
+        _set_cell_metadata(cell_metadata, row_idx, total_col_idx, 0.0, "Digital", False)
+
+        row.extend(["", ""])
+        rows.append(row)
+
+    return rows
+
+
+def _build_tv_metric_rows(
+    campaign_name: str,
+    region: str,
+    masterbrand: str,
+    year: int | None,
+    excel_path: str | Path | None,
+    start_row_idx: int,
+    cell_metadata: dict[tuple[int, int], dict[str, object]],
+) -> tuple[list[list[str]], float]:
+    if not excel_path or year is None:
+        return [], 0.0
+
+    rows: list[list[str]] = []
+    grp_totals: list[float] = []
+    reach1_totals: list[float] = []
+    freq_totals: list[float] = []
+
+    for month in TABLE_MONTH_ORDER:
+        metrics = get_month_specific_tv_metrics(
+            excel_path,
+            region,
+            masterbrand,
+            campaign_name,
+            year,
+            month,
+        )
+
+        grp_totals.append(float(metrics.get("grp_sum", 0.0) or 0.0))
+        reach1 = metrics.get("reach1_avg", 0.0) or 0.0
+        reach1_totals.append(float(reach1) * 100.0)
+        freq_totals.append(float(metrics.get("frequency_avg", 0.0) or 0.0))
+
+    grp_row_idx = start_row_idx
+    grp_row: list[str] = ["-", "-", "GRPs"]
+    grp_sum = 0.0
+    for month_idx, value in enumerate(grp_totals):
+        formatted = format_number(value, is_grp=True)
+        if not formatted:
+            formatted = "-"
+        grp_row.append(formatted)
+        col_idx = 3 + month_idx
+        _set_cell_metadata(
+            cell_metadata,
+            grp_row_idx,
+            col_idx,
+            value,
+            "GRPs",
+            not is_empty_formatted_value(formatted),
+        )
+        grp_sum += value
+
+    total_col_idx = 3 + len(TABLE_MONTH_ORDER)
+    total_formatted = format_number(grp_sum, is_grp=True)
+    grp_row.append(total_formatted if total_formatted else "-")
+    _set_cell_metadata(
+        cell_metadata,
+        grp_row_idx,
+        total_col_idx,
+        grp_sum,
+        "GRPs",
+        not is_empty_formatted_value(total_formatted),
+    )
+    grp_row.extend([format_number(grp_sum, is_grp=True), ""])
+    rows.append(grp_row)
+
+    reach_row_idx = start_row_idx + len(rows)
+    reach_row: list[str] = ["-", "-", "Reach@1+"]
+    for month_idx, value in enumerate(reach1_totals):
+        formatted = _format_percentage_cell(value)
+        reach_row.append(formatted if formatted else "-")
+        col_idx = 3 + month_idx
+        _set_cell_metadata(
+            cell_metadata,
+            reach_row_idx,
+            col_idx,
+            value,
+            "Reach",
+            not is_empty_formatted_value(formatted),
+        )
+
+    reach_row.append("-")  # TOTAL column
+    _set_cell_metadata(cell_metadata, reach_row_idx, total_col_idx, 0.0, "Reach", False)
+    reach_row.extend(["", ""])
+    rows.append(reach_row)
+
+    ots_row_idx = start_row_idx + len(rows)
+    ots_row: list[str] = ["-", "-", "OTS@3+"]
+    for month_idx, value in enumerate(freq_totals):
+        formatted = format_number(value, is_grp=False)
+        if not formatted:
+            formatted = "-"
+        ots_row.append(formatted)
+        col_idx = 3 + month_idx
+        _set_cell_metadata(
+            cell_metadata,
+            ots_row_idx,
+            col_idx,
+            value,
+            "OTS",
+            not is_empty_formatted_value(formatted),
+        )
+
+    ots_row.append("-")
+    _set_cell_metadata(cell_metadata, ots_row_idx, total_col_idx, 0.0, "OTS", False)
+    ots_row.extend(["", ""])
+    rows.append(ots_row)
+
+    return rows, grp_sum
+
+
+def _build_budget_row(
+    campaign_label: str,
+    media_label: str,
+    media_key: str,
+    monthly_values: list[float],
+    total_cost: float,
+    share_percentage: float | None,
+    row_idx: int,
+    cell_metadata: dict[tuple[int, int], dict[str, object]],
+) -> list[str]:
+    row: list[str] = [campaign_label, media_label, "£ 000"]
+
+    for month_idx, value in enumerate(monthly_values):
+        formatted = _format_budget_cell(value)
+        col_idx = 3 + month_idx
+        row.append(formatted)
+        _set_cell_metadata(
+            cell_metadata,
+            row_idx,
+            col_idx,
+            value,
+            media_key,
+            not is_empty_formatted_value(formatted),
+        )
+
+    total_col_idx = 3 + len(TABLE_MONTH_ORDER)
+    total_formatted = _format_total_budget(total_cost)
+    row.append(total_formatted)
+    _set_cell_metadata(
+        cell_metadata,
+        row_idx,
+        total_col_idx,
+        total_cost,
+        media_key,
+        not is_empty_formatted_value(total_formatted),
+    )
+
+    row.append("")  # GRPs column blank for budget row
+    if share_percentage is not None:
+        row.append(_format_percentage_cell(share_percentage))
+    else:
+        row.append("")
+
+    return row
+
+
+def _build_campaign_block(
+    campaign_name: str,
+    campaign_df: pd.DataFrame,
+    base_row_idx: int,
+    total_budget_for_percentage: float,
+    cell_metadata: dict[tuple[int, int], dict[str, object]],
+    region: str,
+    masterbrand: str,
+    year: int | None,
+    excel_path: str | Path | None,
+) -> tuple[list[list[str]], list[float], float]:
+    block_rows: list[list[str]] = []
+    block_month_totals = [0.0] * len(TABLE_MONTH_ORDER)
+    block_grp_total = 0.0
+
+    campaign_total_budget = float(campaign_df["Total Cost"].sum() or 0.0)
+    share_percentage = (
+        (campaign_total_budget / total_budget_for_percentage) * 100.0
+        if total_budget_for_percentage > 0
+        else 0.0
+    )
+
+    first_media = True
+
+    for media_key in MEDIA_DISPLAY_ORDER:
+        media_mask = (
+            campaign_df["Mapped Media Type"].astype(str).str.lower()
+            == media_key.lower()
+        )
+        media_df = campaign_df[media_mask]
+        if media_df.empty:
+            continue
+
+        monthly_values = _collect_monthly_values(media_df)
+        block_month_totals = [
+            existing + value for existing, value in zip(block_month_totals, monthly_values)
+        ]
+        total_cost = float(media_df["Total Cost"].sum() or 0.0)
+
+        row_idx = base_row_idx + len(block_rows)
+        campaign_label = str(campaign_name).upper() if first_media else "-"
+
+        row = _build_budget_row(
+            campaign_label,
+            _media_display_label(media_key),
+            media_key,
+            monthly_values,
+            total_cost,
+            share_percentage if first_media else None,
+            row_idx,
+            cell_metadata,
+        )
+        block_rows.append(row)
+
+        if media_key == "Television":
+            tv_rows, tv_grp_total = _build_tv_metric_rows(
+                str(campaign_name),
+                region,
+                masterbrand,
+                year,
+                excel_path,
+                base_row_idx + len(block_rows),
+                cell_metadata,
+            )
+            if tv_rows:
+                block_rows.extend(tv_rows)
+                block_grp_total += tv_grp_total
+        elif media_key == "Digital":
+            digital_rows = _build_digital_metric_rows(
+                base_row_idx + len(block_rows),
+                cell_metadata,
+            )
+            if digital_rows:
+                block_rows.extend(digital_rows)
+
+        first_media = False
+
+    total_row = _build_campaign_monthly_total_row(
+        base_row_idx + len(block_rows),
+        block_month_totals,
+        cell_metadata,
+    )
+    block_rows.append(total_row)
+
+    return block_rows, block_month_totals, block_grp_total
+
+
+def _build_grand_total_row(
+    monthly_totals: list[float],
+    total_budget: float,
+    grand_total_grp: float,
+) -> list[str]:
+    row: list[str] = ["GRAND TOTAL", "", ""]
+    for value in monthly_totals:
+        row.append(_format_budget_cell(value))
+
+    row.append(_format_total_budget(total_budget))
+    row.append(format_number(grand_total_grp, is_grp=True))
+    row.append(_format_percentage_cell(100.0))
+    return row
+
+
+def _coerce_year(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(str(value).strip())
+    except (ValueError, TypeError):
+        return None
 
 
 def _initialize_from_config(config: Config) -> None:
@@ -72,6 +722,7 @@ def _initialize_from_config(config: Config) -> None:
     global table_config, row_heights_config, table_position_config
     global comments_config, comments_title_pos_config, comments_box_pos_config
     global title_position_config, charts_config, chart_positions_config
+    global summary_tiles_config
     global TABLE_PLACEHOLDER_NAME
     global CLR_BLACK, CLR_WHITE, CLR_LIGHT_GRAY_TEXT, CLR_TABLE_GRAY, CLR_HEADER_GREEN
     global CLR_COMMENTS_GRAY, CLR_SUBTOTAL_GRAY
@@ -85,6 +736,8 @@ def _initialize_from_config(config: Config) -> None:
     global CHART_STYLE_CONTEXT, CHART_COLOR_MAPPING, CHART_COLOR_CYCLE
     global MAX_ROWS_PER_SLIDE, SPLIT_STRATEGY, SHOW_CHARTS_ON_SPLITS, SHOW_CARRIED_SUBTOTAL, CONTINUATION_INDICATOR
     global ELEMENT_COORDINATES
+    global REQUIRED_SHAPE_NAMES
+    global SUMMARY_TILE_CONFIG
 
     MASTER_CONFIG = config
 
@@ -103,6 +756,8 @@ def _initialize_from_config(config: Config) -> None:
     title_position_config = presentation_config.get("title", {}).get("positioning", {})
     charts_config = presentation_config.get("charts", {})
     chart_positions_config = charts_config.get("positioning", {})
+    summary_tiles_config = presentation_config.get("summary_tiles", {})
+    SUMMARY_TILE_CONFIG = summary_tiles_config
 
     TABLE_PLACEHOLDER_NAME = table_config.get("placeholder_name", "Table Placeholder 1")
 
@@ -227,11 +882,57 @@ def _initialize_from_config(config: Config) -> None:
     }
 
 
-def configure(config: Config) -> None:
-    _initialize_from_config(config)
-
-
 _initialize_from_config(load_master_config())
+
+
+def configure(config: Config) -> None:
+    global REQUIRED_SHAPE_NAMES
+    _initialize_from_config(config)
+    REQUIRED_SHAPE_NAMES = _collect_required_shape_names()
+
+
+
+def _collect_required_shape_names() -> set[str]:
+    """Build the set of shape names the template must expose."""
+
+    required: set[str] = {SHAPE_NAME_TABLE}
+
+    tiles = SUMMARY_TILE_CONFIG if SUMMARY_TILE_CONFIG else {}
+
+    for section in ("quarter_budgets", "media_share", "funnel_share"):
+        for tile in tiles.get(section, {}).values():
+            shape_name = tile.get("shape") if isinstance(tile, dict) else None
+            if shape_name:
+                required.add(str(shape_name))
+
+    footer_cfg = tiles.get("footer_notes", {})
+    footer_shape = footer_cfg.get("shape") if isinstance(footer_cfg, dict) else None
+    if footer_shape:
+        required.add(str(footer_shape))
+
+    # Only require comments placeholder if comments enabled in config
+    if comments_config.get("enabled", False):
+        required.update({SHAPE_NAME_COMMENTS_TITLE, SHAPE_NAME_COMMENTS_BOX})
+
+    # Charts are optional and controlled via config flag
+    if charts_config.get("enabled", False):
+        required.update({SHAPE_NAME_FUNNEL_CHART, SHAPE_NAME_MEDIA_TYPE_CHART, SHAPE_NAME_CAMPAIGN_TYPE_CHART})
+
+    return required
+
+
+def _validate_template_shapes(template_slide) -> bool:
+    """Verify the template slide exposes all required shapes."""
+
+    available = {getattr(shape, "name", "") for shape in template_slide.shapes}
+    missing = sorted(name for name in REQUIRED_SHAPE_NAMES if name and name not in available)
+
+    if missing:
+        logger.error("Template missing required shapes: %s", ", ".join(missing))
+        return False
+
+    logger.debug("Template shape validation passed (%s shapes present).", len(REQUIRED_SHAPE_NAMES))
+    return True
 
 # Define the constant we need (EXACTLY = 1 is the standard value)
 class WD_ROW_HEIGHT_RULE:
@@ -256,6 +957,8 @@ SHAPE_NAME_OOH_LEGEND_COLOR = "OOHLegendColor"
 SHAPE_NAME_OOH_LEGEND_TEXT = "OOHLegendText"
 SHAPE_NAME_OTHER_LEGEND_COLOR = "OtherLegendColor"
 SHAPE_NAME_OTHER_LEGEND_TEXT = "OtherLegendText"
+
+REQUIRED_SHAPE_NAMES = _collect_required_shape_names()
 
 # Must exactly match the placeholder name in Slide Master
 TABLE_PLACEHOLDER_NAME = "Table Placeholder 1"
@@ -473,7 +1176,7 @@ def _get_shape_by_name(slide, name):
     for shape in slide.shapes:
         if shape.name == name:
             return shape
-    logger.warning(f"Shape with name '{name}' not found on slide.")
+    logger.debug("Shape with name '%s' not found on slide.", name)
     return None
 
 def _copy_text_box(source_shape, target_slide, new_name=None, new_text=None):
@@ -573,6 +1276,9 @@ def _copy_shape(source_shape, target_slide, new_name=None):
         logger.debug(f"Source shape '{source_shape.name}' line color has no rgb or complex fill. Defaulting line color.")
     
     new_line.width = source_line.width # Width is in EMUs, direct copy is fine
+
+    if hasattr(source_shape, "text") and hasattr(new_shape, "text"):
+        new_shape.text = source_shape.text
 
     logger.debug(f"Copied shape '{source_shape.name}' to '{new_shape.name}' on target slide.")
     return new_shape
@@ -696,197 +1402,104 @@ def load_and_prepare_data(excel_path):  # backward compatibility proxy
     return data_set.frame
 
 def _prepare_main_table_data_detailed(df, region, masterbrand, year=None, excel_path=None):
-    """
-    Prepare table data for a specific region/masterbrand combination.
-    Adapted from v1.5 create_campaign_table function for v2.0 template approach.
-    
-    Args:
-        df: DataFrame with loaded Excel data
-        region: Region name to filter by
-        masterbrand: Masterbrand name to filter by
-        
-    Returns:
-        tuple: (table_data, cell_metadata) where:
-            - table_data: List of lists representing table rows
-            - cell_metadata: Dictionary with metadata for each cell for conditional formatting
-        or (None, None) if no data found
-    """
+    """Prepare detailed table data for a region/masterbrand/year combination."""
+
+    global _CAMPAIGN_BOUNDARIES
+
     try:
         year_text = f" - {year}" if year is not None else ""
-        logger.info(f"Preparing table data for {region} - {masterbrand}{year_text}")
-        
-        # **ENHANCED DEBUGGING**: Log data filtering process
-        logger.debug(f"Total rows in DataFrame before filtering: {len(df)}")
-        logger.debug(f"Unique countries in data: {sorted(df['Country'].dropna().unique())}")
-        logger.debug(f"Unique masterbrands in data: {sorted(df['Brand'].dropna().unique())}")
+        logger.info("Preparing table data for %s - %s%s", region, masterbrand, year_text)
+
+        filter_mask = (
+            (df["Country"].astype(str).str.strip() == str(region).strip())
+            & (df["Brand"].astype(str).str.strip() == str(masterbrand).strip())
+        )
+
         if year is not None:
-            logger.debug(f"Unique years in data: {sorted(df['Year'].dropna().unique())}")
-        
-        # Month mapping for quarterly calculations
-        month_mapping = {
-            'January': 1, 'Jan': 1, 'JAN': 1, '1': 1, 1: 1,
-            'February': 2, 'Feb': 2, 'FEB': 2, '2': 2, 2: 2,
-            'March': 3, 'Mar': 3, 'MAR': 3, '3': 3, 3: 3,
-            'April': 4, 'Apr': 4, 'APR': 4, '4': 4, 4: 4,
-            'May': 5, 'MAY': 5, '5': 5, 5: 5,
-            'June': 6, 'Jun': 6, 'JUN': 6, '6': 6, 6: 6,
-            'July': 7, 'Jul': 7, 'JUL': 7, '7': 7, 7: 7,
-            'August': 8, 'Aug': 8, 'AUG': 8, '8': 8, 8: 8,
-            'September': 9, 'Sep': 9, 'SEP': 9, '9': 9, 9: 9,
-            'October': 10, 'Oct': 10, 'OCT': 10, '10': 10, 10: 10,
-            'November': 11, 'Nov': 11, 'NOV': 11, '11': 11, 11: 11,
-            'December': 12, 'Dec': 12, 'DEC': 12, '12': 12
-        }
-        
-        # Constants for table structure
-        MONTHS = ['JAN', 'FEB', 'MAR', 'Q1', 'APR', 'MAY', 'JUN', 'Q2', 'JUL', 'AUG', 'SEP', 'Q3', 'OCT', 'NOV', 'DEC', 'Q4']
-        GRP_DATA_IDENTIFIER = "GRPs"  # Identifier for GRP sub-rows
-        
-        # Filter data for the specific region, masterbrand, and year
-        # Use the processed column names from load_and_prepare_data
-        filter_conditions = [
-            (df['Country'].astype(str).str.strip() == region),
-            (df['Brand'].astype(str).str.strip() == masterbrand)
-        ]
-        
-        if year is not None:
-            filter_conditions.append(df['Year'].astype(str).str.strip() == str(year))
-        
-        filtered_df = df[
-            filter_conditions[0] & filter_conditions[1] & (filter_conditions[2] if len(filter_conditions) > 2 else True)
-        ].copy()
-        
-        # **ENHANCED DEBUGGING**: Log filtering results
-        logger.debug(f"Rows after filtering for {region} - {masterbrand}: {len(filtered_df)}")
-        
-        if filtered_df.empty:
-            logger.warning(f"No data found for {region} - {masterbrand}")
-            # **ENHANCED DEBUGGING**: Show available combinations for troubleshooting
-            available_combinations = df.groupby(['Country', 'Brand']).size().reset_index(name='count')
-            logger.debug(f"Available country/masterbrand combinations:")
-            for _, combo in available_combinations.iterrows():
-                logger.debug(f"  {combo['Country']} - {combo['Brand']} ({combo['count']} rows)")
+            filter_mask &= df["Year"].astype(str).str.strip() == str(year).strip()
+
+        subset = df.loc[filter_mask].copy()
+        logger.debug("Rows after filtering: %s", len(subset))
+
+        if subset.empty:
+            logger.warning("No data found for %s - %s%s", region, masterbrand, year_text)
+            _CAMPAIGN_BOUNDARIES = []
             return None, None
-            
-        logger.info(f"Found {len(filtered_df)} rows for {region} - {masterbrand}")
-        
-        # Get unique campaigns and sort them
-        campaign_column = 'Campaign Name'
-        campaigns = sorted(filtered_df[campaign_column].dropna().unique())
-        
-        # **ENHANCED DEBUGGING**: Log campaign details
-        logger.info(f"Found {len(campaigns)} unique campaigns for {region} - {masterbrand}:")
-        for i, campaign in enumerate(campaigns):
-            campaign_rows = len(filtered_df[filtered_df[campaign_column] == campaign])
-            logger.info(f"  {i+1}. '{campaign}' ({campaign_rows} rows)")
-        
-        # **ENHANCED DEBUGGING**: Check for potential data quality issues
-        if any(campaign in str(campaigns) for campaign in ['Gender', 'You Did It']):
-            logger.warning(f"DATA QUALITY ALERT: Suspicious campaigns found for {region} - {masterbrand}: {campaigns}")
-            logger.warning("This may indicate incorrect data filtering or source data issues")
-        
-        # Initialize table data with headers
-        table_data = [['CAMPAIGN NAME', 'BUDGET', 'GRPs', 'REACH', 'OTS', '%', 'MEDIA TYPE'] + MONTHS]
-        monthly_totals = [0.0] * len(MONTHS)
-        grp_monthly_totals = [0.0] * len(MONTHS)
-        
-        # Initialize cell metadata for conditional formatting
-        # Structure: {(row_idx, col_idx): {'has_data': bool, 'media_type': str, 'value': float}}
-        cell_metadata = {}
-        
-        # Calculate total budget for percentage calculations
-        total_budget_for_percentage = filtered_df['Total Cost'].sum()
-        grand_total_grp = 0  # Sum of campaign total GRPs for footer
-        
-        logger.debug(f"Total budget for percentage calculation: £{total_budget_for_percentage:,.2f}")
-        
-        for campaign_name in campaigns:
-            if pd.isna(campaign_name) or str(campaign_name).strip() == '':
+
+        table_rows: list[list[str]] = [TABLE_HEADER_COLUMNS.copy()]
+        cell_metadata: dict[tuple[int, int], dict[str, object]] = {}
+        monthly_totals = [0.0] * len(TABLE_MONTH_ORDER)
+        total_budget = float(subset["Total Cost"].sum() or 0.0)
+        grand_total_grp = 0.0
+        campaign_boundaries: list[tuple[int, int]] = []
+
+        campaign_names = sorted(
+            subset["Campaign Name"].dropna().unique(),
+            key=lambda name: str(name).upper(),
+        )
+
+        coerced_year = _coerce_year(year)
+
+        for campaign_name in campaign_names:
+            campaign_df = subset[subset["Campaign Name"] == campaign_name]
+            if campaign_df.empty:
                 continue
-            
-            campaign_df = filtered_df[filtered_df[campaign_column] == campaign_name]
-            logger.debug(f"Processing campaign: '{campaign_name}' ({len(campaign_df)} rows)")
-            
-            campaign_total_budget = campaign_df['Total Cost'].sum()
-            campaign_percentage = (campaign_total_budget / total_budget_for_percentage * 100) if total_budget_for_percentage > 0 else 0
-            
-            logger.debug(f"  Campaign budget: £{campaign_total_budget:,.2f} ({campaign_percentage:.1f}%)")
-            
-            # Calculate total TV GRP for this campaign
-            campaign_total_tv_grp_value = 0
-            if 'GRP' in campaign_df.columns:
-                campaign_tv_df = campaign_df[campaign_df['Media Type'].astype(str).str.upper().isin(['TV', 'TELEVISION'])]
-                if not campaign_tv_df.empty:
-                    grp_sum = campaign_tv_df['GRP'].sum()
-                    if not pd.isna(grp_sum):
-                        campaign_total_tv_grp_value = grp_sum
-            
-            logger.debug(f"  Campaign TV GRPs: {campaign_total_tv_grp_value}")
-            
-            # Get unique media types for this campaign, prioritizing TV first
-            media_types_for_campaign = sorted(campaign_df['Media Type'].fillna('').astype(str).unique())
-            media_types_for_campaign.sort(key=lambda mt: 0 if normalize_media_type(str(mt)) == 'Television' else 1)
-            
-            logger.debug(f"  Media types: {media_types_for_campaign}")
-            
-            first_media_type_for_campaign = True
-            
-            for media_type_original in media_types_for_campaign:
-                if pd.isna(media_type_original) or str(media_type_original).strip() == '':
-                    continue
-                
-                current_media_type_normalized = normalize_media_type(str(media_type_original))
-                media_df = campaign_df[campaign_df['Media Type'] == media_type_original]
-                
-                monthly_budget_data_formatted = ['-'] * len(MONTHS)
-                monthly_grp_data_formatted = ['-'] * len(MONTHS)
-                
-                is_tv_current_media = current_media_type_normalized == 'Television'
-                
-                # For wide-format data, monthly budgets are already in columns
-                # No need to group by Month column
-                
-                # Populate monthly budget data with quarterly totals
-                q_budget_total = 0
-                current_row_idx = len(table_data)  # Track current row index for metadata
-                
-                for i, month_name in enumerate(MONTHS):
-                    month_col_idx = i + 7  # Month columns start after first 7 columns
-                    
-                    if month_name.startswith('Q'):  # Q1, Q2, Q3, Q4
-                        formatted_budget = format_number(q_budget_total, is_budget=True, is_monthly_column=True)
-                        monthly_budget_data_formatted[i] = formatted_budget
-                        monthly_totals[i] += q_budget_total
-                        # Add metadata for quarter columns - FIXED: align with display logic
-                        cell_metadata[(current_row_idx, month_col_idx)] = {
-                            'has_data': not is_empty_formatted_value(formatted_budget),
-                            'media_type': current_media_type_normalized,
-                            'value': q_budget_total
-                        }
-                        q_budget_total = 0
-                    else:
-                        # For wide-format data, get budget directly from month column
-                        # Convert month name to proper case (Jan, Feb, Mar, etc.)
-                        month_col_name = month_name.capitalize() if len(month_name) == 3 else month_name
-                        if month_col_name in media_df.columns:
-                            budget_val = media_df[month_col_name].sum()
-                            formatted_budget = format_number(budget_val, is_budget=True, is_monthly_column=True)
-                            monthly_budget_data_formatted[i] = formatted_budget
-                            monthly_totals[i] += budget_val
-                            q_budget_total += budget_val
-                            # Add metadata for month columns - FIXED: align with display logic
-                            cell_metadata[(current_row_idx, month_col_idx)] = {
-                                'has_data': not is_empty_formatted_value(formatted_budget),
-                                'media_type': current_media_type_normalized,
-                                'value': budget_val
-                            }
-                        else:
-                            logger.warning(f"Month column {month_name} not found in data.")
-                            cell_metadata[(current_row_idx, month_col_idx)] = {
-                                'has_data': False,
-                                'media_type': current_media_type_normalized,
-                                'value': 0
-                            }
+
+            base_row_idx = len(table_rows)
+            block_rows, block_month_totals, block_grp_total = _build_campaign_block(
+                campaign_name,
+                campaign_df,
+                base_row_idx,
+                total_budget,
+                cell_metadata,
+                region,
+                masterbrand,
+                coerced_year,
+                excel_path,
+            )
+
+            if not block_rows:
+                continue
+
+            table_rows.extend(block_rows)
+            monthly_totals = [
+                total + addition
+                for total, addition in zip(monthly_totals, block_month_totals)
+            ]
+            grand_total_grp += block_grp_total
+            campaign_boundaries.append((base_row_idx, len(table_rows) - 1))
+
+        grand_total_row = _build_grand_total_row(
+            monthly_totals,
+            total_budget,
+            grand_total_grp,
+        )
+        table_rows.append(grand_total_row)
+
+        _CAMPAIGN_BOUNDARIES = campaign_boundaries
+
+        logger.info(
+            "Table data created for %s - %s%s with %s rows",
+            region,
+            masterbrand,
+            year_text,
+            len(table_rows),
+        )
+        return table_rows, cell_metadata
+
+    except Exception as exc:
+        logger.error(
+            "Error preparing table data for %s - %s%s: %s",
+            region,
+            masterbrand,
+            year_text,
+            exc,
+        )
+        logger.error(traceback.format_exc())
+        _CAMPAIGN_BOUNDARIES = []
+        return None, None
+
+        """
                 
                 # Process GRP data for TV media types
                 if is_tv_current_media and 'GRP' in df.columns:
@@ -945,523 +1558,16 @@ def _prepare_main_table_data_detailed(df, region, masterbrand, year=None, excel_
                 total_reach_display = ""
                 total_freq_display = ""
                 if first_media_type_for_campaign and is_tv_current_media:
-                    # Calculate TOTAL REACH as average of all Reach@1+ values for this campaign
-                    # Get all monthly Reach@1+ values for this campaign from raw data
-                    all_reach1_values = []
-                    total_grps_for_campaign = 0
-                    
-                    # Collect all monthly reach@1+ values and GRPs for this campaign
-                    for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']:
-                        metrics = get_month_specific_tv_metrics(excel_path, region, masterbrand, campaign_name, year, month)
-                        if not pd.isna(metrics['reach1_avg']) and metrics['reach1_avg'] > 0:
-                            all_reach1_values.append(metrics['reach1_avg'])
-                        if not pd.isna(metrics['grp_sum']) and metrics['grp_sum'] > 0:
-                            total_grps_for_campaign += metrics['grp_sum']
-                    
-                    # Calculate TOTAL REACH as average of all monthly Reach@1+ values
-                    if all_reach1_values:
-                        total_reach_avg = sum(all_reach1_values) / len(all_reach1_values)
-                        reach_pct = total_reach_avg * 100
-                        total_reach_display = f"{reach_pct:.0f}%"
-                        
-                        # Calculate TOTAL FREQ as Total GRPs ÷ Total Average Reach@1+
-                        if total_reach_avg > 0 and total_grps_for_campaign > 0:
-                            # Fix frequency calculation: GRPs are already percentage, reach is decimal
-                            # Convert reach from decimal to percentage for calculation
-                            total_freq = total_grps_for_campaign / (total_reach_avg * 100)
-                            # Format as whole number with thousands separator
-                            total_freq_display = f"{int(round(total_freq)):,}"
-                        else:
-                            total_freq_display = "-"
-                    else:
-                        total_reach_display = "-"
-                        total_freq_display = "-"
-                else:
-                    total_reach_display = "-"
-                    total_freq_display = "-"
 
-                # Create primary media type row
-                primary_row_data = [
-                    campaign_name_display,
-                    campaign_budget_display,
-                    campaign_total_grp_display,
-                    total_reach_display,
-                    total_freq_display,
-                    campaign_percentage_display,
-                    current_media_type_normalized
-                ] + monthly_budget_data_formatted
-                table_data.append(primary_row_data)
-                
-                # Add GRP sub-row for TV media types
-                if is_tv_current_media:
-                    grp_sub_row_data = [
-                        "",  # Campaign Name blank
-                        "",  # Budget blank
-                        "",  # TV GRPs (campaign total) blank
-                        "",  # TOTAL REACH blank
-                        "",  # TOTAL FREQ blank
-                        "",  # % blank
-                        GRP_DATA_IDENTIFIER  # Media Type is GRP_DATA_IDENTIFIER
-                    ] + monthly_grp_data_formatted
-                    table_data.append(grp_sub_row_data)
-                    
-                    # Add Reach@1+ sub-row for TV campaigns
-                    # Calculate month-by-month Reach 1+ values
-                    monthly_reach_data = []
-                    reach_row_idx = len(table_data)  # Get the row index for metadata
-                    
-                    # Track quarterly values for average calculation
-                    q1_values, q2_values, q3_values, q4_values = [], [], [], []
-                    current_quarter_values = q1_values
-                    
-                    for i, month_name in enumerate(MONTHS):
-                        month_col_idx = i + 7  # Month columns start after first 7 columns
-                        
-                        if month_name.startswith('Q'):  # Q1, Q2, Q3, Q4
-                            # Calculate quarterly average from accumulated values
-                            if current_quarter_values:
-                                quarterly_avg = sum(current_quarter_values) / len(current_quarter_values)
-                                # Convert decimal average to percentage (0.70 -> 70%)
-                                quarterly_pct = quarterly_avg * 100
-                                reach1_formatted = f"{quarterly_pct:.0f}%" if quarterly_pct > 0 else "-"
-                            else:
-                                reach1_formatted = "-"
-                                quarterly_avg = 0
-                            
-                            monthly_reach_data.append(reach1_formatted)
-                            # Add cell metadata for coloring - FIXED: align with display logic
-                            cell_metadata[(reach_row_idx, month_col_idx)] = {
-                                'has_data': not is_empty_formatted_value(reach1_formatted),
-                                'media_type': 'Reach@1+',
-                                'value': quarterly_avg
-                            }
-                            
-                            # Switch to next quarter
-                            if month_name == 'Q1':
-                                current_quarter_values = q2_values
-                            elif month_name == 'Q2':
-                                current_quarter_values = q3_values
-                            elif month_name == 'Q3':
-                                current_quarter_values = q4_values
-                        else:
-                            # Use month-specific aggregation from raw data
-                            metrics = get_month_specific_tv_metrics(excel_path, region, masterbrand, campaign_name, year, month_name)
-                            reach1_avg = metrics['reach1_avg']
-                            
-                            if not pd.isna(reach1_avg) and reach1_avg > 0:
-                                # Convert decimal to percentage (0.70 -> 70%)
-                                reach1_pct = reach1_avg * 100
-                                reach1_formatted = f"{reach1_pct:.0f}%"
-                                month_reach1_avg = reach1_avg
-                                current_quarter_values.append(month_reach1_avg)
-                            else:
-                                reach1_formatted = "-"
-                                month_reach1_avg = 0
-                            
-                            monthly_reach_data.append(reach1_formatted)
-                            # Add cell metadata for coloring - FIXED: align with display logic
-                            cell_metadata[(reach_row_idx, month_col_idx)] = {
-                                'has_data': not is_empty_formatted_value(reach1_formatted),
-                                'media_type': 'Reach@1+',
-                                'value': month_reach1_avg
-                            }
-                    
-                    reach_sub_row_data = [
-                        "",  # Campaign Name blank
-                        "-",  # Budget shows dash
-                        "-",  # TV GRPs shows dash
-                        "-",  # TOTAL REACH shows dash
-                        "-",  # TOTAL FREQ shows dash
-                        "-",  # % shows dash
-                        "Reach@1+"  # Media Type column
-                    ] + monthly_reach_data
-                    table_data.append(reach_sub_row_data)
-                    
-                    # Add OTS@1+ sub-row for TV campaigns
-                    # Calculate month-by-month OTS@1+ values (GRPs ÷ Reach@1+)
-                    monthly_freq_data = []
-                    freq_row_idx = len(table_data)  # Get the row index for metadata
-                    
-                    # Track quarterly values for average calculation
-                    q1_values, q2_values, q3_values, q4_values = [], [], [], []
-                    current_quarter_values = q1_values
-                    
-                    for i, month_name in enumerate(MONTHS):
-                        month_col_idx = i + 7  # Month columns start after first 7 columns
-                        
-                        if month_name.startswith('Q'):  # Q1, Q2, Q3, Q4
-                            # Calculate quarterly average from accumulated values
-                            if current_quarter_values:
-                                quarterly_avg = sum(current_quarter_values) / len(current_quarter_values)
-                                freq_formatted = f"{quarterly_avg:.0f}" if quarterly_avg > 0 else "-"
-                            else:
-                                freq_formatted = "-"
-                                quarterly_avg = 0
-                            
-                            monthly_freq_data.append(freq_formatted)
-                            # Add cell metadata for coloring - FIXED: align with display logic
-                            cell_metadata[(freq_row_idx, month_col_idx)] = {
-                                'has_data': not is_empty_formatted_value(freq_formatted),
-                                'media_type': 'OTS@1+',
-                                'value': quarterly_avg
-                            }
-                            
-                            # Switch to next quarter
-                            if month_name == 'Q1':
-                                current_quarter_values = q2_values
-                            elif month_name == 'Q2':
-                                current_quarter_values = q3_values
-                            elif month_name == 'Q3':
-                                current_quarter_values = q4_values
-                        else:
-                            # Use month-specific aggregation from raw data
-                            metrics = get_month_specific_tv_metrics(excel_path, region, masterbrand, campaign_name, year, month_name)
-                            grp_sum = metrics['grp_sum']
-                            reach1_avg = metrics['reach1_avg']
-                            
-                            # Calculate OTS@1+ = GRPs ÷ Reach@1+
-                            if (not pd.isna(grp_sum) and grp_sum > 0 and 
-                                not pd.isna(reach1_avg) and reach1_avg > 0):
-                                # reach1_avg is in decimal form (0.68 = 68%), so divide by 100
-                                ots1_value = grp_sum / (reach1_avg * 100)
-                                freq_formatted = f"{ots1_value:.0f}"
-                                month_freq_avg = ots1_value
-                                current_quarter_values.append(month_freq_avg)
-                            else:
-                                freq_formatted = "-"
-                                month_freq_avg = 0
-                            
-                            monthly_freq_data.append(freq_formatted)
-                            # Add cell metadata for coloring - FIXED: align with display logic
-                            cell_metadata[(freq_row_idx, month_col_idx)] = {
-                                'has_data': not is_empty_formatted_value(freq_formatted),
-                                'media_type': 'OTS@1+',
-                                'value': month_freq_avg
-                            }
-                    
-                    freq_sub_row_data = [
-                        "",  # Campaign Name blank
-                        "-",  # Budget shows dash
-                        "-",  # TV GRPs shows dash
-                        "-",  # TOTAL REACH shows dash
-                        "-",  # TOTAL FREQ shows dash
-                        "-",  # % shows dash
-                        "OTS@1+"  # Media Type column
-                    ] + monthly_freq_data
-                    table_data.append(freq_sub_row_data)
-                    
-                    # Add Reach@3+ sub-row for TV campaigns
-                    # Calculate month-by-month Reach 3+ values
-                    monthly_reach3_data = []
-                    reach3_row_idx = len(table_data)  # Get the row index for metadata
-                    
-                    # Track quarterly values for average calculation
-                    q1_values, q2_values, q3_values, q4_values = [], [], [], []
-                    current_quarter_values = q1_values
-                    
-                    for i, month_name in enumerate(MONTHS):
-                        month_col_idx = i + 7  # Month columns start after first 7 columns
-                        
-                        if month_name.startswith('Q'):  # Q1, Q2, Q3, Q4
-                            # Calculate quarterly average from accumulated values
-                            if current_quarter_values:
-                                quarterly_avg = sum(current_quarter_values) / len(current_quarter_values)
-                                # Convert decimal average to percentage (0.70 -> 70%)
-                                quarterly_pct = quarterly_avg * 100
-                                reach3_formatted = f"{quarterly_pct:.0f}%" if quarterly_pct > 0 else "-"
-                            else:
-                                reach3_formatted = "-"
-                                quarterly_avg = 0
-                            
-                            monthly_reach3_data.append(reach3_formatted)
-                            # Add cell metadata for coloring - FIXED: align with display logic
-                            cell_metadata[(reach3_row_idx, month_col_idx)] = {
-                                'has_data': not is_empty_formatted_value(reach3_formatted),
-                                'media_type': 'Reach@3+',
-                                'value': quarterly_avg
-                            }
-                            
-                            # Switch to next quarter
-                            if month_name == 'Q1':
-                                current_quarter_values = q2_values
-                            elif month_name == 'Q2':
-                                current_quarter_values = q3_values
-                            elif month_name == 'Q3':
-                                current_quarter_values = q4_values
-                        else:
-                            # Use month-specific aggregation from raw data
-                            metrics = get_month_specific_tv_metrics(excel_path, region, masterbrand, campaign_name, year, month_name)
-                            reach3_avg = metrics['reach3_avg']
-                            
-                            if not pd.isna(reach3_avg) and reach3_avg > 0:
-                                # Convert decimal to percentage (0.70 -> 70%)
-                                reach3_pct = reach3_avg * 100
-                                reach3_formatted = f"{reach3_pct:.0f}%"
-                                month_reach3_avg = reach3_avg
-                                current_quarter_values.append(month_reach3_avg)
-                            else:
-                                reach3_formatted = "-"
-                                month_reach3_avg = 0
-                            
-                            monthly_reach3_data.append(reach3_formatted)
-                            # Add cell metadata for coloring - FIXED: align with display logic
-                            cell_metadata[(reach3_row_idx, month_col_idx)] = {
-                                'has_data': not is_empty_formatted_value(reach3_formatted),
-                                'media_type': 'Reach@3+',
-                                'value': month_reach3_avg
-                            }
-                    
-                    reach3_sub_row_data = [
-                        "",  # Campaign Name blank
-                        "-",  # Budget shows dash
-                        "-",  # TV GRPs shows dash
-                        "-",  # TOTAL REACH shows dash
-                        "-",  # TOTAL FREQ shows dash
-                        "-",  # % shows dash
-                        "Reach@3+"  # Media Type column
-                    ] + monthly_reach3_data
-                    table_data.append(reach3_sub_row_data)
-                    
-                    # Add OTS@3+ sub-row for TV campaigns (OTS@3+ = GRPs ÷ Reach@3+)
-                    # Calculate month-by-month OTS values
-                    monthly_ots_data = []
-                    ots_row_idx = len(table_data)  # Get the row index for metadata
-                    
-                    # Track quarterly values for average calculation
-                    q1_values, q2_values, q3_values, q4_values = [], [], [], []
-                    current_quarter_values = q1_values
-                    
-                    for i, month_name in enumerate(MONTHS):
-                        month_col_idx = i + 7  # Month columns start after first 7 columns
-                        
-                        if month_name.startswith('Q'):  # Q1, Q2, Q3, Q4
-                            # Calculate quarterly average from accumulated values
-                            if current_quarter_values:
-                                quarterly_avg = sum(current_quarter_values) / len(current_quarter_values)
-                                # OTS is a regular number, not a percentage
-                                ots_formatted = f"{quarterly_avg:.0f}" if quarterly_avg > 0 else "-"
-                            else:
-                                ots_formatted = "-"
-                                quarterly_avg = 0
-                            
-                            monthly_ots_data.append(ots_formatted)
-                            # Add cell metadata for coloring - FIXED: align with display logic
-                            cell_metadata[(ots_row_idx, month_col_idx)] = {
-                                'has_data': not is_empty_formatted_value(ots_formatted),
-                                'media_type': 'OTS@3+',
-                                'value': quarterly_avg
-                            }
-                            
-                            # Switch to next quarter
-                            if month_name == 'Q1':
-                                current_quarter_values = q2_values
-                            elif month_name == 'Q2':
-                                current_quarter_values = q3_values
-                            elif month_name == 'Q3':
-                                current_quarter_values = q4_values
-                        else:
-                            # Use month-specific aggregation from raw data
-                            metrics = get_month_specific_tv_metrics(excel_path, region, masterbrand, campaign_name, year, month_name)
-                            grp_sum = metrics['grp_sum']
-                            reach3_avg = metrics['reach3_avg']
-                            
-                            # Calculate OTS@3+ = GRPs ÷ Reach@3+
-                            if (not pd.isna(grp_sum) and grp_sum > 0 and 
-                                not pd.isna(reach3_avg) and reach3_avg > 0):
-                                # reach3_avg is in decimal form (0.15 = 15%), so divide by 100
-                                ots_value = grp_sum / (reach3_avg * 100)
-                                # OTS is a regular number, not a percentage
-                                ots_formatted = f"{ots_value:.0f}"
-                                month_ots_avg = ots_value
-                                current_quarter_values.append(month_ots_avg)
-                            else:
-                                ots_formatted = "-"
-                                month_ots_avg = 0
-                            
-                            monthly_ots_data.append(ots_formatted)
-                            # Add cell metadata for coloring - FIXED: align with display logic
-                            cell_metadata[(ots_row_idx, month_col_idx)] = {
-                                'has_data': not is_empty_formatted_value(ots_formatted),
-                                'media_type': 'OTS@3+',
-                                'value': month_ots_avg
-                            }
-                    
-                    ots_sub_row_data = [
-                        "",  # Campaign Name blank
-                        "-",  # Budget shows dash
-                        "-",  # TV GRPs shows dash
-                        "-",  # TOTAL REACH shows dash
-                        "-",  # TOTAL FREQ shows dash
-                        "-",  # % shows dash
-                        "OTS@3+"  # Media Type column
-                    ] + monthly_ots_data
-                    table_data.append(ots_sub_row_data)
-                
-                first_media_type_for_campaign = False
-        
-        # Add total row
-        total_row_budget_values = [format_number(total, is_budget=True, is_monthly_column=True) for total in monthly_totals]
-        
-        total_row = [
-            'TOTAL',
-            format_number(total_budget_for_percentage, is_budget=True),
-            format_number(grand_total_grp, is_grp=True),  # Sum of all campaign total GRPs for TV
-            '-',  # TOTAL REACH blank for total row
-            '-',  # TOTAL FREQ blank for total row
-            format_number(100, is_percentage=True),
-            ''  # Media type blank for total row
-        ] + total_row_budget_values
-        table_data.append(total_row)
-        
-        logger.info(f"Table data created successfully for {region} - {masterbrand}. Total rows: {len(table_data)}")
-        return table_data, cell_metadata
-        
-    except Exception as e:
-        logger.error(f"Error preparing table data for {region} - {masterbrand}: {str(e)}")
-        logger.error(traceback.format_exc())
-        return None, None
+        """
 
 def _split_table_data_by_campaigns(table_data, cell_metadata):
-    """
-    Split table data into multiple tables if it exceeds MAX_ROWS_PER_SLIDE.
-    Keeps complete campaigns together (including TV sub-rows).
-    
-    Args:
-        table_data: List of lists representing table rows
-        cell_metadata: Dictionary with metadata for each cell
-        
-    Returns:
-        List of tuples: [(table_data_split, cell_metadata_split, is_continuation), ...]
-    """
-    if not table_data or len(table_data) <= MAX_ROWS_PER_SLIDE:
-        # No need to split
-        return [(table_data, cell_metadata, False)]
-    
-    logger.info(f"Table has {len(table_data)} rows, splitting needed (max: {MAX_ROWS_PER_SLIDE})")
-    
-    # Identify header and total row
-    header_row = table_data[0]
-    total_row = table_data[-1]
-    
-    # Group campaigns with their sub-rows
-    campaigns = []
-    current_campaign = []
-    current_campaign_name = None
-    
-    # Track which rows are sub-rows
-    sub_row_media_types = ['GRPs', 'Reach@1+', 'OTS@1+', 'Reach@3+', 'OTS@3+']
-    
-    for i in range(1, len(table_data) - 1):  # Skip header and total
-        row = table_data[i]
-        media_type = row[6] if len(row) > 6 else ""
-        campaign_name = row[0] if row[0] else ""
-        
-        if media_type in sub_row_media_types:
-            # This is a sub-row, add to current campaign
-            if current_campaign:  # Make sure we have a campaign to add to
-                current_campaign.append((i, row))
-        else:
-            # This is a main row
-            if current_campaign and current_campaign_name:
-                # Save previous campaign (including its main row and sub-rows)
-                campaigns.append({
-                    'name': current_campaign_name,
-                    'rows': current_campaign,
-                    'start_idx': current_campaign[0][0]
-                })
-            # Start new campaign with this main row
-            current_campaign_name = campaign_name
-            current_campaign = [(i, row)]
-    
-    # Don't forget the last campaign
-    if current_campaign and current_campaign_name:
-        campaigns.append({
-            'name': current_campaign_name,
-            'rows': current_campaign,
-            'start_idx': current_campaign[0][0]
-        })
-    
-    
-    # Now split campaigns into slides
-    splits = []
-    current_split = [header_row]
-    current_split_indices = [0]  # Track original indices for metadata
-    current_row_count = 1  # Start with header
-    split_number = 0
-    
-    # Track totals for subtotals
-    running_total_budget = 0
-    running_total_grp = 0
-    subtotal_values = None  # Initialize for carried forward rows
-    all_split_rows = []  # Track all rows across splits for final total
-    
-    for campaign in campaigns:
-        campaign_row_count = len(campaign['rows'])
-        
-        # Check if adding this campaign would exceed the limit
-        # Reserve 1 row for subtotal/total
-        if current_row_count + campaign_row_count + 1 > MAX_ROWS_PER_SLIDE:
-            # Complete current split with total/subtotal
-            if split_number > 0 or len(splits) > 0:
-                # For intermediate splits, use SUBTOTAL
-                subtotal_values = _calculate_subtotal_for_split(current_split[1:])  # Exclude header
-                subtotal_row = ['SUBTOTAL'] + subtotal_values
-                current_split.append(subtotal_row)
-                current_split_indices.append(-1)  # Special index for subtotal
-            else:
-                # For first split when there will be more, use TOTAL
-                total_values = _calculate_subtotal_for_split(current_split[1:])  # Exclude header
-                total_row_split = ['TOTAL'] + total_values
-                current_split.append(total_row_split)
-                current_split_indices.append(-1)  # Special index for total
-            
-            # Save current split
-            split_metadata = _extract_metadata_for_indices(cell_metadata, current_split_indices, len(current_split))
-            splits.append((current_split, split_metadata, split_number > 0))
-            
-            # Start new split
-            split_number += 1
-            current_split = [header_row]
-            current_split_indices = [0]
-            current_row_count = 1
-            
-            # Add carried forward subtotal if configured
-            if SHOW_CARRIED_SUBTOTAL and splits and subtotal_values:
-                # Make sure subtotal_values has the right number of columns
-                if len(subtotal_values) == 22:  # Missing campaign name column
-                    carried_row = ['CARRIED FORWARD'] + subtotal_values
-                else:
-                    logger.warning(f"Unexpected subtotal_values length: {len(subtotal_values)}")
-                    carried_row = ['CARRIED FORWARD'] + subtotal_values
-                current_split.append(carried_row)
-                current_split_indices.append(-2)  # Special index for carried forward
-                current_row_count += 1
-        
-        # Add campaign to current split
-        for idx, row in campaign['rows']:
-            current_split.append(row)
-            current_split_indices.append(idx)
-            all_split_rows.append(row)  # Track for final total
-        current_row_count += campaign_row_count
-    
-    # Handle the last split
-    if len(splits) > 0:
-        # This is a continuation slide, calculate grand total from all rows
-        grand_total_values = _calculate_subtotal_for_split(all_split_rows)
-        grand_total_row = ['TOTAL'] + grand_total_values
-        current_split.append(grand_total_row)
-        current_split_indices.append(-1)
-    else:
-        # This is the only slide, add original total row
-        current_split.append(total_row)
-        current_split_indices.append(len(table_data) - 1)
-    
-    # Extract metadata for final split
-    split_metadata = _extract_metadata_for_indices(cell_metadata, current_split_indices, len(current_split))
-    splits.append((current_split, split_metadata, split_number > 0))
-    
-    logger.info(f"Table split into {len(splits)} slides")
-    return splits
+    """Current table layout fits on a single slide; splitting handled in Phase B3."""
+
+    if not table_data:
+        return []
+
+    return [(table_data, cell_metadata, False)]
 
 
 def _calculate_subtotal_for_split(rows):
@@ -1734,13 +1840,35 @@ def set_title_text_detailed(title_shape, title_text, template_prs):
     logger.debug(f"Finished setting title for shape '{title_shape.name}'. Text frame word_wrap: {title_shape.text_frame.word_wrap}, auto_size: {title_shape.text_frame.auto_size}")
 
 def _add_and_style_table(slide, table_data, cell_metadata, template_slide=None):
+    global _TABLE_PLACEHOLDER_WARNING_EMITTED
+
     table_pos = get_element_position('main_table')
     if not table_pos:
         logger.error("Failed to get table position coordinates")
         return False
 
+    placeholder_name = TABLE_PLACEHOLDER_NAME
+    use_placeholder = False
+    if placeholder_name:
+        for placeholder in slide.placeholders:
+            if (
+                placeholder.placeholder_format.type == PP_PLACEHOLDER.TABLE
+                and getattr(placeholder, "name", "") == placeholder_name
+            ):
+                use_placeholder = True
+                break
+
+    if not use_placeholder:
+        if placeholder_name and not _TABLE_PLACEHOLDER_WARNING_EMITTED:
+            logger.info(
+                "Table placeholder '%s' unavailable on slide layout; using absolute positioning for tables.",
+                placeholder_name,
+            )
+            _TABLE_PLACEHOLDER_WARNING_EMITTED = True
+        placeholder_name = ""
+
     table_layout = TableLayout(
-        placeholder_name=TABLE_PLACEHOLDER_NAME,
+        placeholder_name=placeholder_name,
         shape_name=SHAPE_NAME_TABLE,
         position=table_pos,
         row_height_header=TABLE_ROW_HEIGHT_HEADER,
@@ -1984,54 +2112,11 @@ def _add_pie_chart(slide, chart_data, chart_title, position_info, chart_name=Non
 def _populate_slide_content(new_slide, prs, combination_row, slide_title_suffix, 
                           split_table_data, split_metadata, split_idx, df, excel_path):
     """Populate a single slide with all content (title, table, charts, comments)."""
-    
-    # Copy Title Placeholder from template FIRST
-    template_title_shape = _get_shape_by_name(prs.slides[0], SHAPE_NAME_TITLE)
-    if template_title_shape:
-        title_text = f"{combination_row[0]} – {combination_row[1]} ({combination_row[2]}){slide_title_suffix}"
-        copied_title_shape = _copy_text_box(template_title_shape, new_slide, new_name=SHAPE_NAME_TITLE, new_text=title_text)
-        if copied_title_shape:
-            # QA FIX: Ensure correct font for title
-            if copied_title_shape.has_text_frame and copied_title_shape.text_frame.paragraphs:
-                for paragraph in copied_title_shape.text_frame.paragraphs:
-                    for run in paragraph.runs:
-                        # PRIORITY 3: Enhanced font consistency for titles
-                        _ensure_font_consistency(
-                            run.font,
-                            target_font_name=DEFAULT_FONT_NAME,
-                            target_size=FONT_SIZE_TITLE,
-                            target_bold=True,
-                            target_color=CLR_WHITE
-                        )
-            logger.info(f"Title copied and populated for slide.")
-    
-    # Copy Static Text Elements (Comments Title and Box)
-    template_comments_title_shape = _get_shape_by_name(prs.slides[0], SHAPE_NAME_COMMENTS_TITLE)
-    if template_comments_title_shape:
-        copied_comments_title = _copy_text_box(template_comments_title_shape, new_slide, new_name=SHAPE_NAME_COMMENTS_TITLE, new_text="COMMENTS")
-        if copied_comments_title:
-            # Position comments title using centralized coordinates
-            title_pos = get_element_position('comments_title')
-            if title_pos:
-                copied_comments_title.left = title_pos['left']
-                copied_comments_title.top = title_pos['top']
-                copied_comments_title.width = title_pos['width']
-                copied_comments_title.height = title_pos['height']
-    
-    # Copy Comments Box
-    template_comments_box_shape = _get_shape_by_name(prs.slides[0], SHAPE_NAME_COMMENTS_BOX)
-    if template_comments_box_shape:
-        copied_comments_box = _copy_text_box(template_comments_box_shape, new_slide, new_name=SHAPE_NAME_COMMENTS_BOX, new_text="")
-        if copied_comments_box:
-            # Position comments box using centralized coordinates
-            box_pos = get_element_position('comments_box')
-            if box_pos:
-                copied_comments_box.left = box_pos['left']
-                copied_comments_box.top = box_pos['top']
-                copied_comments_box.width = box_pos['width']
-                copied_comments_box.height = box_pos['height']
-    
-    logger.info("Skipping legend copying - legend elements are part of slide master")
+
+    template_slide = prs.slides[0]
+
+    _apply_title(new_slide, template_slide, combination_row, slide_title_suffix)
+    _clear_comments(new_slide)
     
     # Create and populate the main data table
     logger.info(f"Creating table for {combination_row[0]} - {combination_row[1]} - {combination_row[2]}{slide_title_suffix}")
@@ -2042,44 +2127,7 @@ def _populate_slide_content(new_slide, prs, combination_row, slide_title_suffix,
     else:
         logger.warning(f"Failed to create table for slide")
     
-    # Create and add the three pie charts
-    if SHOW_CHARTS_ON_SPLITS == "all" or (split_idx == 0 and SHOW_CHARTS_ON_SPLITS == "first_only"):
-        logger.info(f"Creating charts for {combination_row[0]} - {combination_row[1]} - {combination_row[2]}")
-        
-        # Chart positioning using centralized coordinate system
-        chart_positions = [
-            get_element_position('chart_1'),
-            get_element_position('chart_2'),
-            get_element_position('chart_3')
-        ]
-        
-        # Validate chart positions
-        if not all(chart_positions):
-            logger.error("Failed to get chart position coordinates")
-            chart_positions = []
-        
-        # 1. Funnel Chart
-        funnel_data = _prepare_funnel_chart_data_detailed(df, combination_row[0], combination_row[1], combination_row[2])
-        if funnel_data:
-            funnel_success = _add_pie_chart(new_slide, funnel_data, "BUDGET BY FUNNEL STAGE", chart_positions[0], SHAPE_NAME_FUNNEL_CHART)
-            if funnel_success:
-                logger.info(f"Funnel chart created successfully for slide")
-        
-        # 2. Media Type Chart  
-        media_type_data = _prepare_media_type_chart_data_detailed(df, combination_row[0], combination_row[1], combination_row[2])
-        if media_type_data:
-            media_success = _add_pie_chart(new_slide, media_type_data, "BUDGET BY MEDIA TYPE", chart_positions[1], SHAPE_NAME_MEDIA_TYPE_CHART)
-            if media_success:
-                logger.info(f"Media type chart created successfully for slide")
-        
-        # 3. Campaign Type Chart
-        campaign_type_data = _prepare_campaign_type_chart_data(df, combination_row[0], combination_row[1], combination_row[2])
-        if campaign_type_data:
-            campaign_success = _add_pie_chart(new_slide, campaign_type_data, "BUDGET BY CAMPAIGN TYPE", chart_positions[2], SHAPE_NAME_CAMPAIGN_TYPE_CHART)
-            if campaign_success:
-                logger.info(f"Campaign type chart created successfully for slide")
-                
-        logger.info(f"Chart creation completed for slide")
+    _populate_summary_tiles(new_slide, template_slide, df, combination_row, excel_path)
 
 def create_presentation(template_path, excel_path, output_path):
     """Creates a PowerPoint presentation based on a template and Excel data."""
@@ -2109,6 +2157,10 @@ def create_presentation(template_path, excel_path, output_path):
         else:
             logger.debug("  No slides found in template!")
         logger.debug("--- End Template Slide Structure ---")
+
+        if not _validate_template_shapes(prs.slides[0]):
+            logger.error("Template validation failed; aborting presentation generation.")
+            return False
 
         df = load_and_prepare_data(excel_path)
         if df is None or df.empty:
@@ -2462,7 +2514,6 @@ def _verify_file_exists(label, path_str, extra_search=()):
     # If we get here, the file wasn't found anywhere
     p_resolved = p.resolve()
     raise FileNotFoundError(f"❌ {label} file not found: '{p_resolved}'")
-
 def _unit_test__no_orphan_self():
     import inspect, re, pathlib
     src = pathlib.Path(__file__).read_text(encoding="utf-8")

@@ -55,6 +55,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="List available .pptx templates from configured directories and exit.",
     )
+    parser.add_argument(
+        "--reconcile",
+        action="store_true",
+        help="Run Excel vs PPT reconciliation checks after generation and emit a CSV report.",
+    )
+    parser.add_argument(
+        "--reconciliation-report",
+        help="Optional output path (CSV) for reconciliation results. Defaults to the run directory.",
+    )
     return parser
 
 
@@ -107,6 +116,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if success:
         logger.info("Presentation generated successfully: %s", paths.output_file)
         print(paths.output_file)
+        _run_reconciliation_if_requested(args, paths, config, logger)
         return 0
 
     logger.error("Presentation generation failed")
@@ -288,6 +298,49 @@ def _to_absolute_path(path_like: str | Path) -> Path:
     if not path.is_absolute():
         path = PROJECT_ROOT / path
     return path.resolve()
+
+
+def _run_reconciliation_if_requested(
+    args: argparse.Namespace,
+    paths: ResolvedPaths,
+    config: Config,
+    logger,
+) -> None:
+    if not getattr(args, "reconcile", False):
+        return
+
+    from amp_automation.validation import reconciliation as reconciliation_module
+
+    if args.reconciliation_report:
+        report_path = Path(args.reconciliation_report)
+        if not report_path.is_absolute():
+            report_path = paths.output_dir / report_path
+    else:
+        report_path = paths.output_dir / "reconciliation_summary.csv"
+
+    try:
+        results = reconciliation_module.generate_reconciliation_report(
+            paths.output_file,
+            paths.excel,
+            config,
+            logger=logger,
+        )
+        reconciliation_module.write_reconciliation_report(results, report_path)
+        if not results:
+            logger.info("Reconciliation produced no data-driven slides; report written to %s", report_path)
+            return
+
+        failing = [item for item in results if not item.passed]
+        if failing:
+            logger.warning(
+                "Reconciliation detected mismatches on %s slide(s); review %s",
+                len(failing),
+                report_path,
+            )
+        else:
+            logger.info("Reconciliation passed for all summary tiles; report saved to %s", report_path)
+    except Exception as exc:
+        logger.error("Reconciliation failed: %s", exc)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution entrypoint
