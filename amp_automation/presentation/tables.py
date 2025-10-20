@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from pptx.dml.color import RGBColor
@@ -15,6 +15,27 @@ from pptx.enum.shapes import PP_PLACEHOLDER
 from pptx.oxml.ns import qn
 from pptx.oxml.xmlchemy import OxmlElement
 from pptx.util import Pt
+
+
+ALIGNMENT_LOOKUP = {
+    "left": PP_ALIGN.LEFT,
+    "center": PP_ALIGN.CENTER,
+    "right": PP_ALIGN.RIGHT,
+    "justify": PP_ALIGN.JUSTIFY,
+}
+
+
+def _resolve_alignment(value) -> PP_ALIGN:
+    if isinstance(value, PP_ALIGN):
+        return value
+    if isinstance(value, str):
+        return ALIGNMENT_LOOKUP.get(value.lower(), PP_ALIGN.CENTER)
+    if isinstance(value, int):
+        try:
+            return PP_ALIGN(value)
+        except ValueError:
+            return PP_ALIGN.CENTER
+    return PP_ALIGN.CENTER
 
 logger = logging.getLogger("amp_automation.presentation.tables")
 
@@ -66,29 +87,22 @@ def apply_table_borders(table, border_color: RGBColor, border_width_pt: float = 
                         if border is None:
                             border = OxmlElement(f"a:{edge}")
                             tcPr.append(border)
+                        # Clear any existing children/attributes so we start from a clean state
+                        border.attrib.clear()
+                        for child in list(border):
+                            border.remove(child)
 
                         border.set("w", str(border_width_emu))
-                        border.set("cap", "flat")
-                        border.set("cmpd", "sng")
-                        border.set("algn", "ctr")
 
-                        solid_fill = border.find(qn("a:solidFill"))
-                        if solid_fill is None:
-                            solid_fill = OxmlElement("a:solidFill")
-                            border.append(solid_fill)
-
-                        srgb = solid_fill.find(qn("a:srgbClr"))
-                        if srgb is None:
-                            srgb = OxmlElement("a:srgbClr")
-                            solid_fill.append(srgb)
-
+                        solid_fill = OxmlElement("a:solidFill")
+                        srgb = OxmlElement("a:srgbClr")
                         srgb.set("val", hex_color)
+                        solid_fill.append(srgb)
+                        border.append(solid_fill)
 
-                        dash = border.find(qn("a:prstDash"))
-                        if dash is None:
-                            dash = OxmlElement("a:prstDash")
-                            border.append(dash)
+                        dash = OxmlElement("a:prstDash")
                         dash.set("val", "solid")
+                        border.append(dash)
 
                 except Exception as cell_error:  # pragma: no cover - defensive log
                     logger.debug("Border styling failed for cell (%s,%s): %s", row_idx, col_idx, cell_error)
@@ -99,6 +113,24 @@ def apply_table_borders(table, border_color: RGBColor, border_width_pt: float = 
     except Exception as exc:  # pragma: no cover - defensive log
         logger.warning("Error applying table borders: %s", exc)
         return False
+
+
+def _scale_table_height(table, target_height_emu: int | None) -> None:
+    """Scale table row heights proportionally to reach the target total height."""
+
+    if not target_height_emu:
+        return
+
+    current_height = sum(row.height for row in table.rows)
+    if not current_height:
+        return
+
+    scale = target_height_emu / current_height
+    if abs(scale - 1.0) < 1e-6:
+        return
+
+    for row in table.rows:
+        row.height = int(row.height * scale)
 
 
 @dataclass(slots=True)
@@ -117,6 +149,10 @@ class CellStyleContext:
     color_digital: RGBColor
     color_ooh: RGBColor
     color_other: RGBColor
+    column_alignment: dict[int, object] = field(default_factory=dict)
+    word_wrap_columns: set[int] = field(default_factory=set)
+    uppercase_columns: set[int] = field(default_factory=set)
+    dual_line_labels: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -160,6 +196,9 @@ def style_table_cell(
     CLR_DIGITAL = context.color_digital
     CLR_OOH = context.color_ooh
     CLR_OTHER = context.color_other
+    alignment = _resolve_alignment(context.column_alignment.get(col_idx))
+    wrap_from_config = col_idx in context.word_wrap_columns
+    should_wrap = wrap_from_config
 
     from pptx.util import Pt
     from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE, MSO_VERTICAL_ANCHOR
@@ -205,7 +244,7 @@ def style_table_cell(
 
         text_frame = cell.text_frame
         text_frame.clear()
-        text_frame.word_wrap = False
+        text_frame.word_wrap = wrap_from_config
         text_frame.auto_size = MSO_AUTO_SIZE.NONE
 
         try:
@@ -347,7 +386,7 @@ def style_table_cell(
                 len(text_frame.paragraphs),
             )
 
-        p.alignment = PP_ALIGN.CENTER
+        p.alignment = alignment
         pPr = p._p.get_or_add_pPr()
 
         for spacing_element in ["a:spcBef", "a:spcAft", "a:lnSpc"]:
@@ -442,13 +481,21 @@ def style_table_cell(
                 else:
                     processed_cell_text = str(original_cell_text)
 
-        p.text = processed_cell_text
+        if processed_cell_text not in ("", "-", "–") and col_idx in context.uppercase_columns:
+            processed_cell_text = processed_cell_text.upper()
+
+        normalized_key = processed_cell_text.replace("\n", " ").strip().upper() if processed_cell_text else ""
+        if normalized_key and normalized_key in context.dual_line_labels:
+            processed_cell_text = "\n".join(context.dual_line_labels[normalized_key])
+
+        should_wrap = wrap_from_config or ("\n" in processed_cell_text)
+        text_frame.word_wrap = should_wrap
 
         if not p.runs:
             run = p.add_run()
-            run.text = processed_cell_text
         else:
             run = p.runs[0]
+        run.text = processed_cell_text
 
         if row_idx == 0:
             run.font.name = DEFAULT_FONT_NAME
@@ -582,11 +629,11 @@ def style_table_cell(
             cell.vertical_anchor,
         )
 
-        text_frame.word_wrap = False
+        text_frame.word_wrap = should_wrap
         text_frame.auto_size = MSO_AUTO_SIZE.NONE
 
         for para_idx, paragraph in enumerate(text_frame.paragraphs):
-            paragraph.alignment = PP_ALIGN.CENTER
+            paragraph.alignment = alignment
             paragraph.line_spacing = 1.0
 
             pPr_final = paragraph._p.get_or_add_pPr()
@@ -807,6 +854,21 @@ def add_and_style_table(
                 table_row.height_rule = layout.height_rule_value
             except Exception as exc:
                 logger.debug("Could not set height rule for row %s: %s", row_index, exc)
+
+    target_height_emu = None
+    if layout.position and layout.position.get("height") is not None:
+        height_value = layout.position.get("height")
+        if hasattr(height_value, "emu"):
+            target_height_emu = int(height_value.emu)
+        else:
+            try:
+                target_height_emu = int(height_value)
+            except (TypeError, ValueError):
+                target_height_emu = None
+    if target_height_emu is None:
+        target_height_emu = getattr(table_shape, "height", None)
+
+    _scale_table_height(table, target_height_emu)
 
     if layout.column_widths:
         for col_index, width in enumerate(layout.column_widths[:cols]):
