@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from pptx.dml.color import RGBColor
-from pptx.enum.dml import MSO_COLOR_TYPE
+from pptx.enum.dml import MSO_COLOR_TYPE, MSO_THEME_COLOR_INDEX
 from pptx.enum.text import MSO_AUTO_SIZE, MSO_VERTICAL_ANCHOR, PP_ALIGN
 from pptx.slide import Slide
 from pptx.enum.shapes import PP_PLACEHOLDER
@@ -563,63 +563,109 @@ def style_table_cell(
                 run_oxml_error,
             )
 
+        subtotal_labels = {"SUBTOTAL", "CARRIED FORWARD", "MONTHLY TOTAL (\u00a3 000)", "GRAND TOTAL"}
+        row_label = str(table_data[row_idx][0]).strip().upper() if row_idx < len(table_data) else ""
+
+        def _apply_rgb_fill(target_cell, rgb_color):
+            target_cell.fill.solid()
+            target_cell.fill.fore_color.rgb = rgb_color
+
+        def _apply_theme_fill(target_cell, theme_color, brightness=None):
+            target_cell.fill.solid()
+            target_cell.fill.fore_color.theme_color = theme_color
+            if brightness is not None:
+                target_cell.fill.fore_color.brightness = brightness
+            if hasattr(target_cell.fill.fore_color, "tint"):
+                target_cell.fill.fore_color.tint = None
+            if hasattr(target_cell.fill.fore_color, "shade"):
+                target_cell.fill.fore_color.shade = None
+
+        def _apply_base_background(target_cell):
+            _apply_theme_fill(target_cell, MSO_THEME_COLOR_INDEX.BACKGROUND_1, brightness=0)
+
+        highlight_alias_map = {
+            "GRPS": "TELEVISION",
+            "REACH": "TELEVISION",
+            "REACH@1+": "TELEVISION",
+            "REACH1+": "TELEVISION",
+            "OTS": "TELEVISION",
+            "OTS@3+": "TELEVISION",
+        }
+
         if row_idx == 0:
-            if col_idx < 3:
-                cell.fill.solid()
-                cell.fill.fore_color.rgb = CLR_TABLE_GRAY
+            header_text2_cols = {0, 1, 2, 15, 16, 17}
+            if col_idx in header_text2_cols:
+                _apply_theme_fill(cell, MSO_THEME_COLOR_INDEX.TEXT_2, brightness=-0.1)
             else:
-                cell.fill.solid()
-                cell.fill.fore_color.rgb = CLR_HEADER_GREEN
+                _apply_theme_fill(cell, MSO_THEME_COLOR_INDEX.TEXT_1, brightness=0.35)
 
-        elif row_idx == len(table_data) - 1:
-            cell.fill.solid()
-            cell.fill.fore_color.rgb = CLR_SUBTOTAL_GRAY
-
-        elif table_data[row_idx][0] in ["SUBTOTAL", "CARRIED FORWARD", "MONTHLY TOTAL (£ 000)"]:
-            cell.fill.solid()
-            cell.fill.fore_color.rgb = CLR_SUBTOTAL_GRAY
+        elif row_idx == len(table_data) - 1 or row_label in subtotal_labels:
+            _apply_rgb_fill(cell, CLR_SUBTOTAL_GRAY)
 
         else:
             cell_key = (row_idx, col_idx)
+            total_col_idx = len(table_data[row_idx]) - 3 if row_idx < len(table_data) and len(table_data[row_idx]) >= 3 else None
 
-            if col_idx < 3 or col_idx >= 16:
-                cell.fill.background()
-
-            else:
+            def resolve_media_type() -> str | None:
                 if cell_key in cell_metadata:
-                    cell_meta = cell_metadata[cell_key]
-                    cell_value = cell_meta.get("value", 0)
-                    has_data = cell_meta.get("has_data", False)
+                    return cell_metadata[cell_key].get("media_type")
+                media_value = table_data[row_idx][1] if row_idx < len(table_data) and len(table_data[row_idx]) > 1 else None
+                media_value = str(media_value).strip() if media_value else ""
+                if media_value and media_value != "-":
+                    return media_value
+                if row_idx > 0:
+                    prev_row = table_data[row_idx - 1]
+                    if len(prev_row) > 1:
+                        prev_media = str(prev_row[1]).strip()
+                        if prev_media and prev_media != "-":
+                            return prev_media
+                return None
 
-                    try:
-                        float(cell_value) if cell_value else 0
-                    except (ValueError, TypeError):
-                        pass
+            media_type = resolve_media_type()
 
-                    if has_data:
-                        media_type = cell_meta["media_type"]
+            def apply_media_highlight() -> bool:
+                if not media_type:
+                    return False
 
-                        if media_type == "Television":
-                            cell.fill.solid()
-                            cell.fill.fore_color.rgb = CLR_TELEVISION
-                        elif media_type == "Digital":
-                            cell.fill.solid()
-                            cell.fill.fore_color.rgb = CLR_DIGITAL
-                        elif media_type == "OOH":
-                            cell.fill.solid()
-                            cell.fill.fore_color.rgb = CLR_OOH
-                        elif media_type in ("Radio", "Cinema", "Print", "Other"):
-                            cell.fill.solid()
-                            cell.fill.fore_color.rgb = CLR_OTHER
-                        elif media_type == "Subtotal":
-                            cell.fill.solid()
-                            cell.fill.fore_color.rgb = CLR_SUBTOTAL_GRAY
-                        else:
-                            cell.fill.background()
-                    else:
-                        cell.fill.background()
+                normalized = media_type.strip().upper()
+                normalized = highlight_alias_map.get(normalized, normalized)
+                if normalized in {"TELEVISION", "TV"}:
+                    _apply_rgb_fill(cell, CLR_TELEVISION)
+                    return True
+                if normalized == "DIGITAL":
+                    _apply_rgb_fill(cell, CLR_DIGITAL)
+                    return True
+                if normalized == "OOH":
+                    _apply_rgb_fill(cell, CLR_OOH)
+                    return True
+                if normalized in {"RADIO", "CINEMA", "PRINT", "OTHER"}:
+                    _apply_rgb_fill(cell, CLR_OTHER)
+                    return True
+                if normalized == "SUBTOTAL":
+                    _apply_rgb_fill(cell, CLR_SUBTOTAL_GRAY)
+                    return True
+                return False
+
+            base_applied = False
+            if col_idx in (0, 1):
+                _apply_base_background(cell)
+                base_applied = True
+            elif total_col_idx is not None and col_idx >= total_col_idx:
+                _apply_base_background(cell)
+                base_applied = True
+
+            if col_idx == 2:
+                if not apply_media_highlight() and not base_applied:
+                    _apply_base_background(cell)
+            elif 3 <= col_idx <= 14:
+                cell_meta = cell_metadata.get(cell_key, {})
+                if cell_meta.get("has_data"):
+                    if not apply_media_highlight() and not base_applied:
+                        _apply_base_background(cell)
                 else:
                     cell.fill.background()
+            elif not base_applied:
+                cell.fill.background()
 
         cell.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE
         logger.debug(

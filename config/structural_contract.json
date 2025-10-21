@@ -1,0 +1,78 @@
+{
+  "table_shape_name": "MainDataTable",
+  "table_header": [
+    "CAMPAIGN",
+    "MEDIA",
+    "METRICS",
+    "JAN",
+    "FEB",
+    "MAR",
+    "APR",
+    "MAY",
+    "JUN",
+    "JUL",
+    "AUG",
+    "SEP",
+    "OCT",
+    "NOV",
+    "DEC",
+    "TOTAL",
+    "GRPS",
+    "%"
+  ],
+  "media_order": [
+    "TELEVISION",
+    "DIGITAL",
+    "OOH",
+    "RADIO",
+    "PRINT",
+    "CINEMA",
+    "OTHER"
+  ],
+  "media_metrics": {
+    "TELEVISION": [
+      "£ 000",
+      "GRPS",
+      "REACH@1+",
+      "OTS@3+"
+    ],
+    "DIGITAL": [
+      "£ 000",
+      "YT REACH",
+      "META REACH",
+      "TT REACH"
+    ],
+    "OOH": [
+      "£ 000"
+    ],
+    "RADIO": [
+      "£ 000"
+    ],
+    "PRINT": [
+      "£ 000"
+    ],
+    "CINEMA": [
+      "£ 000"
+    ],
+    "OTHER": [
+      "£ 000"
+    ]
+  },
+  "campaign_total_label": "MONTHLY TOTAL (£ 000)",
+  "grand_total_label": "GRAND TOTAL",
+  "required_shapes": [
+    "MainDataTable",
+    "QuarterBudgetQ1",
+    "QuarterBudgetQ2",
+    "QuarterBudgetQ3",
+    "QuarterBudgetQ4",
+    "MediaShareTelevision",
+    "MediaShareDigital",
+    "MediaShareOther",
+    "FunnelShareAwareness",
+    "FunnelShareConsideration",
+    "FunnelSharePurchase",
+    "FooterNotes"
+  ],
+  "footer_shape": "FooterNotes"
+}

@@ -3,7 +3,6 @@
   "_version": "2.0.0",
   "_last_updated": "2025-10-07",
   "_description": "Consolidated configuration file for all AMP automation settings",
-
   "project": {
     "name": "AMP Laydowns Automation",
     "version": "1.0.0",
@@ -11,7 +10,6 @@
     "author": "AMP Development Team",
     "last_updated": "2025-10-07"
   },
-
   "paths": {
     "input": {
       "base": "input",
@@ -49,13 +47,11 @@
       "auto_cleanup_on_exit": true
     }
   },
-
   "script": {
     "name": "excel_to_ppt_v1_071025.py",
     "location": "scripts/excel_to_ppt_v1_071025.py",
     "description": "Main production script for Excel to PowerPoint conversion"
   },
-
   "template": {
     "current": "Template_V4_FINAL_071025.pptx",
     "location": "template/Template_V4_FINAL_071025.pptx",
@@ -68,22 +64,90 @@
     "validation": {
       "check_exists": true,
       "check_structure": true,
-      "required_shapes": ["Table Placeholder 1"]
+      "required_shapes": [
+        "Table Placeholder 1"
+      ]
     }
   },
-
   "presentation": {
     "table": {
-      "max_rows_per_slide": 17,
+      "max_rows_per_slide": 32,
       "split_strategy": "by_campaign",
       "show_charts_on_splits": "all",
       "show_carried_subtotal": true,
       "continuation_indicator": " (Continued)",
+      "styling": {
+        "column_alignment": {
+          "0": "left",
+          "1": "left",
+          "2": "left",
+          "3-14": "right",
+          "15": "right",
+          "16": "center",
+          "17": "center"
+        },
+        "word_wrap_columns": [
+          0,
+          1,
+          2
+        ],
+        "uppercase_columns": [
+          0,
+          1,
+          2
+        ],
+        "dual_line_labels": {
+          "MONTHLY TOTAL (\u00a3 000)": [
+            "MONTHLY TOTAL",
+            "(\u00a3 000)"
+          ],
+          "CARRIED FORWARD": [
+            "CARRIED",
+            "FORWARD"
+          ],
+          "GRAND TOTAL": [
+            "GRAND",
+            "TOTAL"
+          ],
+          "YT REACH": [
+            "YT",
+            "REACH"
+          ],
+          "META REACH": [
+            "META",
+            "REACH"
+          ],
+          "TT REACH": [
+            "TT",
+            "REACH"
+          ]
+        }
+      },
       "row_heights": {
         "header_inches": 0.139,
         "body_inches": 0.118,
         "subtotal_inches": 0.139
       },
+      "column_widths_inches": [
+        0.888,
+        0.798,
+        0.909,
+        0.37,
+        0.438,
+        0.438,
+        0.438,
+        0.454,
+        0.455,
+        0.509,
+        0.479,
+        0.485,
+        0.438,
+        0.479,
+        0.385,
+        0.491,
+        0.438,
+        0.438
+      ],
       "positioning": {
         "left_inches": 0.179,
         "top_inches": 0.698,
@@ -93,6 +157,8 @@
     },
     "fonts": {
       "default_family": "Calibri",
+      "table_family": "Verdana",
+      "legend_family": "Verdana",
       "fallback_family": "Arial",
       "sizes_pt": {
         "title": 11,
@@ -110,16 +176,72 @@
     },
     "colors": {
       "media_types": {
-        "television": {"rgb": [113, 212, 141], "hex": "#71D48D"},
-        "digital": {"rgb": [253, 242, 183], "hex": "#FDF2B7"},
-        "ooh": {"rgb": [255, 191, 0], "hex": "#FFBF00"},
-        "other": {"rgb": [176, 211, 255], "hex": "#B0D3FF"}
+        "television": {
+          "rgb": [
+            113,
+            212,
+            141
+          ],
+          "hex": "#71D48D"
+        },
+        "digital": {
+          "rgb": [
+            253,
+            242,
+            183
+          ],
+          "hex": "#FDF2B7"
+        },
+        "ooh": {
+          "rgb": [
+            255,
+            217,
+            97
+          ],
+          "hex": "#FFD961"
+        },
+        "other": {
+          "rgb": [
+            176,
+            211,
+            255
+          ],
+          "hex": "#B0D3FF"
+        }
       },
       "ui_elements": {
-        "header_green": {"rgb": [56, 236, 4], "hex": "#38EC04"},
-        "table_gray": {"rgb": [191, 191, 191], "hex": "#BFBFBF"},
-        "subtotal_gray": {"rgb": [217, 217, 217], "hex": "#D9D9D9"},
-        "comments_gray": {"rgb": [242, 242, 242], "hex": "#F2F2F2"}
+        "header_green": {
+          "rgb": [
+            56,
+            236,
+            4
+          ],
+          "hex": "#38EC04"
+        },
+        "table_gray": {
+          "rgb": [
+            191,
+            191,
+            191
+          ],
+          "hex": "#BFBFBF"
+        },
+        "subtotal_gray": {
+          "rgb": [
+            217,
+            217,
+            217
+          ],
+          "hex": "#D9D9D9"
+        },
+        "comments_gray": {
+          "rgb": [
+            242,
+            242,
+            242
+          ],
+          "hex": "#F2F2F2"
+        }
       }
     },
     "layout": {
@@ -182,7 +304,7 @@
       "shape": "TitlePlaceholder",
       "positioning": {
         "left_inches": 0.184,
-        "top_inches": 0.270,
+        "top_inches": 0.27,
         "width_inches": 2.944,
         "height_inches": 0.337
       },
@@ -195,13 +317,13 @@
       "title_positioning": {},
       "box_positioning": {}
     },
-        "summary_tiles": {
+    "summary_tiles": {
       "quarter_budgets": {
         "q1": {
           "shape": "QuarterBudgetQ1",
           "label": "Q1",
           "prefix": "Q1: ",
-          "number_format": "£{value:,.0f}K",
+          "number_format": "\u00a3{value:,.0f}K",
           "scale": 0.001,
           "position": {
             "left_inches": 2.758,
@@ -214,7 +336,7 @@
           "shape": "QuarterBudgetQ2",
           "label": "Q2",
           "prefix": "Q2: ",
-          "number_format": "£{value:,.0f}K",
+          "number_format": "\u00a3{value:,.0f}K",
           "scale": 0.001,
           "position": {
             "left_inches": 4.051,
@@ -227,7 +349,7 @@
           "shape": "QuarterBudgetQ3",
           "label": "Q3",
           "prefix": "Q3: ",
-          "number_format": "£{value:,.0f}K",
+          "number_format": "\u00a3{value:,.0f}K",
           "scale": 0.001,
           "position": {
             "left_inches": 5.392,
@@ -240,17 +362,17 @@
           "shape": "QuarterBudgetQ4",
           "label": "Q4",
           "prefix": "Q4: ",
-          "number_format": "£{value:,.0f}K",
+          "number_format": "\u00a3{value:,.0f}K",
           "scale": 0.001,
           "position": {
             "left_inches": 6.855,
             "top_inches": 4.881,
-            "width_inches": 1.310,
+            "width_inches": 1.31,
             "height_inches": 0.105
           }
         }
-            },
-            "media_share": {
+      },
+      "media_share": {
         "television": {
           "shape": "MediaShareTelevision",
           "label": "TV",
@@ -287,8 +409,8 @@
             "height_inches": 0.128
           }
         }
-            },
-            "funnel_share": {
+      },
+      "funnel_share": {
         "awareness": {
           "shape": "FunnelShareAwareness",
           "label": "AWA",
@@ -325,8 +447,8 @@
             "height_inches": 0.128
           }
         }
-            },
-            "footer_notes": {
+      },
+      "footer_notes": {
         "shape": "FooterNotes",
         "default_text": "Source: DD_MM_YY_Lumina Export.\nNote: Digital Reach only for TOP channels and Awareness stage only. Cost: ALL digital channels",
         "append_date": true,
@@ -337,10 +459,35 @@
           "width_inches": 3.585,
           "height_inches": 0.269
         }
-            }
-        }
+      }
+    }
   },
-
+  "tooling": {
+    "autopptx": {
+      "enabled": false,
+      "base_slide_index": 0,
+      "output_suffix": "_autopptx",
+      "table_font_name": "Calibri",
+      "table_font_size": 12
+    },
+    "aspose": {
+      "enabled": false,
+      "export_formats": [
+        "pdf"
+      ],
+      "output_subdir": "aspose",
+      "timeout_seconds": 120,
+      "client_id": null,
+      "client_secret": null
+    },
+    "docstrange": {
+      "enabled": false,
+      "command": "docstrange",
+      "output_subdir": "docstrange",
+      "format": "markdown",
+      "reference_template": null
+    }
+  },
   "data": {
     "excel": {
       "required_columns": {
@@ -382,7 +529,16 @@
       "example": "Global | EMEA | MEA | Pakistan -> Pakistan"
     },
     "media_types": {
-      "recognized": ["Television", "TV", "Digital", "OOH", "Other", "Print", "Radio", "Cinema"],
+      "recognized": [
+        "Television",
+        "TV",
+        "Digital",
+        "OOH",
+        "Other",
+        "Print",
+        "Radio",
+        "Cinema"
+      ],
       "mapping": {
         "Television": "TV",
         "TV": "TV",
@@ -400,7 +556,6 @@
       "order": "descending"
     }
   },
-
   "processing": {
     "max_errors": 15,
     "continue_on_error": false,
@@ -411,7 +566,6 @@
       "required_data_percentage": 40
     }
   },
-
   "performance": {
     "execution_time_limits_seconds": {
       "data_loading": 30,
@@ -437,7 +591,12 @@
     "monitoring": {
       "enabled": true,
       "log_to_file": true,
-      "track_operations": ["data_loading", "data_processing", "presentation_generation", "full_processing"]
+      "track_operations": [
+        "data_loading",
+        "data_processing",
+        "presentation_generation",
+        "full_processing"
+      ]
     },
     "optimization": {
       "enable_gc": true,
@@ -446,7 +605,6 @@
       "chunk_size": 10000
     }
   },
-
   "logging": {
     "level": "INFO",
     "levels": {
@@ -465,7 +623,6 @@
       "performance": true
     }
   },
-
   "output": {
     "filename": {
       "pattern": "AMP_Presentation_{market}_{brand}_{timestamp}.pptx",
@@ -488,7 +645,6 @@
       "include_data_summary": true
     }
   },
-
   "error_handling": {
     "continue_on_non_critical_errors": true,
     "max_consecutive_errors": 5,
@@ -496,7 +652,6 @@
     "create_error_report": true,
     "error_report_location": "logs/errors"
   },
-
   "features": {
     "table_splitting": true,
     "geography_processing": true,
@@ -505,9 +660,9 @@
     "investment_sorting": true,
     "continuation_slides": true,
     "comments_section": true,
-    "legend_generation": true
+    "legend_generation": true,
+    "clone_pipeline_enabled": true
   },
-
   "platform": {
     "current": "windows",
     "font_fallback_enabled": true,
@@ -516,7 +671,6 @@
     "max_path_length": 260,
     "long_path_support_required": true
   },
-
   "defaults": {
     "encoding": "utf-8",
     "decimal_precision": 2,
@@ -525,7 +679,6 @@
     "thousands_separator": ",",
     "decimal_separator": "."
   },
-
   "startup": {
     "verify_dependencies": true,
     "check_paths": true,
@@ -534,13 +687,11 @@
     "cleanup_temp_on_start": false,
     "show_banner": true
   },
-
   "shutdown": {
     "cleanup_temp_files": true,
     "save_session_log": true,
     "create_final_report": false
   },
-
   "development": {
     "debug_mode": false,
     "verbose_output": false,

@@ -212,7 +212,10 @@ def _resolve_output_locations(
     run_dir = base / folder_pattern.format(timestamp=timestamp) if create_timestamped else base
 
     if args.output:
-        output_name = args.output
+        candidate_name = Path(args.output).name
+        if "{timestamp}" in candidate_name:
+            candidate_name = candidate_name.format(timestamp=timestamp)
+        output_name = candidate_name or f"AMP_Presentation_{timestamp}.pptx"
     else:
         output_name = f"AMP_Presentation_{timestamp}.pptx"
 

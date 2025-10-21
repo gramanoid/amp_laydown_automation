@@ -21,19 +21,38 @@ Use this document to regain full operational context after a cold start. It capt
   - `tools/visual_diff.py` exports both template & generated decks via PowerPoint COM, compares PNGs with PIL, and writes metrics + diffs.
   - `tools/inspect_generated_deck.py` re-saves decks to surface latent corruption, outputs shape & rel diagnostics.
 
-## Completed Work (Latest Run: `run_20251020_121840`)
+## Completed Work (Latest Run: `run_20251020_124516`)
 1. Flattened CLI output resolution—`--output` now treated as filename inside run directory (`output/presentations/run_<ts>/`).
 2. Eliminated PowerPoint repair prompt by appending cloned shapes to `p:spTree` and remapping relationship IDs during clone.
 3. Hardened table border styling (`apply_table_borders`) to emit spec-compliant line definitions (removed unsupported cap/alignment/headEnd attributes). Resulting decks now open via PowerPoint COM without errors.
-4. Regenerated deck `GeneratedDeck_Task11_fixed.pptx` (114 slides) under `output/presentations/run_20251020_121840/`; COM automation and python-pptx both confirm slide count = 114.
+4. Regenerated deck `GeneratedDeck_Task11_fixed.pptx` (114 slides) under `output/presentations/run_20251020_124516/`; COM automation and python-pptx both confirm slide count = 114.
 5. Executed targeted pytest suite: `python -m pytest tests/test_tables.py tests/test_assembly_split.py` → all passing.
 6. Ran `tools/visual_diff.py` against the new run. COM export succeeded, producing 114 generated PNGs and 1 template PNG; diff currently fails threshold because template baseline only contains the single master slide.
 7. Zen MCP server vendor repo cloned locally at `temp/zen-mcp-server` (also installed via `pip install -e temp/zen-mcp-server`), mirroring the OpenRouter allow-list (`claude-sonnet-4.5`, `grok-4`, `gemini-2.5-pro`, `gpt-5`). Custom FastMCP adapter (`mcp_app.py`) enables `mcp run` CLI invocation.
 8. Manual numpy/PIL diff confirms Slide1 PNG parity (max diff = 0). Additional template imagery still required for the remaining 113 slides.
+9. Added `features.clone_pipeline_enabled` configuration flag (default `true`) so operators can fall back to the legacy AutoPPTX workflow when required.
+10. Legacy AutoPPTX fallback now reuses the detailed clone table builder (year-aware) and is exercised by `tests/test_autopptx_fallback.py` to guard the configuration toggle path.
+11. Refactored `tools/visual_diff.py` to accept explicit `--reference`/`--generated` arguments, export caching, slide limits, and tightened thresholds; zero-diff metrics captured for `GeneratedDeck_Task11_fixed.pptx` when using the run itself as the provisional reference (summary: `output/visual_diff/diffs/GeneratedDeck_Task11_fixed_vs_GeneratedDeck_Task11_fixed/diff_summary.json`).
+12. Added `config/structural_contract.json` + `tools/validate_structure.py` to codify the structural checklist; pytest `tests/test_structural_validator.py` confirms current deck breaches (media ordering, missing grand totals, footnote date).
+
+### Structural Validation Contract (20 Oct 2025)
+The current baseline focuses on structural fidelity (slide geometry, styling, layout). Use the checklist below when reviewing generated decks prior to declaring a golden 114-slide reference:
+
+1. **Slide Frame:** Title bar format `[MARKET] – [BRAND] (YY)` with template background, border, and Verdana typography. No deviations in color or placement.
+2. **Column Layout:** Headers fixed as `CAMPAIGN | MEDIA | METRICS | JAN … DEC | TOTAL | GRPs | %`. Column widths may flex to avoid wrapping, but labels and dash placeholders remain identical.
+3. **Media Blocks:** Only media with spend are rendered, preserving template ordering (TV → Digital → OOH → Radio → others). Entirely empty rows are removed; empty cells use the template grey dash.
+4. **Metric Rows:** Media-specific metric rows strictly follow the template (TV: £000/GRPs/Reach@1+/OTS@3+, Digital: £000 + channel reach rows, other media: spend only). No additional metrics allowed.
+5. **Styling:** Apply client RGB palette, Verdana fonts, alternating fills, and text colors exactly. Numeric formatting uses `K/M` suffixes to keep values on a single line where possible.
+6. **Subtotals/Totals:** “MONTHLY TOTAL (£ 000)” appears after the final media row of each campaign (even across slide splits). A slide-level “GRAND TOTAL” closes every slide. Quarter tiles are present and compute from on-slide data.
+7. **Footer Tiles & Footnote:** TV/DIG/OTHER tiles plus AWA/CON/PUR cards appear on every slide with fixed colors. Footnote required; source line reads `DDMMYY Lumina Export`, pulling the date from the Excel filename.
+8. **Dynamic vs Static:** Structural elements above are immutable. Campaign order, row counts, and values are data-driven. Media sections disappear only when entirely empty; columns never do.
+9. **Other Elements:** No additional logos, icons, animations, or transitions beyond template defaults.
 
 ## In-Progress & Blocked Items
 1. **Template Baseline for Visual Diff**
-   - `tools/visual_diff.py` now exports the entire generated deck, but the template export still yields a single master-slide PNG. Need a 114-slide reference set (e.g., curated template deck or golden run) before thresholds can pass.
+   - `tools/visual_diff.py` now exports the entire generated deck, but the template export still yields a single master-slide PNG. Current workaround uses the generated deck as its own baseline (zero diff) to validate the tooling; still need a genuine 114-slide reference set (curated template or golden run) before thresholds can assert parity.
+2. **Structural Validator Follow-ups**
+   - `tools/validate_structure.py` flags structural gaps in `GeneratedDeck_Task11_fixed.pptx`: campaigns render Digital blocks before Television, campaign tables omit per-slide `GRAND TOTAL`, and the footnote still carries placeholder dates. These must be resolved before declaring golden parity.
 
 2. **Zen MCP Visual Analysis Workflow**
    - Server reachable via `mcp run mcp_app.py:app` (FastMCP). Inspector command stalls due to hosting requirements; revisit once slide images are available.
@@ -46,10 +65,7 @@ Use this document to regain full operational context after a cold start. It capt
    - Add tests covering media/funnel tile typography, legend alignment, and prevention of duplicated cloned shapes across slides.
    - Extend integration coverage to ensure pipeline splits maintain hierarchical ordering when multiple campaigns exist.
 
-5. **Configuration Toggle Cleanup**
-   - OpenSpec task 1.4 pending: expose configuration flag (likely in `master_config.json`) to disable the clone pipeline and fall back to legacy flow if emergencies arise.
-
-6. **Pipeline Hierarchy Validation**
+5. **Pipeline Hierarchy Validation**
    - Run `scripts/run_pipeline_local.py` on representative Excel inputs (multi-market, multi-campaign) to ensure stage ordering and slide counts remain correct.
 
 ## Operational Commands & Paths
@@ -63,14 +79,15 @@ Use this document to regain full operational context after a cold start. It capt
 - Visual diff baseline (once exports succeed):
   ```bash
   python tools/visual_diff.py \
-    --generated output/presentations/run_20251019_113429/GeneratedDeck_Task11_fixed.pptx \
+    --generated output/presentations/run_20251020_124516/GeneratedDeck_Task11_fixed.pptx \
     --reference template/Template_V4_FINAL_071025.pptx
   ```
 - Manual diff helper (current workaround): `output/visual_diff/manual_diff/`
-- Tests: `pytest tests/test_tables.py tests/test_assembly_split.py`
+- Tests: `pytest tests/test_tables.py tests/test_assembly_split.py tests/test_autopptx_fallback.py`
+- Visual diff: `python tools/visual_diff.py --reference <baseline.pptx> --generated <new_run.pptx> [--keep-exports --max-slides N]`
 - Zen MCP launch:
   ```powershell
-  & "C:/Users/alexg/.factory/droids/zen-mcp-server/.venv/Scripts/mcp.exe" run "C:/Users/alexg/.factory/droids/zen-mcp-server/mcp_app.py:app"
+  & "python" -m zen_mcp_server.server
   ```
 
 ## Risks & Considerations
@@ -83,6 +100,6 @@ Use this document to regain full operational context after a cold start. It capt
 1. Resolve COM export blocker; once PNGs exist for full deck, rerun visual diff + capture metrics JSON.
 2. Use Zen MCP `chat` or `thinkdeep` with exported images to log LLM validation.
 3. Perform PowerPoint Review → Compare and note results in work log.
-4. Implement regression tests (tiles + duplication) and add pipeline toggle (OpenSpec 1.4).
+4. Implement regression tests (tiles + duplication).
 5. Run `scripts/run_pipeline_local.py` smoke tests; log timings and output structure.
 6. Update documentation and OpenSpec once above steps complete.

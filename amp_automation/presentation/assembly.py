@@ -1,6 +1,126 @@
+LEGEND_GROUPS_CONFIG: dict[str, object] = {}
+SUMMARY_TILE_CONFIG: dict[str, object] = {}
+FONT_FAMILY_LEGEND = "Calibri"
+
+LEGEND_COLOR_WIDTH_IN = 24.84 / 96.0
+LEGEND_COLOR_HEIGHT_IN = 13.37 / 96.0
+LEGEND_TEXT_GAP_IN = 0.05
+LEGEND_MIN_TEXT_WIDTH_IN = 0.25
+
+def _apply_configured_position(shape, position_config):
+    if not shape or not position_config:
+        return
+
+    try:
+        if "left_inches" in position_config:
+            shape.left = Inches(float(position_config["left_inches"]))
+        if "top_inches" in position_config:
+            shape.top = Inches(float(position_config["top_inches"]))
+        if "width_inches" in position_config:
+            shape.width = Inches(float(position_config["width_inches"]))
+        if "height_inches" in position_config:
+            shape.height = Inches(float(position_config["height_inches"]))
+    except Exception as exc:
+        logger.debug("Unable to apply configured position for shape '%s': %s", getattr(shape, "name", "<unnamed>"), exc)
+
+
+def _prune_paragraph_runs(paragraph):
+    if not paragraph.runs:
+        return paragraph.add_run()
+    primary_run = paragraph.runs[0]
+    for extra in paragraph.runs[1:]:
+        paragraph._p.remove(extra._r)
+    return primary_run
+
+
+def _set_shape_text(shape, template_shape, text):
+    if not shape or not getattr(shape, "has_text_frame", False):
+        return
+
+    template_tf = template_shape.text_frame if template_shape and getattr(template_shape, "has_text_frame", False) else None
+    text_frame = shape.text_frame
+    text_frame.clear()
+
+    if template_tf:
+        text_frame.word_wrap = template_tf.word_wrap
+        try:
+            text_frame.auto_size = template_tf.auto_size
+        except AttributeError:
+            pass
+        for attr in ("margin_left", "margin_right", "margin_top", "margin_bottom"):
+            try:
+                setattr(text_frame, attr, getattr(template_tf, attr))
+            except Exception:
+                continue
+
+    lines = text.split("\n")
+    for idx, line in enumerate(lines):
+        paragraph = text_frame.paragraphs[idx] if idx < len(text_frame.paragraphs) else text_frame.add_paragraph()
+        template_para = template_tf.paragraphs[idx] if template_tf and idx < len(template_tf.paragraphs) else None
+
+        if template_para:
+            paragraph.alignment = template_para.alignment
+            paragraph.level = template_para.level
+            paragraph.line_spacing = template_para.line_spacing
+            paragraph.space_before = template_para.space_before
+            paragraph.space_after = template_para.space_after
+        elif paragraph.alignment is None:
+            paragraph.alignment = PP_ALIGN.CENTER
+
+        run = _prune_paragraph_runs(paragraph)
+        run.text = line
+
+        if template_para and template_para.runs:
+            template_run = template_para.runs[0]
+            run.font.name = template_run.font.name
+            run.font.size = template_run.font.size
+            run.font.bold = template_run.font.bold
+            run.font.italic = template_run.font.italic
+            template_color = template_run.font.color
+            if template_color.type == MSO_COLOR_TYPE.RGB:
+                run.font.color.rgb = template_color.rgb
+            elif template_color.type == MSO_COLOR_TYPE.SCHEME:
+                run.font.color.theme_color = template_color.theme_color
+                if getattr(template_color, "brightness", None) is not None:
+                    run.font.color.brightness = template_color.brightness
+                if getattr(template_color, "tint", None) is not None:
+                    run.font.color.tint = template_color.tint
+                if getattr(template_color, "shade", None) is not None:
+                    run.font.color.shade = template_color.shade
+        else:
+            run.font.name = FONT_FAMILY_LEGEND
+            run.font.size = FONT_SIZE_BODY
+
+    while len(text_frame.paragraphs) > len(lines):
+        extra_paragraph = text_frame.paragraphs[len(lines)]
+        text_frame._txBody.remove(extra_paragraph._p)
+
+
+def _get_child_shape(parent_shape, child_name):
+    if not parent_shape or not hasattr(parent_shape, "shapes"):
+        return None
+    for child in parent_shape.shapes:
+        if getattr(child, "name", "") == child_name:
+            return child
+    return None
+
+
 def _populate_summary_tiles(slide, template_slide, df, combination_row, excel_path):
     if not SUMMARY_TILE_CONFIG:
         return
+
+    for section in ("quarter_budgets", "media_share", "funnel_share"):
+        for tile in SUMMARY_TILE_CONFIG.get(section, {}).values():
+            shape_name = tile.get("shape") if isinstance(tile, dict) else None
+            if not shape_name:
+                continue
+            if not any(getattr(shape, "name", "") == shape_name for shape in slide.shapes):
+                clone_template_shape(template_slide, slide, shape_name)
+
+    footer_cfg = SUMMARY_TILE_CONFIG.get("footer_notes", {})
+    footer_shape = footer_cfg.get("shape") if isinstance(footer_cfg, dict) else None
+    if footer_shape and not any(getattr(shape, "name", "") == footer_shape for shape in slide.shapes):
+        clone_template_shape(template_slide, slide, footer_shape)
 
     market, brand, year = combination_row
     combo_filter = (
@@ -29,10 +149,12 @@ def _populate_quarter_tiles(slide, template_slide, subset):
         shape_name = config.get("shape")
         if not shape_name:
             continue
-        shape = _ensure_shape_on_slide(slide, template_slide, shape_name)
+        shape = next((s for s in slide.shapes if getattr(s, "name", "") == shape_name and getattr(s, "has_text_frame", False)), None)
         if not shape:
             logger.warning("Quarter tile shape '%s' missing", shape_name)
             continue
+        template_shape = _get_shape_by_name(template_slide, shape_name)
+        _apply_configured_position(shape, config.get("position"))
 
         quarter_months = {
             "q1": ("Jan", "Feb", "Mar"),
@@ -44,7 +166,7 @@ def _populate_quarter_tiles(slide, template_slide, subset):
         formatted = _format_tile_value(config, value)
         prefix = config.get("prefix", "")
 
-        shape.text_frame.text = f"{prefix}{formatted}"
+        _set_shape_text(shape, template_shape, f"{prefix}{formatted}")
 
 
 def _populate_media_share_tiles(slide, template_slide, subset, total_cost):
@@ -55,10 +177,12 @@ def _populate_media_share_tiles(slide, template_slide, subset, total_cost):
         if not shape_name:
             continue
 
-        shape = _ensure_shape_on_slide(slide, template_slide, shape_name)
+        shape = next((s for s in slide.shapes if getattr(s, "name", "") == shape_name and getattr(s, "has_text_frame", False)), None)
         if not shape:
             logger.warning("Media share shape '%s' missing", shape_name)
             continue
+        template_shape = _get_shape_by_name(template_slide, shape_name)
+        _apply_configured_position(shape, config.get("position"))
 
         normalized_label = media_key.capitalize()
         if media_key.lower() == "television":
@@ -72,7 +196,7 @@ def _populate_media_share_tiles(slide, template_slide, subset, total_cost):
         formatted = _format_percentage_tile(config, value, total_cost)
         label = config.get("label", normalized_label)
 
-        shape.text_frame.text = f"{label}: {formatted}"
+        _set_shape_text(shape, template_shape, f"{label}: {formatted}")
 
 
 def _populate_funnel_share_tiles(slide, template_slide, subset, total_cost):
@@ -82,11 +206,12 @@ def _populate_funnel_share_tiles(slide, template_slide, subset, total_cost):
         shape_name = config.get("shape")
         if not shape_name:
             continue
-
-        shape = _ensure_shape_on_slide(slide, template_slide, shape_name)
+        shape = next((s for s in slide.shapes if getattr(s, "name", "") == shape_name and getattr(s, "has_text_frame", False)), None)
         if not shape:
             logger.warning("Funnel share shape '%s' missing", shape_name)
             continue
+        template_shape = _get_shape_by_name(template_slide, shape_name)
+        _apply_configured_position(shape, config.get("position"))
 
         lookup_key = {
             "awareness": "Awareness",
@@ -98,7 +223,168 @@ def _populate_funnel_share_tiles(slide, template_slide, subset, total_cost):
         formatted = _format_percentage_tile(config, value, total_cost)
         label = config.get("label", lookup_key[:3].upper())
 
-        shape.text_frame.text = f"{label}: {formatted}"
+        _set_shape_text(shape, template_shape, f"{label}: {formatted}")
+
+
+def _apply_legend_color(shape, media_key):
+    if not shape or not hasattr(shape, "fill"):
+        return
+
+    color_lookup = {
+        "television": CLR_TELEVISION,
+        "tv": CLR_TELEVISION,
+        "digital": CLR_DIGITAL,
+        "ooh": CLR_OOH,
+        "other": CLR_OTHER,
+        "radio": CLR_OTHER,
+        "cinema": CLR_OTHER,
+        "print": CLR_OTHER,
+    }
+
+    color = color_lookup.get(str(media_key).strip().lower())
+    if not color:
+        return
+
+    try:
+        shape.fill.solid()
+        shape.fill.fore_color.rgb = color
+        if hasattr(shape, "line"):
+            shape.line.fill.background()
+    except Exception as exc:
+        logger.debug("Unable to apply legend color for '%s': %s", media_key, exc)
+
+
+def _create_legend_color_shape(slide, shape_name, position):
+    if not position:
+        return None
+
+    try:
+        left = Inches(float(position.get("left_inches", 0.0)))
+        top = Inches(float(position.get("top_inches", 0.0)))
+        total_height = Inches(float(position.get("height_inches", LEGEND_COLOR_HEIGHT_IN)))
+    except Exception as exc:
+        logger.debug("Invalid legend position config for '%s': %s", shape_name, exc)
+        return None
+
+    color_width = Inches(LEGEND_COLOR_WIDTH_IN)
+    color_height = Inches(LEGEND_COLOR_HEIGHT_IN)
+    color_top = top + max((total_height - color_height) / 2, 0)
+
+    color_shape = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        left,
+        color_top,
+        color_width,
+        color_height,
+    )
+    color_shape.name = shape_name or f"LegendColor_{len(slide.shapes)}"
+    color_shape.line.fill.background()
+    return color_shape
+
+
+def _create_legend_text_shape(slide, shape_name, position):
+    if not position:
+        return None
+
+    try:
+        left = Inches(float(position.get("left_inches", 0.0)))
+        top = Inches(float(position.get("top_inches", 0.0)))
+        total_width = Inches(float(position.get("width_inches", LEGEND_COLOR_WIDTH_IN + LEGEND_TEXT_GAP_IN + LEGEND_MIN_TEXT_WIDTH_IN)))
+        total_height = Inches(float(position.get("height_inches", LEGEND_COLOR_HEIGHT_IN)))
+    except Exception as exc:
+        logger.debug("Invalid legend position config for '%s': %s", shape_name, exc)
+        return None
+
+    text_left = left + Inches(LEGEND_COLOR_WIDTH_IN + LEGEND_TEXT_GAP_IN)
+    text_width = max(total_width - (text_left - left), Inches(LEGEND_MIN_TEXT_WIDTH_IN))
+
+    text_shape = slide.shapes.add_textbox(text_left, top, text_width, total_height)
+    text_shape.name = shape_name or f"LegendText_{len(slide.shapes)}"
+    return text_shape
+
+
+def _set_legend_text(shape, template_shape, text):
+    if template_shape and getattr(template_shape, "has_text_frame", False):
+        _set_shape_text(shape, template_shape, text)
+        return
+
+    if not shape or not getattr(shape, "has_text_frame", False):
+        return
+
+    text_frame = shape.text_frame
+    text_frame.clear()
+    paragraph = text_frame.paragraphs[0]
+    paragraph.alignment = PP_ALIGN.LEFT
+    run = paragraph.add_run()
+    run.text = text
+    run.font.name = FONT_FAMILY_LEGEND
+    run.font.size = FONT_SIZE_LEGEND
+    run.font.bold = True
+
+
+def _ensure_legend_shapes(slide, template_slide):
+    if not LEGEND_GROUPS_CONFIG:
+        return
+
+    for media_key, legend_cfg in LEGEND_GROUPS_CONFIG.items():
+        group_shape = None
+        group_name = legend_cfg.get("group_shape")
+        if group_name:
+            group_shape = _get_shape_by_name(slide, group_name)
+            if not group_shape:
+                try:
+                    group_shape = clone_template_shape(template_slide, slide, group_name)
+                except TemplateCloneError as exc:
+                    logger.debug("Unable to clone legend group '%s': %s", group_name, exc)
+                    group_shape = None
+            if group_shape:
+                _apply_configured_position(group_shape, legend_cfg.get("position"))
+
+        color_shape_name = legend_cfg.get("color_shape")
+        text_shape_name = legend_cfg.get("text_shape")
+        position = legend_cfg.get("position", {})
+
+        if color_shape_name:
+            if group_shape:
+                color_shape = _get_child_shape(group_shape, color_shape_name)
+            else:
+                color_shape = _get_shape_by_name(slide, color_shape_name)
+                if color_shape is None:
+                    template_color_shape = _get_shape_by_name(template_slide, color_shape_name)
+                    if template_color_shape:
+                        try:
+                            color_shape = clone_template_shape(template_slide, slide, color_shape_name)
+                        except TemplateCloneError:
+                            color_shape = _create_legend_color_shape(slide, color_shape_name, position)
+                    else:
+                        color_shape = _create_legend_color_shape(slide, color_shape_name, position)
+                elif position:
+                    _apply_configured_position(color_shape, position)
+            if color_shape:
+                _apply_legend_color(color_shape, media_key)
+
+        if text_shape_name:
+            template_text_shape = _get_shape_by_name(template_slide, text_shape_name)
+            if group_shape:
+                text_shape = _get_child_shape(group_shape, text_shape_name)
+            else:
+                text_shape = _get_shape_by_name(slide, text_shape_name)
+                if text_shape is None:
+                    if template_text_shape:
+                        try:
+                            text_shape = clone_template_shape(template_slide, slide, text_shape_name)
+                        except TemplateCloneError:
+                            text_shape = _create_legend_text_shape(slide, text_shape_name, position)
+                    else:
+                        text_shape = _create_legend_text_shape(slide, text_shape_name, position)
+                elif position:
+                    _apply_configured_position(text_shape, position)
+            if text_shape:
+                if template_text_shape and getattr(template_text_shape, "has_text_frame", False):
+                    template_text = template_text_shape.text_frame.text
+                else:
+                    template_text = str(media_key).upper()
+                _set_legend_text(text_shape, template_text_shape, template_text)
 
 
 def _populate_footer(slide, template_slide, excel_path):
@@ -106,18 +392,27 @@ def _populate_footer(slide, template_slide, excel_path):
     shape_name = config.get("shape")
     if not shape_name:
         return
-
-    shape = _ensure_shape_on_slide(slide, template_slide, shape_name)
+    shape = next((s for s in slide.shapes if getattr(s, "name", "") == shape_name and getattr(s, "has_text_frame", False)), None)
     if not shape:
         logger.warning("Footer shape '%s' missing", shape_name)
         return
+    template_shape = _get_shape_by_name(template_slide, shape_name)
+    _apply_configured_position(shape, config.get("position"))
+
+    import re
 
     text = config.get("default_text", "")
     if config.get("append_date"):
-        stamp = _extract_export_date(excel_path, config.get("append_date_format", "%d_%m_%y"))
-        text = f"{text}\nData as of {stamp}"
+        stamp_raw = _extract_export_date(excel_path, config.get("append_date_format", "%d_%m_%y"))
+        if stamp_raw:
+            normalized = re.sub(r"[^0-9]", "", stamp_raw)
+            if not normalized:
+                normalized = stamp_raw.replace("_", "").strip()
+            if normalized:
+                text = text.replace("DD_MM_YY", normalized).replace("DDMMYY", normalized)
+                text = text.replace(f"{normalized}_Lumina", f"{normalized} Lumina")
 
-    shape.text_frame.text = text
+    _set_shape_text(shape, template_shape, text)
 
 
 def _extract_export_date(excel_path, output_format):
@@ -181,18 +476,25 @@ def _ensure_shape_on_slide(slide, template_slide, shape_name):
     return new_shape
 
 
-def _apply_title(slide, template_slide, combination_row, slide_title_suffix):
-    shape_name = presentation_config.get("title", {}).get("shape") or SHAPE_NAME_TITLE
-    title_shape = _ensure_shape_on_slide(slide, template_slide, shape_name)
-
+def _compose_title_text(
+    combination_row: tuple[str, str, int],
+    slide_title_suffix: str,
+) -> str:
     market, brand, year = combination_row
     market_display = _normalize_market_name(market)
     title_format = presentation_config.get("title", {}).get("format", "{market} - {brand}")
-    title_text = title_format.format(market=market_display, brand=brand, year=year) + slide_title_suffix
+    return title_format.format(market=market_display, brand=brand, year=year) + slide_title_suffix
+
+
+def _apply_title(slide, template_slide, combination_row, slide_title_suffix):
+    shape_name = presentation_config.get("title", {}).get("shape") or SHAPE_NAME_TITLE
+    title_shape = next((s for s in slide.shapes if getattr(s, "name", "") == shape_name and getattr(s, "has_text_frame", False)), None)
+
+    title_text = _compose_title_text(combination_row, slide_title_suffix)
 
     if not title_shape:
         logger.warning("Title shape '%s' not available on slide", shape_name)
-        return
+        return title_text
 
     text_frame = title_shape.text_frame
     text_frame.clear()
@@ -208,6 +510,8 @@ def _apply_title(slide, template_slide, combination_row, slide_title_suffix):
             True,
             CLR_WHITE,
         )
+
+    return title_text
 
 
 def _normalize_market_name(raw_market: str) -> str:
@@ -245,8 +549,13 @@ from pathlib import Path
 
 from pptx import Presentation
 from pptx.util import Inches, Pt
+
+from amp_automation.presentation.template_geometry import (
+    TEMPLATE_V4_COLUMN_WIDTHS_INCHES,
+    TEMPLATE_V4_TABLE_BOUNDS,
+)
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR, MSO_AUTO_SIZE, MSO_VERTICAL_ANCHOR
-from pptx.enum.shapes import MSO_SHAPE_TYPE, PP_PLACEHOLDER
+from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE, PP_PLACEHOLDER
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_COLOR_TYPE, MSO_FILL, MSO_FILL_TYPE
 
@@ -264,13 +573,17 @@ from amp_automation.presentation.charts import (
 )
 from amp_automation.presentation.tables import (
     CellStyleContext,
-    TableLayout,
-    add_and_style_table as presentation_add_and_style_table,
+    apply_table_borders,
     ensure_font_consistency as _ensure_font_consistency,
+    style_table_cell,
 )
+from amp_automation.presentation.template_clone import TemplateCloneError, clone_template_shape, clone_template_table
 from amp_automation.utils.media import normalize_media_type
+from amp_automation.tooling import autopptx_adapter, aspose_converter, docstrange_validator
+from amp_automation.tooling.autopptx_adapter import SlidePayload
 
 REQUIRED_SHAPE_NAMES: set[str] = set()
+CHANGES_INFO_RELTYPE = "http://schemas.microsoft.com/office/2016/11/relationships/changesInfo"
 
 def _rgb_color(config_value, fallback):
     try:
@@ -289,9 +602,44 @@ def _coord_from_config(config_mapping, fallback):
 }
 
 
+def _parse_alignment_map(mapping: dict | list | None) -> dict[int, object]:
+    result: dict[int, object] = {}
+    if not mapping:
+        return result
+    for key, value in mapping.items():
+        key_str = str(key)
+        if "-" in key_str:
+            start_str, end_str = key_str.split("-", 1)
+            try:
+                start = int(start_str)
+                end = int(end_str)
+            except ValueError:
+                continue
+            for idx in range(start, end + 1):
+                result[idx] = value
+        else:
+            try:
+                result[int(key_str)] = value
+            except ValueError:
+                continue
+    return result
+
+
+def _build_dual_line_map(mapping: dict | None) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    if not mapping:
+        return result
+    for key, parts in mapping.items():
+        key_upper = str(key).upper()
+        if isinstance(parts, (list, tuple)):
+            result[key_upper] = [str(part) for part in parts]
+        else:
+            result[key_upper] = [str(parts)]
+    return result
+
+
 MARGIN_EMU_LR = 45720  # Approx Pt(3.6), from template analysis for left/right cell margins
 ZERO_THRESHOLD = 0.01  # Values below this (absolute) are treated as zero for display/coloring
-_TABLE_PLACEHOLDER_WARNING_EMITTED = False
 
 TABLE_MONTH_ORDER = [
     "Jan",
@@ -339,6 +687,14 @@ MEDIA_DISPLAY_LABELS = {
 }
 
 _CAMPAIGN_BOUNDARIES: list[tuple[int, int]] = []
+TABLE_COLUMN_ALIGNMENT_MAP: dict[int, object] = {}
+TABLE_WORD_WRAP_COLUMNS: set[int] = set()
+TABLE_UPPERCASE_COLUMNS: set[int] = set()
+TABLE_DUAL_LINE_LABELS: dict[str, list[str]] = {}
+CLONE_PIPELINE_ENABLED: bool = True
+AUTOPPTX_CONFIG: dict[str, object] = {}
+ASPOSE_CONFIG: dict[str, object] = {}
+DOCSTRANGE_CONFIG: dict[str, object] = {}
 
 
 def _normalized_media_value(raw_media: str) -> str:
@@ -615,6 +971,9 @@ def _build_campaign_block(
     year: int | None,
     excel_path: str | Path | None,
 ) -> tuple[list[list[str]], list[float], float]:
+    campaign_df = campaign_df.copy()
+    campaign_df["_NormalizedMedia"] = campaign_df["Mapped Media Type"].apply(_normalized_media_value)
+
     block_rows: list[list[str]] = []
     block_month_totals = [0.0] * len(TABLE_MONTH_ORDER)
     block_grp_total = 0.0
@@ -630,7 +989,7 @@ def _build_campaign_block(
 
     for media_key in MEDIA_DISPLAY_ORDER:
         media_mask = (
-            campaign_df["Mapped Media Type"].astype(str).str.lower()
+            campaign_df["_NormalizedMedia"].astype(str).str.lower()
             == media_key.lower()
         )
         media_df = campaign_df[media_mask]
@@ -706,6 +1065,93 @@ def _build_grand_total_row(
     return row
 
 
+def _build_carried_forward_row(
+    month_totals: list[float],
+    total_budget: float,
+    grp_total: float,
+) -> list[str]:
+    row: list[str] = ["CARRIED FORWARD", "", ""]
+    for value in month_totals:
+        row.append(_format_budget_cell(value))
+
+    row.append(_format_total_budget(total_budget))
+    row.append(format_number(grp_total, is_grp=True) if grp_total else "")
+    row.append("")
+    return row
+
+
+def _build_carried_forward_metadata_values(
+    month_totals: list[float],
+    total_budget: float,
+    grp_total: float,
+) -> dict[int, dict[str, object]]:
+    metadata: dict[int, dict[str, object]] = {}
+    month_start_col = 3
+    for idx, value in enumerate(month_totals):
+        col_idx = month_start_col + idx
+        metadata[col_idx] = {
+            "has_data": abs(value) > ZERO_THRESHOLD,
+            "media_type": "Subtotal",
+            "value": value,
+        }
+
+    total_col_idx = month_start_col + len(month_totals)
+    metadata[total_col_idx] = {
+        "has_data": abs(total_budget) > ZERO_THRESHOLD,
+        "media_type": "Subtotal",
+        "value": total_budget,
+    }
+
+    grp_col_idx = total_col_idx + 1
+    if abs(grp_total) > ZERO_THRESHOLD:
+        metadata[grp_col_idx] = {
+            "has_data": True,
+            "media_type": "GRPs",
+            "value": grp_total,
+        }
+
+    return metadata
+
+
+def _build_grand_total_metadata_values(
+    month_totals: list[float],
+    total_budget: float,
+    grand_total_grp: float,
+) -> dict[int, dict[str, object]]:
+    metadata: dict[int, dict[str, object]] = {}
+    month_start_col = 3
+    for idx, value in enumerate(month_totals):
+        col_idx = month_start_col + idx
+        metadata[col_idx] = {
+            "has_data": abs(value) > ZERO_THRESHOLD,
+            "media_type": "Subtotal",
+            "value": value,
+        }
+
+    total_col_idx = month_start_col + len(month_totals)
+    metadata[total_col_idx] = {
+        "has_data": abs(total_budget) > ZERO_THRESHOLD,
+        "media_type": "Subtotal",
+        "value": total_budget,
+    }
+
+    grp_col_idx = total_col_idx + 1
+    metadata[grp_col_idx] = {
+        "has_data": abs(grand_total_grp) > ZERO_THRESHOLD,
+        "media_type": "GRPs",
+        "value": grand_total_grp,
+    }
+
+    pct_col_idx = grp_col_idx + 1
+    metadata[pct_col_idx] = {
+        "has_data": True,
+        "media_type": "Subtotal",
+        "value": 100.0,
+    }
+
+    return metadata
+
+
 def _coerce_year(value: object) -> int | None:
     if value is None:
         return None
@@ -737,9 +1183,16 @@ def _initialize_from_config(config: Config) -> None:
     global MAX_ROWS_PER_SLIDE, SPLIT_STRATEGY, SHOW_CHARTS_ON_SPLITS, SHOW_CARRIED_SUBTOTAL, CONTINUATION_INDICATOR
     global ELEMENT_COORDINATES
     global REQUIRED_SHAPE_NAMES
+    global LEGEND_GROUPS_CONFIG
     global SUMMARY_TILE_CONFIG
+    global TABLE_COLUMN_ALIGNMENT_MAP, TABLE_WORD_WRAP_COLUMNS, TABLE_UPPERCASE_COLUMNS, TABLE_DUAL_LINE_LABELS
+    global CLONE_PIPELINE_ENABLED
+    global AUTOPPTX_CONFIG, ASPOSE_CONFIG, DOCSTRANGE_CONFIG
 
     MASTER_CONFIG = config
+
+    features_section = MASTER_CONFIG.get("features", {}) if isinstance(MASTER_CONFIG.get("features", {}), dict) else {}
+    CLONE_PIPELINE_ENABLED = bool(features_section.get("clone_pipeline_enabled", True))
 
     presentation_config = MASTER_CONFIG.section("presentation")
     fonts_config = presentation_config.get("fonts", {})
@@ -748,16 +1201,29 @@ def _initialize_from_config(config: Config) -> None:
     media_colors_config = colors_config.get("media_types", {})
     ui_colors_config = colors_config.get("ui_elements", {})
     table_config = presentation_config.get("table", {})
+    styling_config = table_config.get("styling", {})
+    TABLE_COLUMN_ALIGNMENT_MAP = _parse_alignment_map(styling_config.get("column_alignment", {}))
+    TABLE_WORD_WRAP_COLUMNS = {int(idx) for idx in styling_config.get("word_wrap_columns", [])}
+    TABLE_UPPERCASE_COLUMNS = {int(idx) for idx in styling_config.get("uppercase_columns", [])}
+    TABLE_DUAL_LINE_LABELS = _build_dual_line_map(styling_config.get("dual_line_labels", {}))
     row_heights_config = table_config.get("row_heights", {})
     table_position_config = table_config.get("positioning", {})
     comments_config = presentation_config.get("comments", {})
     comments_title_pos_config = comments_config.get("title_positioning", {})
     comments_box_pos_config = comments_config.get("box_positioning", {})
     title_position_config = presentation_config.get("title", {}).get("positioning", {})
+    layout_config = presentation_config.get("layout", {})
+    LEGEND_GROUPS_CONFIG = layout_config.get("legend_groups", {})
     charts_config = presentation_config.get("charts", {})
     chart_positions_config = charts_config.get("positioning", {})
     summary_tiles_config = presentation_config.get("summary_tiles", {})
     SUMMARY_TILE_CONFIG = summary_tiles_config
+
+    tooling_section = MASTER_CONFIG.get("tooling", {})
+    tooling_config = tooling_section if isinstance(tooling_section, dict) else {}
+    AUTOPPTX_CONFIG = dict(tooling_config.get("autopptx", {}))
+    ASPOSE_CONFIG = dict(tooling_config.get("aspose", {}))
+    DOCSTRANGE_CONFIG = dict(tooling_config.get("docstrange", {}))
 
     TABLE_PLACEHOLDER_NAME = table_config.get("placeholder_name", "Table Placeholder 1")
 
@@ -775,6 +1241,7 @@ def _initialize_from_config(config: Config) -> None:
     CLR_OTHER = _rgb_color(media_colors_config.get("other", {}).get("rgb"), (176, 211, 255))
 
     DEFAULT_FONT_NAME = fonts_config.get("default_family", "Calibri")
+    TABLE_FONT_NAME = fonts_config.get("table_family", DEFAULT_FONT_NAME)
     FONT_SIZE_HEADER = Pt(float(font_sizes.get("header", 7.5)))
     FONT_SIZE_BODY = Pt(float(font_sizes.get("body", 7.0)))
     FONT_SIZE_CHART_TITLE = Pt(float(font_sizes.get("chart_title", 8.0)))
@@ -782,25 +1249,27 @@ def _initialize_from_config(config: Config) -> None:
     FONT_SIZE_TITLE = Pt(float(font_sizes.get("title", 11.0)))
     FONT_SIZE_LEGEND = Pt(float(font_sizes.get("legend", 6.0)))
     FONT_SIZE_COMMENTS = Pt(float(font_sizes.get("comments", 9.0)))
+    FONT_FAMILY_LEGEND = fonts_config.get("legend_family", DEFAULT_FONT_NAME)
 
     TABLE_ROW_HEIGHT_HEADER = Pt(float(row_heights_config.get("header_inches", 0.139)) * 72)
     TABLE_ROW_HEIGHT_BODY = Pt(float(row_heights_config.get("body_inches", 0.118)) * 72)
     TABLE_ROW_HEIGHT_SUBTOTAL = Pt(float(row_heights_config.get("subtotal_inches", 0.139)) * 72)
-    TABLE_COLUMN_WIDTHS = [
-        Inches(0.65),
-        Inches(0.50),
-        Inches(0.35),
-        Inches(0.43),
-        Inches(0.35),
-        Inches(0.40),
-        Inches(0.72),
-    ] + [Inches(0.375)] * 16
-    TABLE_TOP_OVERRIDE = Inches(float(table_position_config.get("top_inches", 0.812)))
+
+    column_widths_config = table_config.get("column_widths_inches")
+    column_widths_source = (
+        column_widths_config if column_widths_config else TEMPLATE_V4_COLUMN_WIDTHS_INCHES
+    )
+    TABLE_COLUMN_WIDTHS = [Inches(float(width)) for width in column_widths_source]
+
+    table_top_inches = float(
+        table_position_config.get("top_inches", TEMPLATE_V4_TABLE_BOUNDS.top)
+    )
+    TABLE_TOP_OVERRIDE = Inches(table_top_inches)
 
     TABLE_CELL_STYLE_CONTEXT = CellStyleContext(
         margin_left_right_pt=3.6,
         margin_emu_lr=MARGIN_EMU_LR,
-        default_font_name=DEFAULT_FONT_NAME,
+        default_font_name=TABLE_FONT_NAME,
         font_size_header=FONT_SIZE_HEADER,
         font_size_body=FONT_SIZE_BODY,
         color_black=CLR_BLACK,
@@ -812,6 +1281,10 @@ def _initialize_from_config(config: Config) -> None:
         color_digital=CLR_DIGITAL,
         color_ooh=CLR_OOH,
         color_other=CLR_OTHER,
+        column_alignment=TABLE_COLUMN_ALIGNMENT_MAP,
+        word_wrap_columns=TABLE_WORD_WRAP_COLUMNS,
+        uppercase_columns=TABLE_UPPERCASE_COLUMNS,
+        dual_line_labels=TABLE_DUAL_LINE_LABELS,
     )
 
     CHART_STYLE_CONTEXT = ChartStyleContext(
@@ -836,7 +1309,7 @@ def _initialize_from_config(config: Config) -> None:
 
     CHART_COLOR_CYCLE = [CLR_TELEVISION, CLR_DIGITAL, CLR_OOH, CLR_OTHER]
 
-    MAX_ROWS_PER_SLIDE = int(table_config.get("max_rows_per_slide", 17))
+    MAX_ROWS_PER_SLIDE = int(table_config.get("max_rows_per_slide", 32))
     SPLIT_STRATEGY = table_config.get("split_strategy", "by_campaign")
     SHOW_CHARTS_ON_SPLITS = table_config.get("show_charts_on_splits", "all")
     SHOW_CARRIED_SUBTOTAL = bool(table_config.get("show_carried_subtotal", True))
@@ -849,7 +1322,7 @@ def _initialize_from_config(config: Config) -> None:
         ),
         "main_table": _coord_from_config(
             table_position_config,
-            {"left": 0.184, "top": 0.812, "width": 9.299, "height": 2.338},
+            TEMPLATE_V4_TABLE_BOUNDS.as_dict(),
         ),
         "comments_title": _coord_from_config(
             comments_title_pos_config,
@@ -898,7 +1371,6 @@ def _collect_required_shape_names() -> set[str]:
     required: set[str] = {SHAPE_NAME_TABLE}
 
     tiles = SUMMARY_TILE_CONFIG if SUMMARY_TILE_CONFIG else {}
-
     for section in ("quarter_budgets", "media_share", "funnel_share"):
         for tile in tiles.get(section, {}).values():
             shape_name = tile.get("shape") if isinstance(tile, dict) else None
@@ -987,16 +1459,15 @@ FONT_SIZE_CHART_LABELS = Pt(float(font_sizes.get("chart_labels", 6.0)))
 TABLE_ROW_HEIGHT_HEADER = Pt(float(row_heights_config.get("header_inches", 0.139)) * 72)
 TABLE_ROW_HEIGHT_BODY = Pt(float(row_heights_config.get("body_inches", 0.118)) * 72)
 TABLE_ROW_HEIGHT_SUBTOTAL = Pt(float(row_heights_config.get("subtotal_inches", 0.139)) * 72)
-TABLE_COLUMN_WIDTHS = [
-    Inches(0.65),
-    Inches(0.50),
-    Inches(0.35),
-    Inches(0.43),
-    Inches(0.35),
-    Inches(0.40),
-    Inches(0.72),
-] + [Inches(0.375)] * 16
-TABLE_TOP_OVERRIDE = Inches(float(table_position_config.get("top_inches", 0.812)))
+_table_column_config = table_config.get("column_widths_inches")
+_table_column_source = (
+    _table_column_config if _table_column_config else TEMPLATE_V4_COLUMN_WIDTHS_INCHES
+)
+TABLE_COLUMN_WIDTHS = [Inches(float(width)) for width in _table_column_source]
+
+TABLE_TOP_OVERRIDE = Inches(
+    float(table_position_config.get("top_inches", TEMPLATE_V4_TABLE_BOUNDS.top))
+)
 
 TABLE_CELL_STYLE_CONTEXT = CellStyleContext(
     margin_left_right_pt=3.6,
@@ -1013,6 +1484,10 @@ TABLE_CELL_STYLE_CONTEXT = CellStyleContext(
     color_digital=CLR_DIGITAL,
     color_ooh=CLR_OOH,
     color_other=CLR_OTHER,
+    column_alignment=TABLE_COLUMN_ALIGNMENT_MAP,
+    word_wrap_columns=TABLE_WORD_WRAP_COLUMNS,
+    uppercase_columns=TABLE_UPPERCASE_COLUMNS,
+    dual_line_labels=TABLE_DUAL_LINE_LABELS,
 )
 
 CHART_STYLE_CONTEXT = ChartStyleContext(
@@ -1042,11 +1517,10 @@ FONT_SIZE_LEGEND = Pt(float(font_sizes.get("legend", 6.0)))
 FONT_SIZE_COMMENTS = Pt(float(font_sizes.get("comments", 9.0)))
 
 # --- TABLE SPLITTING CONSTANTS ---
-# Calculate based on available height: 2.34" total height, with header at 0.139" and body rows at 0.118"
-# Available for body rows: 2.34 - 0.139 = 2.201"
-# Number of body rows that fit: 2.201 / 0.118 = ~18.6, so 18 body rows + 1 header = 19 total
-# Reduced to 17 to ensure proper fit with margins and prevent overflow
-MAX_ROWS_PER_SLIDE = int(table_config.get("max_rows_per_slide", 17))
+# Template main table exposes 35 physical rows (header + 32 body slots + carried-forward + slide grand total).
+# Keep the default body-row limit at 32 so cloned slides stay pixel-perfect while still reserving space
+# for the carried-forward subtotal and slide-level GRAND TOTAL rows we append during splitting.
+MAX_ROWS_PER_SLIDE = int(table_config.get("max_rows_per_slide", 32))
 SPLIT_STRATEGY = table_config.get("split_strategy", "by_campaign")
 SHOW_CHARTS_ON_SPLITS = table_config.get("show_charts_on_splits", "all")
 SHOW_CARRIED_SUBTOTAL = bool(table_config.get("show_carried_subtotal", True))
@@ -1061,10 +1535,10 @@ ELEMENT_COORDINATES = {
         title_position_config,
         {"left": 0.184, "top": 0.308, "width": 2.952, "height": 0.370},
     ),
-    "main_table": _coord_from_config(
-        table_position_config,
-        {"left": 0.184, "top": 0.812, "width": 9.299, "height": 2.338},
-    ),
+        "main_table": _coord_from_config(
+            table_position_config,
+            TEMPLATE_V4_TABLE_BOUNDS.as_dict(),
+        ),
     "comments_title": _coord_from_config(
         comments_title_pos_config,
         {"left": 1.097, "top": 3.697, "width": 0.640, "height": 0.151},
@@ -1433,10 +1907,37 @@ def _prepare_main_table_data_detailed(df, region, masterbrand, year=None, excel_
         grand_total_grp = 0.0
         campaign_boundaries: list[tuple[int, int]] = []
 
-        campaign_names = sorted(
-            subset["Campaign Name"].dropna().unique(),
-            key=lambda name: str(name).upper(),
-        )
+        campaign_sort_info: list[tuple[str, int, str]] = []
+        for campaign_name, campaign_group in subset.groupby("Campaign Name"):
+            if pd.isna(campaign_name):
+                continue
+            normalized_media = {
+                _normalized_media_value(media)
+                for media in campaign_group["Mapped Media Type"].dropna()
+            }
+            try:
+                first_media_index = next(
+                    idx
+                    for idx, media in enumerate(MEDIA_DISPLAY_ORDER)
+                    if media in normalized_media
+                )
+            except StopIteration:
+                first_media_index = len(MEDIA_DISPLAY_ORDER)
+            campaign_sort_info.append(
+                (
+                    campaign_name,
+                    first_media_index,
+                    str(campaign_name).upper(),
+                )
+            )
+
+        campaign_names = [
+            name
+            for name, _, _ in sorted(
+                campaign_sort_info,
+                key=lambda item: (item[1], item[2]),
+            )
+        ]
 
         coerced_year = _coerce_year(year)
 
@@ -1562,13 +2063,216 @@ def _prepare_main_table_data_detailed(df, region, masterbrand, year=None, excel_
         """
 
 def _split_table_data_by_campaigns(table_data, cell_metadata):
-    """Current table layout fits on a single slide; splitting handled in Phase B3."""
+    """Split the main table into continuation-friendly chunks respecting row limits."""
 
     if not table_data:
         return []
 
-    return [(table_data, cell_metadata, False)]
+    header_idx = 0
+    grand_total_idx = len(table_data) - 1
 
+    if grand_total_idx <= 0:
+        return [(table_data, cell_metadata, False)]
+
+    body_row_count = grand_total_idx - 1
+    if body_row_count <= MAX_ROWS_PER_SLIDE:
+        return [(table_data, cell_metadata, False)]
+
+    campaign_boundaries = _CAMPAIGN_BOUNDARIES or [(1, grand_total_idx - 1)]
+    splits: list[tuple[list[list[str]], dict[tuple[int, int], dict[str, object]], bool]] = []
+
+    current_indices: list[int] = [header_idx]
+    current_body_count = 0
+    slide_contains_continuation = False
+
+    cumulative_months = [0.0] * len(TABLE_MONTH_ORDER)
+    cumulative_total = 0.0
+    cumulative_grp = 0.0
+
+    month_start_col = 3
+    total_col_idx = month_start_col + len(TABLE_MONTH_ORDER)
+    grp_col_idx = total_col_idx + 1
+
+    def _row_label(idx: int) -> str:
+        row = table_data[idx]
+        return str(row[0]).strip().upper() if row else ""
+
+    def _media_label(idx: int) -> str:
+        row = table_data[idx]
+        if len(row) < 2:
+            return ""
+        return str(row[1]).strip().upper()
+
+    def _is_media_header(idx: int) -> bool:
+        label = _row_label(idx)
+        media = _media_label(idx)
+        if label in {"", "-"}:
+            return bool(media and media != "-")
+        if label in {"MONTHLY TOTAL (� 000)", "GRAND TOTAL", "CARRIED FORWARD"}:
+            return False
+        return True
+
+    def _determine_block_length(start_idx: int, campaign_end_idx: int) -> int:
+        """Return the number of contiguous rows that represent a media block (incl. metrics)."""
+
+        if start_idx > campaign_end_idx:
+            return 0
+
+        label = _row_label(start_idx)
+        if label == "MONTHLY TOTAL (� 000)":
+            return 1
+
+        length = 1
+        idx = start_idx + 1
+        while idx <= campaign_end_idx:
+            next_label = _row_label(idx)
+            if next_label == "MONTHLY TOTAL (� 000)":
+                length += 1
+                idx += 1
+                break
+            if _is_media_header(idx):
+                break
+            if next_label == "GRAND TOTAL":
+                break
+            length += 1
+            idx += 1
+        return length
+
+    def accumulate_for_rows(row_indices: list[int]) -> tuple[list[float], float, float]:
+        month_totals = [0.0] * len(TABLE_MONTH_ORDER)
+        total_budget = 0.0
+        grp_total = 0.0
+
+        for row_idx in row_indices:
+            if row_idx >= len(table_data) or row_idx <= 0 or row_idx == grand_total_idx:
+                continue
+
+            for month_idx in range(len(TABLE_MONTH_ORDER)):
+                col_idx = month_start_col + month_idx
+                meta = cell_metadata.get((row_idx, col_idx))
+                if not meta:
+                    continue
+                media_type = meta.get("media_type")
+                if media_type in {"Subtotal", "GrandTotal"}:
+                    continue
+                if meta.get("has_data"):
+                    value = float(meta.get("value", 0.0) or 0.0)
+                    month_totals[month_idx] += value
+
+            total_meta = cell_metadata.get((row_idx, total_col_idx))
+            if total_meta:
+                media_type = total_meta.get("media_type")
+                if media_type not in {"Subtotal", "GrandTotal"} and total_meta.get("has_data"):
+                    total_budget += float(total_meta.get("value", 0.0) or 0.0)
+
+            grp_meta = cell_metadata.get((row_idx, grp_col_idx))
+            if grp_meta and grp_meta.get("has_data"):
+                media_type = grp_meta.get("media_type")
+                if media_type in {"Television", "GRPs"}:
+                    grp_total += float(grp_meta.get("value", 0.0) or 0.0)
+
+        return month_totals, total_budget, grp_total
+
+    def finalize_split(has_remaining: bool) -> None:
+        nonlocal current_indices, current_body_count, cumulative_months, cumulative_total, cumulative_grp, slide_contains_continuation
+
+        if len(current_indices) <= 1:
+            return
+
+        body_indices = [
+            idx for idx in current_indices if idx > 0 and idx != grand_total_idx
+        ]
+        slide_months, slide_total, slide_grp = accumulate_for_rows(body_indices)
+        cumulative_months = [prev + inc for prev, inc in zip(cumulative_months, slide_months)]
+        cumulative_total += slide_total
+        cumulative_grp += slide_grp
+
+        output_indices = current_indices.copy()
+        inserted_meta_rows: dict[int, dict[int, dict[str, object]]] = {}
+
+        if has_remaining and SHOW_CARRIED_SUBTOTAL:
+            output_indices.append(-1)
+
+        output_rows: list[list[str]] = []
+        for new_row_idx, original_idx in enumerate(output_indices):
+            if original_idx == -1:
+                carried_months = list(cumulative_months)
+                carried_row = _build_carried_forward_row(
+                    carried_months,
+                    cumulative_total,
+                    cumulative_grp,
+                )
+                output_rows.append(carried_row)
+                inserted_meta_rows[new_row_idx] = _build_carried_forward_metadata_values(
+                    carried_months,
+                    cumulative_total,
+                    cumulative_grp,
+                )
+            else:
+                output_rows.append(table_data[original_idx])
+
+        output_metadata = _extract_metadata_for_indices(
+            cell_metadata,
+            output_indices,
+            len(output_rows),
+            inserted_meta_rows,
+        )
+
+        per_slide_row = _build_grand_total_row(slide_months, slide_total, slide_grp)
+        output_rows.append(per_slide_row)
+        per_slide_row_idx = len(output_rows) - 1
+        per_slide_metadata = _build_grand_total_metadata_values(
+            slide_months,
+            slide_total,
+            slide_grp,
+        )
+        for col_idx, meta in per_slide_metadata.items():
+            output_metadata[(per_slide_row_idx, col_idx)] = meta
+
+        splits.append((output_rows, output_metadata, len(splits) > 0))
+        slide_contains_continuation = False
+        current_indices = [header_idx]
+        current_body_count = 0
+
+    for boundary_idx, (start, end) in enumerate(campaign_boundaries):
+        idx = start
+        while idx <= end:
+            block_length = _determine_block_length(idx, end)
+            if block_length <= 0:
+                idx += 1
+                continue
+
+            if (
+                current_body_count > 0
+                and current_body_count + block_length > MAX_ROWS_PER_SLIDE
+            ):
+                finalize_split(has_remaining=True)
+                slide_contains_continuation = False
+                continue
+
+            if block_length > MAX_ROWS_PER_SLIDE:
+                logger.warning(
+                    "Media block starting at row %s spans %s rows exceeding MAX_ROWS_PER_SLIDE=%s; forcing slide overflow.",
+                    idx,
+                    block_length,
+                    MAX_ROWS_PER_SLIDE,
+                )
+
+            if current_body_count == 0 and idx > start:
+                slide_contains_continuation = True
+
+            current_indices.extend(range(idx, idx + block_length))
+            current_body_count += block_length
+            idx += block_length
+
+        if slide_contains_continuation and current_body_count > 0:
+            finalize_split(has_remaining=boundary_idx < len(campaign_boundaries) - 1)
+            slide_contains_continuation = False
+            continue
+
+    finalize_split(has_remaining=False)
+
+    return splits
 
 def _calculate_subtotal_for_split(rows):
     """Calculate subtotal values for a split section."""
@@ -1634,13 +2338,17 @@ def _calculate_subtotal_for_split(rows):
     return subtotal_values
 
 
-def _extract_metadata_for_indices(original_metadata, indices, new_row_count):
+def _extract_metadata_for_indices(original_metadata, indices, new_row_count, inserted_metadata: dict[int, dict[int, dict[str, object]]] | None = None):
     """Extract metadata for specific row indices and remap to new positions."""
     new_metadata = {}
+    inserted_metadata = inserted_metadata or {}
     
     for new_row_idx, original_idx in enumerate(indices):
         if original_idx < 0:
-            # Special indices for subtotal/carried forward rows
+            # Special indices for inserted rows (e.g., carried forward)
+            if new_row_idx in inserted_metadata:
+                for col_idx, meta in inserted_metadata[new_row_idx].items():
+                    new_metadata[(new_row_idx, col_idx)] = meta
             continue
             
         # Copy metadata for this row
@@ -1839,158 +2547,116 @@ def set_title_text_detailed(title_shape, title_text, template_prs):
 
     logger.debug(f"Finished setting title for shape '{title_shape.name}'. Text frame word_wrap: {title_shape.text_frame.word_wrap}, auto_size: {title_shape.text_frame.auto_size}")
 
-def _add_and_style_table(slide, table_data, cell_metadata, template_slide=None):
-    global _TABLE_PLACEHOLDER_WARNING_EMITTED
+def _populate_cloned_table(table_shape, table_data, cell_metadata):
+    table = table_shape.table
+    rows_needed = len(table_data)
+    if rows_needed == 0:
+        logger.warning("No table data supplied for cloned table population")
+        return False
 
+    cols_needed = len(table_data[0])
+    if len(table.columns) < cols_needed:
+        logger.warning(
+            "Cloned table has fewer columns (%s) than required (%s)",
+            len(table.columns),
+            cols_needed,
+        )
+        return False
+
+    # Ensure sufficient row capacity by appending rows as needed.
+    while len(table.rows) < rows_needed:
+        table.rows.add_row()
+
+    for col_idx, width in enumerate(TABLE_COLUMN_WIDTHS[: len(table.columns)]):
+        try:
+            table.columns[col_idx].width = width
+        except Exception as exc:
+            logger.debug("Unable to enforce column width for column %s: %s", col_idx, exc)
+
+    header_height = TABLE_ROW_HEIGHT_HEADER
+    body_height = TABLE_ROW_HEIGHT_BODY
+    subtotal_height = TABLE_ROW_HEIGHT_SUBTOTAL
+
+    subtotal_labels = {"SUBTOTAL", "CARRIED FORWARD", "MONTHLY TOTAL (£ 000)", "GRAND TOTAL"}
+
+    for row_idx in range(rows_needed):
+        row = table.rows[row_idx]
+        row_data = table_data[row_idx]
+        label = str(row_data[0]).strip().upper() if row_data else ""
+
+        if row_idx == 0:
+            row.height = header_height
+        elif label in subtotal_labels or row_idx == rows_needed - 1:
+            row.height = subtotal_height
+        else:
+            row.height = body_height
+
+        for col_idx in range(cols_needed):
+            value = row_data[col_idx] if col_idx < len(row_data) else ""
+            cell = table.cell(row_idx, col_idx)
+            cell.text = "" if value is None else str(value)
+            style_table_cell(
+                cell,
+                row_idx,
+                col_idx,
+                table_data,
+                cell_metadata,
+                TABLE_CELL_STYLE_CONTEXT,
+                logger,
+            )
+
+    # Clear any unused rows beyond data to avoid stray template content.
+    for row_idx in range(rows_needed, len(table.rows)):
+        for col_idx in range(len(table.columns)):
+            cell = table.cell(row_idx, col_idx)
+            cell.text = ""
+
+    apply_table_borders(table, TABLE_CELL_STYLE_CONTEXT.color_table_gray)
+    return True
+
+
+def _add_and_style_table(slide, table_data, cell_metadata, template_slide=None):
     table_pos = get_element_position('main_table')
     if not table_pos:
         logger.error("Failed to get table position coordinates")
         return False
 
-    placeholder_name = TABLE_PLACEHOLDER_NAME
-    use_placeholder = False
-    if placeholder_name:
-        for placeholder in slide.placeholders:
-            if (
-                placeholder.placeholder_format.type == PP_PLACEHOLDER.TABLE
-                and getattr(placeholder, "name", "") == placeholder_name
-            ):
-                use_placeholder = True
-                break
+    if template_slide is not None:
+        try:
+            cloned_table_shape = clone_template_table(template_slide, slide, SHAPE_NAME_TABLE)
+            if cloned_table_shape:
+                success = _populate_cloned_table(cloned_table_shape, table_data, cell_metadata)
+                if success:
+                    return True
+                logger.error("Populating cloned table failed; aborting table population")
+        except Exception as exc:  # pragma: no cover - cloning fallback
+            logger.error("Template cloning failed: %s", exc)
 
-    if not use_placeholder:
-        if placeholder_name and not _TABLE_PLACEHOLDER_WARNING_EMITTED:
-            logger.info(
-                "Table placeholder '%s' unavailable on slide layout; using absolute positioning for tables.",
-                placeholder_name,
-            )
-            _TABLE_PLACEHOLDER_WARNING_EMITTED = True
-        placeholder_name = ""
+    logger.error("Template cloning not available; unable to populate MainDataTable")
+    return False
 
-    table_layout = TableLayout(
-        placeholder_name=placeholder_name,
-        shape_name=SHAPE_NAME_TABLE,
-        position=table_pos,
-        row_height_header=TABLE_ROW_HEIGHT_HEADER,
-        row_height_body=TABLE_ROW_HEIGHT_BODY,
-        row_height_subtotal=TABLE_ROW_HEIGHT_SUBTOTAL,
-        column_widths=TABLE_COLUMN_WIDTHS,
-        top_override=TABLE_TOP_OVERRIDE,
-        height_rule_available=TABLE_HEIGHT_RULE_AVAILABLE,
-        height_rule_value=WD_ROW_HEIGHT_RULE.AT_LEAST,
-    )
-
-    return presentation_add_and_style_table(
-        slide,
-        table_data,
-        cell_metadata,
-        table_layout,
-        TABLE_CELL_STYLE_CONTEXT,
-        logger,
-    )
-
-def _prepare_main_table_data(df, region, masterbrand):
+def _prepare_main_table_data(
+    df: pd.DataFrame,
+    region: str,
+    masterbrand: str,
+    year: int | None = None,
+    excel_path: str | Path | None = None,
+):
     """
-    Prepare table data and cell metadata for the main data table.
-    
-    Args:
-        df: DataFrame with the Excel data
-        region: Region filter
-        masterbrand: Masterbrand filter
-        
-    Returns:
-        tuple: (table_data, cell_metadata) or (None, None) if no data
+    Compatibility wrapper returning the detailed table structure used by both pipelines.
+
+    The legacy AutoPPTX workflow expects the same table payload as the clone pipeline so
+    we delegate to :func:`_prepare_main_table_data_detailed` while keeping the public
+    helper signature alive for existing call sites.
     """
-    try:
-        # Filter data for this region/masterbrand combination
-        filtered_df = df[
-            (df['Region'] == region) &
-            (df['Global Masterbrand'] == masterbrand)
-        ].copy()
-        
-        if filtered_df.empty:
-            logger.warning(f"No data found for {region} - {masterbrand}")
-            return None, None
-        
-        # Prepare table structure
-        table_data = []
-        cell_metadata = {}
-        
-        # Header row
-        header_row = ['Campaign Name', 'Budget', 'TV GRPs', 'TOTAL REACH', 'TOTAL FREQ', '%', 'Media Type'] + \
-                    ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 
-                     'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'] + \
-                    ['Q1', 'Q2', 'Q3', 'Q4']
-        table_data.append(header_row)
-        
-        # Process each row of data
-        row_idx = 1
-        for _, row in filtered_df.iterrows():
-            # Build data row
-            campaign_name = str(row.get('Campaign Name', ''))
-            budget = f"${row.get('Budget', 0):,.0f}" if pd.notna(row.get('Budget')) else "$0"
-            tv_grps = str(row.get('TV GRPs', '')) if pd.notna(row.get('TV GRPs')) else ""
-            percentage = f"{row.get('Percentage', 0):.1f}%" if pd.notna(row.get('Percentage')) else "0.0%"
-            media_type = str(row.get('Media Type', ''))
-            
-            data_row = [campaign_name, budget, tv_grps, percentage, media_type]
-            
-            # Add monthly data
-            months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 
-                     'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-            
-            for col_idx, month in enumerate(months, start=5):
-                month_value = row.get(month, 0)
-                if pd.notna(month_value) and month_value != 0:
-                    formatted_value = f"${month_value:,.0f}"
-                    data_row.append(formatted_value)
-                    # Store metadata for conditional formatting - align with display
-                    cell_metadata[(row_idx, col_idx)] = {
-                        'value': month_value,
-                        'media_type': media_type,
-                        'has_data': not is_empty_formatted_value(formatted_value)
-                    }
-                else:
-                    data_row.append("")
-                    cell_metadata[(row_idx, col_idx)] = {
-                        'value': 0,
-                        'media_type': media_type,
-                        'has_data': False
-                    }
-            
-            # Add quarterly data
-            quarters = ['Q1', 'Q2', 'Q3', 'Q4']
-            for col_idx, quarter in enumerate(quarters, start=17):
-                quarter_value = row.get(quarter, 0)
-                if pd.notna(quarter_value) and quarter_value != 0:
-                    data_row.append(f"${quarter_value:,.0f}")
-                else:
-                    data_row.append("–")
-            
-            table_data.append(data_row)
-            row_idx += 1
-        
-        # Add totals row
-        total_budget = filtered_df['Budget'].sum() if 'Budget' in filtered_df.columns else 0
-        totals_row = [
-            'TOTAL',
-            f"${total_budget:,.0f}",
-            '',
-            '',
-            ''  # Media type blank for total row
-        ] + \
-        [f"${month_total:,.0f}" if month_total > 0 else "" for month_total in [filtered_df[month].sum() for month in months]] + \
-        [f"${quarter_total:,.0f}" if quarter_total > 0 else "–" for quarter_total in [filtered_df[quarter].sum() for quarter in quarters]]
-        
-        table_data.append(totals_row)
-        
-        logger.info(f"Prepared table data with {len(table_data)} rows for {region} - {masterbrand}")
-        return table_data, cell_metadata
-        
-    except Exception as e:
-        logger.error(f"Error preparing table data: {str(e)}")
-        logger.error(traceback.format_exc())
-        return None, None
+
+    return _prepare_main_table_data_detailed(
+        df,
+        region,
+        masterbrand,
+        year,
+        excel_path,
+    )
 
 def _prepare_funnel_chart_data(df, region, masterbrand):
     """
@@ -2115,7 +2781,7 @@ def _populate_slide_content(new_slide, prs, combination_row, slide_title_suffix,
 
     template_slide = prs.slides[0]
 
-    _apply_title(new_slide, template_slide, combination_row, slide_title_suffix)
+    title_text = _apply_title(new_slide, template_slide, combination_row, slide_title_suffix)
     _clear_comments(new_slide)
     
     # Create and populate the main data table
@@ -2128,6 +2794,14 @@ def _populate_slide_content(new_slide, prs, combination_row, slide_title_suffix,
         logger.warning(f"Failed to create table for slide")
     
     _populate_summary_tiles(new_slide, template_slide, df, combination_row, excel_path)
+    _ensure_legend_shapes(new_slide, template_slide)
+
+    return {
+        "title": title_text,
+        "subtitle": slide_title_suffix.strip() if slide_title_suffix else None,
+        "table": split_table_data,
+        "notes": None,
+    }
 
 def create_presentation(template_path, excel_path, output_path):
     """Creates a PowerPoint presentation based on a template and Excel data."""
@@ -2158,7 +2832,7 @@ def create_presentation(template_path, excel_path, output_path):
             logger.debug("  No slides found in template!")
         logger.debug("--- End Template Slide Structure ---")
 
-        if not _validate_template_shapes(prs.slides[0]):
+        if CLONE_PIPELINE_ENABLED and not _validate_template_shapes(prs.slides[0]):
             logger.error("Template validation failed; aborting presentation generation.")
             return False
 
@@ -2172,12 +2846,12 @@ def create_presentation(template_path, excel_path, output_path):
         brand_col_name = 'Brand'
         year_col_name = 'Year'
         
-        unique_combinations = df[[country_col_name, brand_col_name, year_col_name]].drop_duplicates().values.tolist()
-        logger.info(f"Found {len(unique_combinations)} unique Country/Global Masterbrand/Year combinations.")
+        unique_combinations_raw = df[[country_col_name, brand_col_name, year_col_name]].drop_duplicates().values.tolist()
+        logger.info(f"Found {len(unique_combinations_raw)} unique Country/Global Masterbrand/Year combinations.")
 
         # Calculate total investment for each combination
         combinations_with_investment = []
-        for combination in unique_combinations:
+        for combination in unique_combinations_raw:
             country, brand, year = combination
             # Filter data for this specific combination
             combination_data = df[
@@ -2202,12 +2876,12 @@ def create_presentation(template_path, excel_path, output_path):
         sorted_markets = sorted(market_investments.items(), key=lambda x: x[1]['total'], reverse=True)
         
         # Build final sorted list: markets ordered by total, brands within market ordered by individual investment
-        unique_combinations = []
+        ordered_combinations: list[tuple[str, str, int]] = []
         for market, data in sorted_markets:
             # Sort combinations within this market by individual investment
             market_combos = sorted(data['combinations'], key=lambda x: x[3], reverse=True)
             # Add to final list (without investment values)
-            unique_combinations.extend([(c, b, y) for c, b, y, _ in market_combos])
+            ordered_combinations.extend([(c, b, y) for c, b, y, _ in market_combos])
         
         # Log the sorted order with market totals
         logger.info("Slides will be generated grouped by market, ordered by total market investment:")
@@ -2220,13 +2894,25 @@ def create_presentation(template_path, excel_path, output_path):
         if len(sorted_markets) > 10:
             logger.info(f"  ... and {len(sorted_markets) - 10} more markets")
 
-        if not unique_combinations:
+        if not ordered_combinations:
             logger.warning("No unique Country/Global Masterbrand combinations found in the data.")
             # Decide if an empty presentation should be saved or an error returned
             # For now, let's save an empty presentation (after removing template slide)
 
+        if not CLONE_PIPELINE_ENABLED:
+            logger.info("Clone pipeline disabled via configuration; falling back to legacy AutoPPTX workflow.")
+            return _generate_autopptx_only(
+                template_path,
+                output_path,
+                df,
+                ordered_combinations,
+                excel_path,
+            )
+
+        autopptx_payloads: list[dict[str, object]] = []
+
         current_market = None
-        for idx, combination_row in enumerate(unique_combinations):
+        for idx, combination_row in enumerate(ordered_combinations):
             # Check if we're starting a new market
             if combination_row[0] != current_market:
                 current_market = combination_row[0]
@@ -2278,11 +2964,11 @@ def create_presentation(template_path, excel_path, output_path):
                     for run in paragraph.runs:
                         run.font.size = Pt(36)  # Large font (30-40 range)
                         run.font.bold = True
-                        run.font.name = DEFAULT_FONT_NAME
+                        run.font.name = FONT_FAMILY_LEGEND
                         run.font.color.rgb = RGBColor(255, 255, 255)  # Pure white
                 logger.info(f"Added market delimiter slide for: {display_market_name}")
             
-            logger.info(f"Processing combination {idx+1}/{len(unique_combinations)}: {combination_row[0]} - {combination_row[1]} - {combination_row[2]}")
+            logger.info(f"Processing combination {idx+1}/{len(ordered_combinations)}: {combination_row[0]} - {combination_row[1]} - {combination_row[2]}")
             
             # First, prepare the table data to check if splitting is needed
             table_result = _prepare_main_table_data_detailed(df, combination_row[0], combination_row[1], combination_row[2], excel_path)
@@ -2308,10 +2994,13 @@ def create_presentation(template_path, excel_path, output_path):
                 # logger.debug(f"Added new slide for {combination_row[0]} - {combination_row[1]} - {combination_row[2]}{slide_title_suffix}")
                 
                 # Populate this slide with content immediately
-                _populate_slide_content(
+                payload = _populate_slide_content(
                     new_slide, prs, combination_row, slide_title_suffix, 
                     split_table_data, split_metadata, split_idx, df, excel_path
                 )
+
+                if payload:
+                    autopptx_payloads.append(payload)
 
                 # Diagnostic: Log all shapes on the new slide (commented out to reduce log size)
             # This entire block is commented out to reduce log file size
@@ -2357,6 +3046,15 @@ def create_presentation(template_path, excel_path, output_path):
         else:
             logger.warning(f"Not removing template slide - only {len(prs.slides)} slides found.")
 
+        # Change-tracking metadata references the removed template slide and breaks COM automation
+        for rel_id, rel in list(prs.part.rels.items()):
+            if rel.reltype == CHANGES_INFO_RELTYPE:
+                try:
+                    prs.part.drop_rel(rel_id)
+                    logger.info("Removed stale changesInfo relationship %s", rel_id)
+                except Exception as exc:
+                    logger.warning(f"Failed to drop changesInfo relationship {rel_id}: {exc}")
+
         # CRITICAL FIX: Ensure output directory exists and add proper save error handling
         from pathlib import Path
         output_path_obj = Path(output_path)
@@ -2378,17 +3076,222 @@ def create_presentation(template_path, excel_path, output_path):
             # Verify file creation and get size
             file_size = os.path.getsize(output_path)
             logger.info(f"File verified: {file_size:,} bytes")
+
+            _run_autopptx_pipeline(
+                template_path,
+                output_path,
+                autopptx_payloads,
+            )
+
+            _run_aspose_exports(output_path)
+            _run_docstrange_comparison(output_path, template_path)
             return True
         except Exception as e:
             logger.exception(f"❌ Save failed: {e}")
             return False
 
-        return True
-
     except Exception as e:
         logger.error(f"An error occurred during presentation creation: {e}")
         logger.error(traceback.format_exc())
         return False
+
+
+def _generate_autopptx_only(
+    template_path: str | Path,
+    output_path: str | Path,
+    df: pd.DataFrame,
+    ordered_combinations: list[tuple[str, str, int]],
+    excel_path: str | Path | None,
+) -> bool:
+    if not AUTOPPTX_CONFIG.get("enabled", True):
+        logger.warning("tooling.autopptx.enabled is false; proceeding because AutoPPTX was invoked explicitly.")
+
+    if not autopptx_adapter.autopptx_available():
+        logger.error("AutoPPTX dependency is unavailable; install 'autopptx' to enable the legacy workflow.")
+        return False
+
+    slide_payloads: list[SlidePayload] = []
+    for combination_row in ordered_combinations:
+        table_result = _prepare_main_table_data(
+            df,
+            combination_row[0],
+            combination_row[1],
+            combination_row[2],
+            excel_path,
+        )
+        if not table_result:
+            logger.warning(
+                "Skipping combination %s - unable to prepare table data for legacy AutoPPTX pipeline",
+                combination_row,
+            )
+            continue
+
+        table_data, cell_metadata = table_result
+        table_splits = _split_table_data_by_campaigns(table_data, cell_metadata)
+        for split_idx, (split_table_data, _, _is_continuation) in enumerate(table_splits):
+            suffix = f" ({split_idx + 1} of {len(table_splits)})" if len(table_splits) > 1 else ""
+            title_text = _compose_title_text(combination_row, suffix)
+            subtitle = suffix.strip() if suffix else None
+
+            normalized_table = [
+                ["" if cell is None else str(cell) for cell in row]
+                for row in split_table_data
+            ]
+
+            slide_payloads.append(
+                SlidePayload(
+                    title=title_text,
+                    subtitle=subtitle,
+                    tables=[normalized_table],
+                    notes=None,
+                )
+            )
+
+    if not slide_payloads:
+        logger.warning("No slide payloads generated for AutoPPTX workflow; presentation will not be created.")
+        return False
+
+    output_path_obj = Path(output_path)
+    output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+
+    base_slide_index = int(AUTOPPTX_CONFIG.get("base_slide_index", 0))
+    table_font_name = AUTOPPTX_CONFIG.get("table_font_name")
+    table_font_size = AUTOPPTX_CONFIG.get("table_font_size")
+
+    autopptx_adapter.generate_presentation(
+        template_path,
+        slide_payloads,
+        output_path_obj,
+        base_slide_index=base_slide_index,
+        table_font_name=table_font_name,
+        table_font_size=table_font_size,
+    )
+    logger.info("AutoPPTX presentation saved to %s", output_path_obj)
+    return True
+
+
+def _run_autopptx_pipeline(template_path: str | Path, main_output: str | Path, payloads: list[dict[str, object]]) -> None:
+    if not AUTOPPTX_CONFIG.get("enabled"):
+        return
+
+    if not payloads:
+        logger.warning("AutoPPTX requested but no slide payloads were captured; skipping generation")
+        return
+
+    if not autopptx_adapter.autopptx_available():  # pragma: no cover - optional dependency
+        logger.warning("AutoPPTX package not available. Install 'autopptx' to enable placeholder rendering")
+        return
+
+    try:
+        output_suffix = AUTOPPTX_CONFIG.get("output_suffix", "_autopptx")
+        base_slide_index = int(AUTOPPTX_CONFIG.get("base_slide_index", 0))
+        table_font_name = AUTOPPTX_CONFIG.get("table_font_name")
+        table_font_size = AUTOPPTX_CONFIG.get("table_font_size")
+
+        main_output_path = Path(main_output)
+        output_path = main_output_path.with_stem(main_output_path.stem + output_suffix)
+
+        slide_payloads: list[SlidePayload] = []
+        for payload in payloads:
+            table_rows = payload.get("table") or []
+            tables = None
+            if table_rows:
+                normalized = [
+                    ["" if cell is None else str(cell) for cell in row]
+                    for row in table_rows
+                ]
+                tables = [normalized]
+
+            slide_payloads.append(
+                SlidePayload(
+                    title=str(payload.get("title") or ""),
+                    subtitle=payload.get("subtitle") or None,
+                    tables=tables,
+                    notes=payload.get("notes") or None,
+                )
+            )
+
+        autopptx_adapter.generate_presentation(
+            template_path,
+            slide_payloads,
+            output_path,
+            base_slide_index=base_slide_index,
+            table_font_name=table_font_name,
+            table_font_size=int(table_font_size) if table_font_size else None,
+        )
+    except Exception as exc:  # pragma: no cover - optional integration
+        logger.error("AutoPPTX generation failed: %s", exc)
+
+
+def _run_aspose_exports(main_output: str | Path) -> None:
+    if not ASPOSE_CONFIG.get("enabled"):
+        return
+
+    export_formats = ASPOSE_CONFIG.get("export_formats") or []
+    if not export_formats:
+        logger.warning("Aspose export enabled but no export_formats configured; skipping")
+        return
+
+    main_output_path = Path(main_output)
+
+    output_target = ASPOSE_CONFIG.get("output_dir") or ASPOSE_CONFIG.get("output_subdir")
+    if output_target:
+        output_dir = Path(output_target)
+        if not output_dir.is_absolute():
+            output_dir = main_output_path.parent / output_dir
+    else:
+        output_dir = main_output_path.parent / "aspose_exports"
+
+    try:
+        aspose_converter.export_with_aspose(
+            main_output_path,
+            export_formats,
+            output_dir,
+            client_id=ASPOSE_CONFIG.get("client_id"),
+            client_secret=ASPOSE_CONFIG.get("client_secret"),
+            base_url=ASPOSE_CONFIG.get(
+                "base_url",
+                aspose_converter.ASPOSE_DEFAULT_BASE_URL,
+            ),
+            timeout=int(ASPOSE_CONFIG.get("timeout_seconds", 120)),
+        )
+    except aspose_converter.AsposeConfigurationError as exc:  # pragma: no cover - optional integration
+        logger.warning("Aspose export skipped: %s", exc)
+    except Exception as exc:  # pragma: no cover - optional integration
+        logger.error("Aspose export failed: %s", exc)
+
+
+def _run_docstrange_comparison(main_output: str | Path, template_path: str | Path) -> None:
+    if not DOCSTRANGE_CONFIG.get("enabled"):
+        return
+
+    command = DOCSTRANGE_CONFIG.get("command")
+    output_dir_cfg = (
+        DOCSTRANGE_CONFIG.get("output_dir")
+        or DOCSTRANGE_CONFIG.get("output_subdir")
+        or "docstrange"
+    )
+
+    main_output_path = Path(main_output)
+    output_dir = Path(output_dir_cfg)
+    if not output_dir.is_absolute():
+        output_dir = main_output_path.parent / output_dir
+
+    reference = DOCSTRANGE_CONFIG.get("reference_template") or template_path
+    output_format = DOCSTRANGE_CONFIG.get("format", "markdown")
+
+    try:
+        docstrange_validator.compare_presentations(
+            main_output_path,
+            reference,
+            output_dir,
+            command=command,
+            output_format=output_format,
+        )
+    except docstrange_validator.DocStrangeNotAvailable as exc:  # pragma: no cover - optional integration
+        logger.warning("DocStrange comparison skipped: %s", exc)
+    except Exception as exc:  # pragma: no cover - optional integration
+        logger.error("DocStrange comparison failed: %s", exc)
 
 def _apply_internal_table_borders(table, total_rows):
     """

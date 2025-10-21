@@ -6,13 +6,12 @@ import logging
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
-from pptx.util import Inches, Pt
+from pptx.enum.text import PP_ALIGN
+from pptx.util import Pt
 
-from amp_automation.presentation.tables import (
-    CellStyleContext,
-    TableLayout,
-    add_and_style_table,
-)
+from amp_automation.presentation.tables import CellStyleContext
+from amp_automation.presentation.template_clone import clone_template_table
+from amp_automation.presentation.assembly import _populate_cloned_table
 
 
 def build_context() -> CellStyleContext:
@@ -34,45 +33,55 @@ def build_context() -> CellStyleContext:
     )
 
 
-def build_layout() -> TableLayout:
-    return TableLayout(
-        placeholder_name="",
-        shape_name="TestTable",
-        position={
-            "left": Inches(1),
-            "top": Inches(1),
-            "width": Inches(4),
-            "height": Inches(2),
-        },
-        row_height_header=Pt(12),
-        row_height_body=Pt(10),
-        row_height_subtotal=Pt(10),
-        column_widths=[Inches(1.5), Inches(1.5)],
-        top_override=None,
-        height_rule_available=False,
-    )
-
-
 def test_add_and_style_table_populates_cells() -> None:
+    # Use a real template cloning cycle
+    template_prs = Presentation("template/Template_V4_FINAL_071025.pptx")
+    template_slide = template_prs.slides[0]
+
     prs = Presentation()
     slide = prs.slides.add_slide(prs.slide_layouts[6])
 
+    table_shape = clone_template_table(template_slide, slide, "MainDataTable")
     table_data = [
-        ["Header A", "Header B"],
-        ["Row 1", "100"],
+        ["Header A", "Header B", "Header C"],
+        ["ROW 1", "100", "Other"],
+        ["GRAND TOTAL", "100", ""],
     ]
     cell_metadata: dict[tuple[int, int], dict[str, object]] = {}
 
-    result = add_and_style_table(
-        slide,
-        table_data,
-        cell_metadata,
-        build_layout(),
-        build_context(),
-        logging.getLogger("test"),
-    )
+    result = _populate_cloned_table(table_shape, table_data, cell_metadata)
 
     assert result is True
-    created_table = slide.shapes[0].table
+    created_table = table_shape.table
     assert created_table.cell(0, 0).text.upper() == "HEADER A"
     assert "100" in created_table.cell(1, 1).text
+
+
+def test_add_and_style_table_respects_alignment_and_dual_line() -> None:
+    template_prs = Presentation("template/Template_V4_FINAL_071025.pptx")
+    template_slide = template_prs.slides[0]
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+
+    table_shape = clone_template_table(template_slide, slide, "MainDataTable")
+
+    table_data = [
+        ["Header A", "Header B", "Header C"],
+        ["Row 1", "100", "Other"],
+        ["GRAND TOTAL", "100", ""],
+    ]
+    cell_metadata: dict[tuple[int, int], dict[str, object]] = {}
+
+    result = _populate_cloned_table(table_shape, table_data, cell_metadata)
+
+    assert result is True
+    table = table_shape.table
+    cell_left = table.cell(1, 0)
+    assert cell_left.text_frame.word_wrap is True
+    paragraphs = cell_left.text_frame.paragraphs
+    assert paragraphs[0].alignment == PP_ALIGN.LEFT
+    assert cell_left.text_frame.text == "ROW 1"
+
+    cell_right = table.cell(1, 1)
+    assert cell_right.text_frame.paragraphs[0].alignment == PP_ALIGN.LEFT
