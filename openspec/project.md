@@ -2,10 +2,10 @@
 
 # Project Context
 
-## Immediate Next Steps (20 Oct 2025)
-1. **Styling polish:** Finalise Slide 1 parity by double-checking alternating greys, footer spacing, and summary-tile/legend typography against the measurement pack.
-2. **Baseline imagery & visual diff:** Capture a multi-slide template reference, rerun `tools/visual_diff.py` across all slides, then execute the Zen MCP workflow and PowerPoint Review > Compare, archiving evidence.
-3. **Regression & smoke:** Extend pytest coverage (summary tiles, legend rebuild, clone-toggle-off path) and run `scripts/run_pipeline_local.py` on multi-market inputs once visuals are approved to validate the 32-row contract.
+## Immediate Next Steps (21 Oct 2025)
+1. **Slide 1 parity closure:** Reset table row heights/column widths to template EMUs, force center alignment, and drop the synthesized legend shapes so Slide 1 geometrically matches the master.
+2. **Baseline imagery & visual diff:** Export multi-slide PNGs for the template and regenerated deck, rerun full-deck `tools/visual_diff.py`, and execute Zen MCP + PowerPoint Review > Compare with archived evidence.
+3. **Regression & smoke:** Add pytest coverage for summary-tile typography, legend rebuild behaviour, and clone-toggle-off path, then run `scripts/run_pipeline_local.py` on additional markets to validate the 32-row contract once visuals are signed off.
 
 ## Purpose
 Automate Annual Marketing Plan laydown decks by converting standardized Lumina Excel exports into pixel-accurate PowerPoint presentations that mirror the `Template_V4_FINAL_071025.pptx` master while preserving financial and media metrics.

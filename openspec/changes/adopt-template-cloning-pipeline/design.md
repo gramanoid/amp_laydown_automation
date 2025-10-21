@@ -14,3 +14,8 @@ Switching to a clone-and-populate strategy ensures every generated slide inherit
 - Confirm final styling on Slide 1 (alternating greys, legend/summary typography, footer spacing) once baseline imagery is available.
 - Decide whether partial rebuild support (e.g., removing empty rows beyond cloning) is required in the near term.
 - Chart regeneration remains disabled; revisit once business requirements surface.
+
+## Current Status (21 Oct 2025)
+- Dimensions, positioning, and fonts now match the template; latest deck `GeneratedDeck_20251021_102357.pptx` passes structural validation.
+- Residual gaps: table row heights slightly off, table cell alignment uses LEFT/RIGHT, and synthesized legend shapes remain on Slide 1. Column widths differ by ≤ 252 EMU.
+- Visual diff probe still exceeds thresholds pending the alignment/height fixes and the capture of a multi-slide template baseline for Zen MCP + PowerPoint Review > Compare.
