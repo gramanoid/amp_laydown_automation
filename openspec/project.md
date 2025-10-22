@@ -6,6 +6,7 @@
 1. **Slide 1 parity closure:** Reset table row heights/column widths to template EMUs, force center alignment, and drop the synthesized legend shapes so Slide 1 geometrically matches the master.
 2. **Baseline imagery & visual diff:** Export multi-slide PNGs for the template and regenerated deck, rerun full-deck `tools/visual_diff.py`, and execute Zen MCP + PowerPoint Review > Compare with archived evidence.
 3. **Regression & smoke:** Add pytest coverage for summary-tile typography, legend rebuild behaviour, and clone-toggle-off path, then run `scripts/run_pipeline_local.py` on additional markets to validate the 32-row contract once visuals are signed off.
+4. **Campaign pagination discovery:** Once current blockers clear, run a focused Q&A to design a no-campaign-splitting strategy so each campaign stays on a single slide and capture an OpenSpec change proposal for delivery.
 
 ## Purpose
 Automate Annual Marketing Plan laydown decks by converting standardized Lumina Excel exports into pixel-accurate PowerPoint presentations that mirror the `Template_V4_FINAL_071025.pptx` master while preserving financial and media metrics.

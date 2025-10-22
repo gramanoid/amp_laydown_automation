@@ -29,6 +29,7 @@ Horizontal three-column merges are controlled by `tools/FixHorizontalMerges.ps1`
 - Add automated regression scripts catching rogue merges or row-height drift before decks ship.
 - Complete Slide 1 geometry/legend parity fix and re-run visual diff plus Zen MCP/Compare workflows for evidence capture.
 - Rehydrate pytest suites and smoke tests (e.g., `tests/test_tables.py`, `tests/test_structural_validator.py`) so pipeline regressions surface automatically.
+- Facilitate a Q&A-led discovery to design campaign pagination that prevents campaigns from splitting across slides, then spin up a dedicated OpenSpec change once prerequisites are cleared.
 
 # Risks
 - PowerPoint COM instability (Unexpected HRESULT, lingering processes) blocks post-processing; failure to close sessions can corrupt decks or lock files.
