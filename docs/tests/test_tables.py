@@ -7,7 +7,7 @@ import logging
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
-from pptx.util import Pt
+from pptx.util import Pt, Emu
 
 from amp_automation.presentation.tables import CellStyleContext
 from amp_automation.presentation.template_clone import clone_template_table
@@ -78,10 +78,14 @@ def test_add_and_style_table_respects_alignment_and_dual_line() -> None:
     assert result is True
     table = table_shape.table
     cell_left = table.cell(1, 0)
-    assert cell_left.text_frame.word_wrap is True
+    assert cell_left.text_frame.word_wrap is False
     paragraphs = cell_left.text_frame.paragraphs
-    assert paragraphs[0].alignment == PP_ALIGN.LEFT
+    assert paragraphs[0].alignment == PP_ALIGN.CENTER
     assert cell_left.text_frame.text == "ROW 1"
 
     cell_right = table.cell(1, 1)
-    assert cell_right.text_frame.paragraphs[0].alignment == PP_ALIGN.LEFT
+    assert cell_right.text_frame.paragraphs[0].alignment == PP_ALIGN.CENTER
+
+    assert table.rows[0].height == Emu(161729)
+    assert table.rows[1].height == Emu(99205)
+    assert table.rows[2].height == Emu(99205)

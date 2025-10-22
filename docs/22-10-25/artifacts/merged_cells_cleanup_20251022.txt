@@ -1,0 +1,13 @@
+Horizontal merge cleanup (22 Oct 2025)
+Deck: output/presentations/run_20251022_092659/GeneratedDeck_20251022_092659.pptx
+Instructions: docs/22-10-25/merged_cells_analysis/merged_cells_fix_instructions.json
+
+Summary:
+- Entries reviewed: 87
+- Expected summary merges retained: 27 (MONTHLY TOTAL, GRAND TOTAL, CARRIED FORWARD)
+- Unexpected / empty merges remaining: 0
+- Process: tools/FixHorizontalMerges.ps1 (JSON-guided split + remerge)
+
+Notes:
+- Row-height probe still reports 692 rows outside 8.4 ±0.1 pt; additional work required separately.
+- Campaign vertical merges continue to fail in PostProcess script (Cell.Merge size mismatch) – now treated as a known issue pending idempotent geometry reset.

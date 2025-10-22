@@ -1,0 +1,106 @@
+TASK: Fix horizontally merged cells in PowerPoint presentation
+FILE: GeneratedDeck_20251022_092659.pptx
+
+PROBLEM: 87 cells are horizontally merged across the first 3 columns (columns 0, 1, 2) that need to be unmerged.
+
+FIX REQUIRED FOR EACH CELL:
+1. Unmerge the cell spanning columns 0, 1, and 2
+2. Keep any existing content in column 0 only
+3. Ensure columns 1 and 2 are empty/separate cells after unmerging
+
+LIST OF MERGED CELLS TO FIX (format: Slide|Row|HasContent|CurrentContent):
+
+Slide 2, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 2, Row 23 - EMPTY
+Slide 3, Row 12 - HAS CONTENT: "ALWAYS ON DCOMM"
+Slide 3, Row 23 - EMPTY
+Slide 4, Row 12 - HAS CONTENT: "GRAND TOTAL"
+Slide 5, Row 12 - EMPTY
+Slide 5, Row 23 - EMPTY
+Slide 7, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 7, Row 23 - HAS CONTENT: "RAMADAN ACTIVATION"
+Slide 11, Row 12 - HAS CONTENT: "GRAND TOTAL"
+Slide 13, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 13, Row 23 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 13, Row 34 - HAS CONTENT: "CARRIED FORWARD"
+Slide 13, Row 35 - HAS CONTENT: "GRAND TOTAL"
+Slide 14, Row 12 - HAS CONTENT: "GRAND TOTAL"
+Slide 15, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 16, Row 12 - EMPTY
+Slide 16, Row 23 - EMPTY
+Slide 17, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 17, Row 23 - HAS CONTENT: "GRAND TOTAL"
+Slide 18, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 18, Row 23 - HAS CONTENT: "GRAND TOTAL"
+Slide 20, Row 12 - HAS CONTENT: "GRAND TOTAL"
+Slide 22, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 22, Row 23 - EMPTY
+Slide 23, Row 12 - EMPTY
+Slide 23, Row 23 - EMPTY
+Slide 24, Row 12 - HAS CONTENT: "NEXTNOVA CLINICAL REPAIR"
+Slide 25, Row 12 - HAS CONTENT: "GENDER"
+Slide 25, Row 23 - HAS CONTENT: "ALWAYS ON DCOMM"
+Slide 25, Row 34 - HAS CONTENT: "GRAND TOTAL"
+Slide 26, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 26, Row 23 - HAS CONTENT: "MASTERBRAND"
+Slide 26, Row 24 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 27, Row 12 - HAS CONTENT: "ROCKET"
+Slide 27, Row 23 - HAS CONTENT: "ALWAYS ON DCOMM"
+Slide 27, Row 34 - HAS CONTENT: "GRAND TOTAL"
+Slide 28, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 29, Row 12 - HAS CONTENT: "ALWAYS ON DCOMM"
+Slide 29, Row 23 - EMPTY
+Slide 30, Row 12 - EMPTY
+Slide 30, Row 23 - EMPTY
+Slide 32, Row 12 - HAS CONTENT: "TIME 2.0"
+Slide 33, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 34, Row 12 - HAS CONTENT: "ALWAYS ON DCOMM"
+Slide 35, Row 12 - HAS CONTENT: "HERITAGE"
+Slide 36, Row 12 - HAS CONTENT: "EX REAL WORLD EVIDENCE"
+Slide 36, Row 23 - HAS CONTENT: "OTRIVIN PLUS"
+Slide 36, Row 24 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 39, Row 12 - HAS CONTENT: "CLINICAL WHITE"
+Slide 39, Row 23 - HAS CONTENT: "ALWAYS ON DCOMM"
+Slide 39, Row 34 - HAS CONTENT: "GRAND TOTAL"
+Slide 41, Row 12 - EMPTY
+Slide 41, Row 23 - EMPTY
+Slide 42, Row 12 - HAS CONTENT: "PRONATURALS"
+Slide 43, Row 12 - EMPTY
+Slide 43, Row 23 - EMPTY
+Slide 44, Row 12 - HAS CONTENT: "IMMUNO VITA C MAX + ELDERBERRY"
+Slide 45, Row 12 - HAS CONTENT: "GRAND TOTAL"
+Slide 47, Row 12 - HAS CONTENT: "EX CONDITION"
+Slide 47, Row 23 - EMPTY
+Slide 49, Row 12 - HAS CONTENT: "GRAND TOTAL"
+Slide 51, Row 12 - EMPTY
+Slide 51, Row 23 - EMPTY
+Slide 51, Row 34 - HAS CONTENT: "CARRIED FORWARD"
+Slide 51, Row 35 - HAS CONTENT: "GRAND TOTAL"
+Slide 54, Row 12 - EMPTY
+Slide 54, Row 23 - EMPTY
+Slide 56, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 58, Row 12 - HAS CONTENT: "EX ‑ MINERS ARMS"
+Slide 61, Row 12 - EMPTY
+Slide 61, Row 23 - EMPTY
+Slide 62, Row 12 - HAS CONTENT: "LETS TREAT IT RIGHT"
+Slide 63, Row 12 - HAS CONTENT: "YOU DID IT"
+Slide 63, Row 23 - EMPTY
+Slide 64, Row 12 - EMPTY
+Slide 74, Row 12 - HAS CONTENT: "FACES‑CONDITION"
+Slide 74, Row 23 - HAS CONTENT: "FEEL FAMILIAR"
+Slide 75, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 75, Row 23 - HAS CONTENT: "ALWAYS ON DCOMM"
+Slide 76, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 76, Row 23 - HAS CONTENT: "GRAND TOTAL"
+Slide 78, Row 12 - HAS CONTENT: "EX WORLD ORAL HEALTH DAY"
+Slide 79, Row 12 - HAS CONTENT: "GRAND TOTAL"
+Slide 81, Row 12 - HAS CONTENT: "MONTHLY TOTAL (£ 000)"
+Slide 82, Row 12 - EMPTY
+Slide 84, Row 12 - HAS CONTENT: "HHP GLOBAL PAIN AWARENESS WEEK"
+
+NOTES:
+- All row numbers are 1-indexed (first row = 1)
+- All slide numbers are 1-indexed (first slide = 1)
+- Column indices are 0-indexed: Column 0 = first column, Column 1 = second column, Column 2 = third column
+- After unmerging, only Column 0 should retain the original content
+- Columns 1 and 2 should be empty separate cells

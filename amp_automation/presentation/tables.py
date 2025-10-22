@@ -140,6 +140,7 @@ class CellStyleContext:
     default_font_name: str
     font_size_header: Pt
     font_size_body: Pt
+    font_size_body_compact: Pt
     color_black: RGBColor
     color_light_gray_text: RGBColor
     color_table_gray: RGBColor
@@ -151,6 +152,7 @@ class CellStyleContext:
     color_other: RGBColor
     column_alignment: dict[int, object] = field(default_factory=dict)
     word_wrap_columns: set[int] = field(default_factory=set)
+    shrink_to_fit_columns: set[int] = field(default_factory=set)
     uppercase_columns: set[int] = field(default_factory=set)
     dual_line_labels: dict[str, list[str]] = field(default_factory=dict)
 
@@ -187,6 +189,8 @@ def style_table_cell(
     DEFAULT_FONT_NAME = context.default_font_name
     FONT_SIZE_HEADER = context.font_size_header
     FONT_SIZE_BODY = context.font_size_body
+    FONT_SIZE_BODY_COMPACT = context.font_size_body_compact
+    FONT_SIZE_MONTHLY_TOTAL = Pt(6.5)
     CLR_BLACK = context.color_black
     CLR_LIGHT_GRAY_TEXT = context.color_light_gray_text
     CLR_TABLE_GRAY = context.color_table_gray
@@ -196,12 +200,21 @@ def style_table_cell(
     CLR_DIGITAL = context.color_digital
     CLR_OOH = context.color_ooh
     CLR_OTHER = context.color_other
-    alignment = _resolve_alignment(context.column_alignment.get(col_idx))
     wrap_from_config = col_idx in context.word_wrap_columns
-    should_wrap = wrap_from_config
+    shrink_to_fit = col_idx in context.shrink_to_fit_columns
+    use_compact_font = False
+    MONTH_HEADER_COLUMNS = set(range(3, 15))
+    CLR_WHITE = RGBColor(255, 255, 255)
+    SUBTOTAL_LABELS = {"SUBTOTAL", "CARRIED FORWARD", "MONTHLY TOTAL (£ 000)", "GRAND TOTAL"}
 
-    from pptx.util import Pt
+    normalized_row_label = ""
+    if 0 <= row_idx < len(table_data) and table_data[row_idx]:
+        normalized_row_label = " ".join(str(table_data[row_idx][0]).replace("\xa0", " ").split()).upper()
+    is_monthly_total_row = normalized_row_label == "MONTHLY TOTAL (£ 000)"
+    is_total_row = row_idx == len(table_data) - 1 or (row_idx > 0 and normalized_row_label in SUBTOTAL_LABELS)
+
     from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE, MSO_VERTICAL_ANCHOR
+    alignment = PP_ALIGN.CENTER
 
     try:
         original_cell_text = str(table_data[row_idx][col_idx]) if col_idx < len(table_data[row_idx]) else ""
@@ -244,6 +257,12 @@ def style_table_cell(
 
         text_frame = cell.text_frame
         text_frame.clear()
+        if use_compact_font and processed_cell_text:
+            processed_cell_text = (
+                processed_cell_text.replace(" ", "\u2060 ")
+                .replace("-", "\u2011")
+            )
+
         text_frame.word_wrap = wrap_from_config
         text_frame.auto_size = MSO_AUTO_SIZE.NONE
 
@@ -481,15 +500,46 @@ def style_table_cell(
                 else:
                     processed_cell_text = str(original_cell_text)
 
-        if processed_cell_text not in ("", "-", "–") and col_idx in context.uppercase_columns:
+        if processed_cell_text and processed_cell_text.strip().endswith("%"):
+            pct_value = processed_cell_text.strip()[:-1]
+            try:
+                numeric_pct = float(pct_value)
+                if abs(numeric_pct - round(numeric_pct)) < 1e-6:
+                    processed_cell_text = f"{int(round(numeric_pct))}%"
+            except ValueError:
+                pass
+
+        if processed_cell_text not in ("", "-", "-") and col_idx in context.uppercase_columns:
             processed_cell_text = processed_cell_text.upper()
 
-        normalized_key = processed_cell_text.replace("\n", " ").strip().upper() if processed_cell_text else ""
+        normalized_key = (
+            processed_cell_text.replace("\r", " ").replace("\n", " ").strip().upper()
+            if processed_cell_text
+            else ""
+        )
         if normalized_key and normalized_key in context.dual_line_labels:
-            processed_cell_text = "\n".join(context.dual_line_labels[normalized_key])
+            processed_cell_text = "\r".join(context.dual_line_labels[normalized_key])
 
-        should_wrap = wrap_from_config or ("\n" in processed_cell_text)
-        text_frame.word_wrap = should_wrap
+        processed_cell_text = (
+            processed_cell_text.replace("\r\n", "\r").replace("\n", "\r") if processed_cell_text else processed_cell_text
+        )
+
+        normalized_for_compact = (
+            "".join(ch for ch in processed_cell_text if ch.isalnum()) if processed_cell_text else ""
+        )
+        compact_length = len(normalized_for_compact)
+        compact_columns = {0, 1}
+        use_compact_font = (
+            row_idx > 0
+            and col_idx in compact_columns
+            and compact_length >= 10
+        )
+
+        if use_compact_font and processed_cell_text:
+            processed_cell_text = processed_cell_text.replace(" ", "\u00A0").replace("-", "\u2011")
+
+        text_frame.word_wrap = wrap_from_config
+        text_frame.auto_size = MSO_AUTO_SIZE.NONE
 
         if not p.runs:
             run = p.add_run()
@@ -497,23 +547,24 @@ def style_table_cell(
             run = p.runs[0]
         run.text = processed_cell_text
 
+        body_font_size = FONT_SIZE_BODY
+
         if row_idx == 0:
             run.font.name = DEFAULT_FONT_NAME
             run.font.size = FONT_SIZE_HEADER
             run.font.bold = True
-            run.font.color.rgb = CLR_BLACK
+            header_color = CLR_WHITE if col_idx in MONTH_HEADER_COLUMNS else CLR_BLACK
+            run.font.color.rgb = header_color
 
-        elif row_idx == len(table_data) - 1 or (
-            row_idx > 0 and table_data[row_idx][0] in ["SUBTOTAL", "CARRIED FORWARD", "MONTHLY TOTAL (£ 000)"]
-        ):
+        elif is_total_row:
             run.font.name = DEFAULT_FONT_NAME
-            run.font.size = FONT_SIZE_BODY
+            run.font.size = FONT_SIZE_MONTHLY_TOTAL if is_monthly_total_row else FONT_SIZE_HEADER
             run.font.bold = True
             run.font.color.rgb = CLR_BLACK
 
         else:
             run.font.name = DEFAULT_FONT_NAME
-            run.font.size = FONT_SIZE_BODY
+            run.font.size = body_font_size
 
             if is_empty_cell:
                 run.font.color.rgb = CLR_LIGHT_GRAY_TEXT
@@ -675,7 +726,7 @@ def style_table_cell(
             cell.vertical_anchor,
         )
 
-        text_frame.word_wrap = should_wrap
+        text_frame.word_wrap = wrap_from_config
         text_frame.auto_size = MSO_AUTO_SIZE.NONE
 
         for para_idx, paragraph in enumerate(text_frame.paragraphs):
@@ -718,11 +769,13 @@ def style_table_cell(
                 if row_idx == 0:
                     expected_font_size = FONT_SIZE_HEADER
                     expected_bold = True
-                elif row_idx == len(table_data) - 1:
-                    expected_font_size = FONT_SIZE_BODY
+                    if col_idx in MONTH_HEADER_COLUMNS:
+                        expected_color_rgb = CLR_WHITE
+                elif is_total_row:
+                    expected_font_size = FONT_SIZE_MONTHLY_TOTAL if is_monthly_total_row else FONT_SIZE_HEADER
                     expected_bold = True
                 else:
-                    expected_font_size = FONT_SIZE_BODY
+                    expected_font_size = body_font_size if use_compact_font else FONT_SIZE_BODY
                     if col_idx < 3:
                         expected_bold = True
                     if cell_run.text == "-":

@@ -9,7 +9,7 @@
 - [x] 2.1 `openspec validate update-table-styling-continuations --strict`
 
 ## 3. Slide 1 Parity Follow-up (21 Oct 2025)
-- [ ] 3.1 Snap Slide 1 table row heights/column widths to template EMUs.
-- [ ] 3.2 Center-align all table cell paragraphs post-population.
-- [ ] 3.3 Prune synthesized legend shapes on slides where the template omits them.
-- [ ] 3.4 Regenerate deck, rerun diff/validator/tests, and archive updated evidence.
+- [x] 3.1 Snap Slide 1 table row heights/column widths to template EMUs.
+- [x] 3.2 Center-align all table cell paragraphs post-population.
+- [x] 3.3 Prune synthesized legend shapes on slides where the template omits them.
+- [x] 3.4 Regenerate deck, rerun diff/validator/tests, and archive updated evidence.

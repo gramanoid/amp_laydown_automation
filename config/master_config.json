@@ -86,73 +86,72 @@
           "16": "center",
           "17": "center"
         },
-        "word_wrap_columns": [
+        "word_wrap_columns": [],
+        "shrink_to_fit_columns": [
           0,
           1,
           2
         ],
         "uppercase_columns": [
           0,
-          1,
-          2
+          1
         ],
-        "dual_line_labels": {
-          "MONTHLY TOTAL (\u00a3 000)": [
-            "MONTHLY TOTAL",
-            "(\u00a3 000)"
-          ],
-          "CARRIED FORWARD": [
-            "CARRIED",
-            "FORWARD"
-          ],
-          "GRAND TOTAL": [
-            "GRAND",
-            "TOTAL"
-          ],
-          "YT REACH": [
-            "YT",
-            "REACH"
-          ],
-          "META REACH": [
-            "META",
-            "REACH"
-          ],
-          "TT REACH": [
-            "TT",
-            "REACH"
-          ]
-        }
+        "dual_line_labels": {}
       },
       "row_heights": {
-        "header_inches": 0.139,
-        "body_inches": 0.118,
-        "subtotal_inches": 0.139
+        "header_inches": 0.176869,
+        "body_inches": 0.116667,
+        "subtotal_inches": 0.116667,
+        "header_emu": 161729,
+        "body_emu": 106680,
+        "subtotal_emu": 106680,
+        "trailer_emu": 0
       },
+      "column_widths_emu": [
+        812364,
+        729251,
+        831384,
+        338274,
+        400567,
+        400567,
+        400567,
+        414770,
+        415954,
+        465506,
+        437595,
+        443865,
+        400567,
+        437595,
+        352043,
+        449092,
+        400567,
+        400567
+      ],
       "column_widths_inches": [
-        0.888,
-        0.798,
-        0.909,
-        0.37,
-        0.438,
-        0.438,
-        0.438,
-        0.454,
-        0.455,
-        0.509,
-        0.479,
-        0.485,
-        0.438,
-        0.479,
-        0.385,
-        0.491,
-        0.438,
-        0.438
+        0.888412,
+        0.797519,
+        0.909213,
+        0.369941,
+        0.438065,
+        0.438065,
+        0.438065,
+        0.453598,
+        0.454893,
+        0.509084,
+        0.47856,
+        0.485417,
+        0.438065,
+        0.47856,
+        0.384999,
+        0.491133,
+        0.438065,
+        0.438065
       ],
       "positioning": {
         "left_inches": 0.179,
         "top_inches": 0.698,
         "width_inches": 9.33,
-        "height_inches": 4.119
+        "height_inches": 3.757102
       }
     },
     "fonts": {
@@ -162,8 +161,9 @@
       "fallback_family": "Arial",
       "sizes_pt": {
         "title": 11,
-        "header": 7.5,
-        "body": 7,
+        "header": 7,
+        "body": 6,
+        "body_compact": 6,
         "chart_title": 8,
         "chart_labels": 6,
         "legend": 6,

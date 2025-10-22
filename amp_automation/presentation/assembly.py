@@ -105,6 +105,26 @@ def _get_child_shape(parent_shape, child_name):
     return None
 
 
+def _remove_shape_by_name(container, shape_name):
+    """Remove a shape (or nested shape) with the provided name from the container."""
+    if not shape_name or not container or not hasattr(container, "shapes"):
+        return False
+    removed = False
+    for shape in list(container.shapes):
+        name = getattr(shape, "name", "")
+        if name == shape_name:
+            element = shape._element
+            parent = element.getparent()
+            if parent is not None:
+                parent.remove(element)
+            removed = True
+            continue
+        if getattr(shape, "shape_type", None) == MSO_SHAPE_TYPE.GROUP and hasattr(shape, "shapes"):
+            if _remove_shape_by_name(shape, shape_name):
+                removed = True
+    return removed
+
+
 def _populate_summary_tiles(slide, template_slide, df, combination_row, excel_path):
     if not SUMMARY_TILE_CONFIG:
         return
@@ -325,13 +345,40 @@ def _set_legend_text(shape, template_shape, text):
 def _ensure_legend_shapes(slide, template_slide):
     if not LEGEND_GROUPS_CONFIG:
         return
-
     for media_key, legend_cfg in LEGEND_GROUPS_CONFIG.items():
-        group_shape = None
         group_name = legend_cfg.get("group_shape")
+        color_shape_name = legend_cfg.get("color_shape")
+        text_shape_name = legend_cfg.get("text_shape")
+        position = legend_cfg.get("position", {})
+
+        template_group_shape = _get_shape_by_name(template_slide, group_name) if (template_slide and group_name) else None
+        template_color_shape = None
+        template_text_shape = None
+
+        if template_group_shape:
+            if color_shape_name:
+                template_color_shape = _get_child_shape(template_group_shape, color_shape_name)
+            if text_shape_name:
+                template_text_shape = _get_child_shape(template_group_shape, text_shape_name)
+        else:
+            if template_slide and color_shape_name:
+                template_color_shape = _get_shape_by_name(template_slide, color_shape_name)
+            if template_slide and text_shape_name:
+                template_text_shape = _get_shape_by_name(template_slide, text_shape_name)
+
+        template_has_entry = any(
+            shape is not None for shape in (template_group_shape, template_color_shape, template_text_shape)
+        )
+
+        if template_slide is not None and not template_has_entry:
+            for candidate in (group_name, color_shape_name, text_shape_name):
+                _remove_shape_by_name(slide, candidate)
+            continue
+
+        group_shape = None
         if group_name:
             group_shape = _get_shape_by_name(slide, group_name)
-            if not group_shape:
+            if not group_shape and template_group_shape is not None:
                 try:
                     group_shape = clone_template_shape(template_slide, slide, group_name)
                 except TemplateCloneError as exc:
@@ -340,44 +387,36 @@ def _ensure_legend_shapes(slide, template_slide):
             if group_shape:
                 _apply_configured_position(group_shape, legend_cfg.get("position"))
 
-        color_shape_name = legend_cfg.get("color_shape")
-        text_shape_name = legend_cfg.get("text_shape")
-        position = legend_cfg.get("position", {})
-
         if color_shape_name:
             if group_shape:
                 color_shape = _get_child_shape(group_shape, color_shape_name)
             else:
                 color_shape = _get_shape_by_name(slide, color_shape_name)
-                if color_shape is None:
-                    template_color_shape = _get_shape_by_name(template_slide, color_shape_name)
-                    if template_color_shape:
-                        try:
-                            color_shape = clone_template_shape(template_slide, slide, color_shape_name)
-                        except TemplateCloneError:
-                            color_shape = _create_legend_color_shape(slide, color_shape_name, position)
-                    else:
+                if color_shape is None and template_color_shape is not None:
+                    try:
+                        color_shape = clone_template_shape(template_slide, slide, color_shape_name)
+                    except TemplateCloneError:
                         color_shape = _create_legend_color_shape(slide, color_shape_name, position)
-                elif position:
+                if color_shape is None and template_color_shape is None:
+                    color_shape = _create_legend_color_shape(slide, color_shape_name, position)
+                elif color_shape and position:
                     _apply_configured_position(color_shape, position)
             if color_shape:
                 _apply_legend_color(color_shape, media_key)
 
         if text_shape_name:
-            template_text_shape = _get_shape_by_name(template_slide, text_shape_name)
             if group_shape:
                 text_shape = _get_child_shape(group_shape, text_shape_name)
             else:
                 text_shape = _get_shape_by_name(slide, text_shape_name)
-                if text_shape is None:
-                    if template_text_shape:
-                        try:
-                            text_shape = clone_template_shape(template_slide, slide, text_shape_name)
-                        except TemplateCloneError:
-                            text_shape = _create_legend_text_shape(slide, text_shape_name, position)
-                    else:
+                if text_shape is None and template_text_shape is not None:
+                    try:
+                        text_shape = clone_template_shape(template_slide, slide, text_shape_name)
+                    except TemplateCloneError:
                         text_shape = _create_legend_text_shape(slide, text_shape_name, position)
-                elif position:
+                if text_shape is None and template_text_shape is None:
+                    text_shape = _create_legend_text_shape(slide, text_shape_name, position)
+                elif text_shape and position:
                     _apply_configured_position(text_shape, position)
             if text_shape:
                 if template_text_shape and getattr(template_text_shape, "has_text_frame", False):
@@ -520,6 +559,112 @@ def _normalize_market_name(raw_market: str) -> str:
     return raw_market
 
 
+def _normalize_row_label(value: object) -> str:
+    if value is None:
+        return ""
+    return " ".join(str(value).replace("\xa0", " ").split()).upper()
+
+
+def _derive_campaign_blocks_for_table(table_data: list[list[str]]) -> list[tuple[int, int]]:
+    """Return [(campaign_start_row, monthly_total_row)] for each campaign block."""
+    if not table_data or len(table_data) <= 1:
+        return []
+
+    blocks: list[tuple[int, int]] = []
+    idx = 1  # skip header
+    total_label = "MONTHLY TOTAL (£ 000)"
+    skip_labels = {"", "-", total_label, "CARRIED FORWARD", "GRAND TOTAL"}
+
+    while idx < len(table_data) - 1:
+        label = _normalize_row_label(table_data[idx][0] if idx < len(table_data) and table_data[idx] else "")
+        if label in skip_labels:
+            idx += 1
+            continue
+
+        start_idx = idx
+        search_idx = idx + 1
+        monthly_idx = None
+
+        while search_idx < len(table_data):
+            search_label = _normalize_row_label(
+                table_data[search_idx][0] if search_idx < len(table_data) and table_data[search_idx] else ""
+            )
+            if search_label == total_label:
+                monthly_idx = search_idx
+                break
+            if search_label and search_label not in {"", "-", total_label}:
+                # Reached next campaign without finding monthly total; abort this block.
+                break
+            search_idx += 1
+
+        if monthly_idx is None:
+            idx += 1
+            continue
+
+        blocks.append((start_idx, monthly_idx))
+        idx = monthly_idx + 1
+
+    return blocks
+
+
+def _apply_campaign_cell_merges(table, table_data: list[list[str]]) -> None:
+    """Merge campaign name column cells and monthly total headers to prevent row inflation."""
+    from pptx.enum.text import PP_ALIGN
+    from pptx.enum.text import MSO_VERTICAL_ANCHOR
+
+    blocks = _derive_campaign_blocks_for_table(table_data)
+    if not blocks:
+        return
+
+    for start_idx, monthly_idx in blocks:
+        try:
+            if start_idx >= len(table.rows) or monthly_idx >= len(table.rows):
+                continue
+
+            merge_end = max(start_idx, monthly_idx - 1)
+            if merge_end > start_idx:
+                top_cell = table.cell(start_idx, 0)
+                for merge_row in range(start_idx + 1, merge_end + 1):
+                    table.cell(merge_row, 0).text = ""
+                merged_cell = top_cell.merge(table.cell(merge_end, 0))
+                merged_label = str(table_data[start_idx][0] or "")
+                merged_cell.text = merged_label
+                try:
+                    merged_cell.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
+                except Exception:
+                    pass
+                try:
+                    merged_cell.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE
+                except Exception:
+                    pass
+
+            if monthly_idx >= len(table.rows):
+                continue
+
+            left_cell = table.cell(monthly_idx, 0)
+            label_text = str(left_cell.text or "")
+            for col_idx in (1, 2):
+                if col_idx < len(table.columns):
+                    table.cell(monthly_idx, col_idx).text = ""
+            merged_total = left_cell.merge(table.cell(monthly_idx, 2))
+            merged_total.text = label_text
+            try:
+                merged_total.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
+            except Exception:
+                pass
+            try:
+                merged_total.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.debug(
+                "Skipping campaign cell merge for rows %s-%s: %s",
+                start_idx,
+                monthly_idx,
+                exc,
+            )
+
+
 def _clear_comments(slide):
     if not comments_config.get("enabled", False):
         return
@@ -548,11 +693,21 @@ import ast, pathlib, inspect, textwrap
 from pathlib import Path
 
 from pptx import Presentation
-from pptx.util import Inches, Pt
+from pptx.util import Inches, Pt, Emu
 
 from amp_automation.presentation.template_geometry import (
+    TEMPLATE_V4_COLUMN_WIDTHS_EMU,
     TEMPLATE_V4_COLUMN_WIDTHS_INCHES,
+    TEMPLATE_V4_ROW_HEIGHT_BODY_EMU,
+    TEMPLATE_V4_ROW_HEIGHT_BODY_INCHES,
+    TEMPLATE_V4_ROW_HEIGHT_HEADER_EMU,
+    TEMPLATE_V4_ROW_HEIGHT_HEADER_INCHES,
+    TEMPLATE_V4_ROW_HEIGHT_TRAILER_EMU,
     TEMPLATE_V4_TABLE_BOUNDS,
+    TEMPLATE_V4_TABLE_LEFT_EMU,
+    TEMPLATE_V4_TABLE_TOP_EMU,
+    TEMPLATE_V4_TABLE_WIDTH_EMU,
+    TEMPLATE_V4_TABLE_HEIGHT_EMU,
 )
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR, MSO_AUTO_SIZE, MSO_VERTICAL_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE, PP_PLACEHOLDER
@@ -691,6 +846,7 @@ TABLE_COLUMN_ALIGNMENT_MAP: dict[int, object] = {}
 TABLE_WORD_WRAP_COLUMNS: set[int] = set()
 TABLE_UPPERCASE_COLUMNS: set[int] = set()
 TABLE_DUAL_LINE_LABELS: dict[str, list[str]] = {}
+TABLE_SHRINK_TO_FIT_COLUMNS: set[int] = set()
 CLONE_PIPELINE_ENABLED: bool = True
 AUTOPPTX_CONFIG: dict[str, object] = {}
 ASPOSE_CONFIG: dict[str, object] = {}
@@ -1173,10 +1329,10 @@ def _initialize_from_config(config: Config) -> None:
     global CLR_BLACK, CLR_WHITE, CLR_LIGHT_GRAY_TEXT, CLR_TABLE_GRAY, CLR_HEADER_GREEN
     global CLR_COMMENTS_GRAY, CLR_SUBTOTAL_GRAY
     global CLR_TELEVISION, CLR_DIGITAL, CLR_OOH, CLR_OTHER
-    global DEFAULT_FONT_NAME, FONT_SIZE_HEADER, FONT_SIZE_BODY
+    global DEFAULT_FONT_NAME, FONT_SIZE_HEADER, FONT_SIZE_BODY, FONT_SIZE_BODY_COMPACT
     global FONT_SIZE_CHART_TITLE, FONT_SIZE_CHART_LABELS
     global FONT_SIZE_TITLE, FONT_SIZE_LEGEND, FONT_SIZE_COMMENTS
-    global TABLE_ROW_HEIGHT_HEADER, TABLE_ROW_HEIGHT_BODY, TABLE_ROW_HEIGHT_SUBTOTAL
+    global TABLE_ROW_HEIGHT_HEADER, TABLE_ROW_HEIGHT_BODY, TABLE_ROW_HEIGHT_SUBTOTAL, TABLE_ROW_HEIGHT_TRAILER
     global TABLE_COLUMN_WIDTHS, TABLE_TOP_OVERRIDE
     global TABLE_CELL_STYLE_CONTEXT
     global CHART_STYLE_CONTEXT, CHART_COLOR_MAPPING, CHART_COLOR_CYCLE
@@ -1185,7 +1341,7 @@ def _initialize_from_config(config: Config) -> None:
     global REQUIRED_SHAPE_NAMES
     global LEGEND_GROUPS_CONFIG
     global SUMMARY_TILE_CONFIG
-    global TABLE_COLUMN_ALIGNMENT_MAP, TABLE_WORD_WRAP_COLUMNS, TABLE_UPPERCASE_COLUMNS, TABLE_DUAL_LINE_LABELS
+    global TABLE_COLUMN_ALIGNMENT_MAP, TABLE_WORD_WRAP_COLUMNS, TABLE_UPPERCASE_COLUMNS, TABLE_DUAL_LINE_LABELS, TABLE_SHRINK_TO_FIT_COLUMNS
     global CLONE_PIPELINE_ENABLED
     global AUTOPPTX_CONFIG, ASPOSE_CONFIG, DOCSTRANGE_CONFIG
 
@@ -1204,6 +1360,7 @@ def _initialize_from_config(config: Config) -> None:
     styling_config = table_config.get("styling", {})
     TABLE_COLUMN_ALIGNMENT_MAP = _parse_alignment_map(styling_config.get("column_alignment", {}))
     TABLE_WORD_WRAP_COLUMNS = {int(idx) for idx in styling_config.get("word_wrap_columns", [])}
+    TABLE_SHRINK_TO_FIT_COLUMNS = {int(idx) for idx in styling_config.get("shrink_to_fit_columns", [])}
     TABLE_UPPERCASE_COLUMNS = {int(idx) for idx in styling_config.get("uppercase_columns", [])}
     TABLE_DUAL_LINE_LABELS = _build_dual_line_map(styling_config.get("dual_line_labels", {}))
     row_heights_config = table_config.get("row_heights", {})
@@ -1244,6 +1401,7 @@ def _initialize_from_config(config: Config) -> None:
     TABLE_FONT_NAME = fonts_config.get("table_family", DEFAULT_FONT_NAME)
     FONT_SIZE_HEADER = Pt(float(font_sizes.get("header", 7.5)))
     FONT_SIZE_BODY = Pt(float(font_sizes.get("body", 7.0)))
+    FONT_SIZE_BODY_COMPACT = Pt(float(font_sizes.get("body_compact", font_sizes.get("body", 7.0))))
     FONT_SIZE_CHART_TITLE = Pt(float(font_sizes.get("chart_title", 8.0)))
     FONT_SIZE_CHART_LABELS = Pt(float(font_sizes.get("chart_labels", 6.0)))
     FONT_SIZE_TITLE = Pt(float(font_sizes.get("title", 11.0)))
@@ -1251,15 +1409,49 @@ def _initialize_from_config(config: Config) -> None:
     FONT_SIZE_COMMENTS = Pt(float(font_sizes.get("comments", 9.0)))
     FONT_FAMILY_LEGEND = fonts_config.get("legend_family", DEFAULT_FONT_NAME)
 
-    TABLE_ROW_HEIGHT_HEADER = Pt(float(row_heights_config.get("header_inches", 0.139)) * 72)
-    TABLE_ROW_HEIGHT_BODY = Pt(float(row_heights_config.get("body_inches", 0.118)) * 72)
-    TABLE_ROW_HEIGHT_SUBTOTAL = Pt(float(row_heights_config.get("subtotal_inches", 0.139)) * 72)
+    header_height_emu = row_heights_config.get("header_emu")
+    body_height_emu = row_heights_config.get("body_emu")
+    subtotal_height_emu = row_heights_config.get("subtotal_emu")
+    trailer_height_emu = row_heights_config.get("trailer_emu")
 
-    column_widths_config = table_config.get("column_widths_inches")
-    column_widths_source = (
-        column_widths_config if column_widths_config else TEMPLATE_V4_COLUMN_WIDTHS_INCHES
-    )
-    TABLE_COLUMN_WIDTHS = [Inches(float(width)) for width in column_widths_source]
+    if header_height_emu is not None:
+        TABLE_ROW_HEIGHT_HEADER = Emu(int(header_height_emu))
+    else:
+        header_inches = float(
+            row_heights_config.get("header_inches", TEMPLATE_V4_ROW_HEIGHT_HEADER_INCHES)
+        )
+        TABLE_ROW_HEIGHT_HEADER = Inches(header_inches)
+
+    if body_height_emu is not None:
+        TABLE_ROW_HEIGHT_BODY = Emu(int(body_height_emu))
+    else:
+        body_inches = float(
+            row_heights_config.get("body_inches", TEMPLATE_V4_ROW_HEIGHT_BODY_INCHES)
+        )
+        TABLE_ROW_HEIGHT_BODY = Inches(body_inches)
+
+    if subtotal_height_emu is not None:
+        TABLE_ROW_HEIGHT_SUBTOTAL = Emu(int(subtotal_height_emu))
+    else:
+        subtotal_inches = float(
+            row_heights_config.get("subtotal_inches", TEMPLATE_V4_ROW_HEIGHT_BODY_INCHES)
+        )
+        TABLE_ROW_HEIGHT_SUBTOTAL = Inches(subtotal_inches)
+
+    if trailer_height_emu is not None:
+        TABLE_ROW_HEIGHT_TRAILER = Emu(int(trailer_height_emu))
+    else:
+        TABLE_ROW_HEIGHT_TRAILER = Emu(TEMPLATE_V4_ROW_HEIGHT_TRAILER_EMU)
+
+    column_widths_emu_config = table_config.get("column_widths_emu") or []
+    if column_widths_emu_config:
+        TABLE_COLUMN_WIDTHS = [Emu(int(width)) for width in column_widths_emu_config]
+    else:
+        column_widths_config = table_config.get("column_widths_inches")
+        column_widths_source = (
+            column_widths_config if column_widths_config else TEMPLATE_V4_COLUMN_WIDTHS_INCHES
+        )
+        TABLE_COLUMN_WIDTHS = [Inches(float(width)) for width in column_widths_source]
 
     table_top_inches = float(
         table_position_config.get("top_inches", TEMPLATE_V4_TABLE_BOUNDS.top)
@@ -1272,6 +1464,7 @@ def _initialize_from_config(config: Config) -> None:
         default_font_name=TABLE_FONT_NAME,
         font_size_header=FONT_SIZE_HEADER,
         font_size_body=FONT_SIZE_BODY,
+        font_size_body_compact=FONT_SIZE_BODY_COMPACT,
         color_black=CLR_BLACK,
         color_light_gray_text=CLR_LIGHT_GRAY_TEXT,
         color_table_gray=CLR_TABLE_GRAY,
@@ -1283,6 +1476,7 @@ def _initialize_from_config(config: Config) -> None:
         color_other=CLR_OTHER,
         column_alignment=TABLE_COLUMN_ALIGNMENT_MAP,
         word_wrap_columns=TABLE_WORD_WRAP_COLUMNS,
+        shrink_to_fit_columns=TABLE_SHRINK_TO_FIT_COLUMNS,
         uppercase_columns=TABLE_UPPERCASE_COLUMNS,
         dual_line_labels=TABLE_DUAL_LINE_LABELS,
     )
@@ -1453,6 +1647,8 @@ CLR_OTHER = _rgb_color(media_colors_config.get("other", {}).get("rgb"), (176, 21
 DEFAULT_FONT_NAME = fonts_config.get("default_family", "Calibri")
 FONT_SIZE_HEADER = Pt(float(font_sizes.get("header", 7.5)))
 FONT_SIZE_BODY = Pt(float(font_sizes.get("body", 7.0)))
+FONT_SIZE_BODY_COMPACT = Pt(
+    float(font_sizes.get("body_compact", font_sizes.get("body", 7.0))))
 FONT_SIZE_CHART_TITLE = Pt(float(font_sizes.get("chart_title", 8.0)))
 FONT_SIZE_CHART_LABELS = Pt(float(font_sizes.get("chart_labels", 6.0)))
 
@@ -1475,6 +1671,7 @@ TABLE_CELL_STYLE_CONTEXT = CellStyleContext(
     default_font_name=DEFAULT_FONT_NAME,
     font_size_header=FONT_SIZE_HEADER,
     font_size_body=FONT_SIZE_BODY,
+    font_size_body_compact=FONT_SIZE_BODY_COMPACT,
     color_black=CLR_BLACK,
     color_light_gray_text=CLR_LIGHT_GRAY_TEXT,
     color_table_gray=CLR_TABLE_GRAY,
@@ -1486,6 +1683,7 @@ TABLE_CELL_STYLE_CONTEXT = CellStyleContext(
     color_other=CLR_OTHER,
     column_alignment=TABLE_COLUMN_ALIGNMENT_MAP,
     word_wrap_columns=TABLE_WORD_WRAP_COLUMNS,
+    shrink_to_fit_columns=TABLE_SHRINK_TO_FIT_COLUMNS,
     uppercase_columns=TABLE_UPPERCASE_COLUMNS,
     dual_line_labels=TABLE_DUAL_LINE_LABELS,
 )
@@ -1797,7 +1995,11 @@ def format_number(value, is_budget=False, is_percentage=False, is_grp=False, is_
 
     # Handle percentages first
     if is_percentage:
-        return f"{numeric_value:.1f}%"
+        formatted_pct = f"{numeric_value:.1f}%"
+        if formatted_pct.endswith(".0%"):
+            rounded = int(round(numeric_value))
+            return f"{rounded}%"
+        return formatted_pct
 
     # Handle GRPs with K suffix for thousands
     if is_grp:
@@ -1813,46 +2015,30 @@ def format_number(value, is_budget=False, is_percentage=False, is_grp=False, is_
     # IMPROVED BUDGET FORMATTING: More accurate representation
     if is_budget:
         abs_value = abs(numeric_value)
-        
-        # For values >= 1M, use millions
+
+        # Values >= 1M expressed in millions
         if abs_value >= 1_000_000:
             formatted_val = numeric_value / 1_000_000.0
-            # For monthly columns, always use whole numbers (no decimals)
-            if is_monthly_column:
-                return f"£{formatted_val:.0f}M"
-            else:
-                # Use 1 decimal place for millions to preserve accuracy in main Budget column
-                if formatted_val == int(formatted_val):
-                    return f"£{formatted_val:.0f}M"
-                else:
-                    return f"£{formatted_val:.1f}M"
-        
-        # For values >= 1K, use thousands
-        elif abs_value >= 1_000:
+            # Keep a single decimal only when materially helpful; otherwise use whole numbers
+            rounded = round(formatted_val, 1 if abs_value >= 5_000_000 else 0)
+            if rounded == int(rounded):
+                return f"£{int(rounded)}M"
+            return f"£{rounded:.1f}M"
+
+        # Values >= 1K expressed in thousands (always whole numbers to minimize width)
+        if abs_value >= 1_000:
             formatted_val = numeric_value / 1_000.0
-            # For monthly columns, always use whole numbers (no decimals)
-            if is_monthly_column:
-                return f"£{formatted_val:.0f}K"
-            else:
-                # Use 1 decimal place for thousands when needed for accuracy in main Budget column
-                if formatted_val == int(formatted_val):
-                    return f"£{formatted_val:.0f}K"
-                else:
-                    return f"£{formatted_val:.1f}K"
-        
-        # For values < 1K, show in pounds with K suffix for consistency
-        else:
-            # CRITICAL FIX: For monthly columns with values < 1K, show actual amount in pounds
-            # This prevents £500 from displaying as "£0K" which appears empty
-            if is_monthly_column and abs_value > 0:
-                return f"£{int(numeric_value)}"
-            
-            formatted_val = numeric_value / 1_000.0
-            # For monthly columns, always round to whole K units
-            if is_monthly_column:
-                return f"£{formatted_val:.0f}K"
-            else:
-                return f"£{formatted_val:.2f}K"
+            rounded = round(formatted_val)
+            return f"£{int(rounded)}K"
+
+        # Values < 1K show actual pounds when positive for monthly columns
+        if is_monthly_column and abs_value > 0:
+            return f"£{int(round(numeric_value))}"
+
+        formatted_val = numeric_value / 1_000.0
+        if is_monthly_column:
+            return f"£{int(round(formatted_val))}K"
+        return f"£{formatted_val:.2f}K"
     
     # Non-budget formatting (fallback)
     abs_value = abs(numeric_value)
@@ -2576,20 +2762,43 @@ def _populate_cloned_table(table_shape, table_data, cell_metadata):
     header_height = TABLE_ROW_HEIGHT_HEADER
     body_height = TABLE_ROW_HEIGHT_BODY
     subtotal_height = TABLE_ROW_HEIGHT_SUBTOTAL
+    trailer_height = TABLE_ROW_HEIGHT_TRAILER
+
+    def _apply_row_height(target_row, target_height, row_index, *, lock_exact=False):
+        """Assign height and optionally pin it via hRule='exact'."""
+        target_row.height = target_height
+        if lock_exact:
+            try:
+                target_row._tr.set("hRule", "exact")
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.debug("Unable to lock row %s height rule: %s", row_index, exc)
+        else:
+            if target_row._tr.get("hRule") is not None:
+                try:
+                    del target_row._tr.attrib["hRule"]
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    logger.debug("Unable to clear row %s height rule: %s", row_index, exc)
 
     subtotal_labels = {"SUBTOTAL", "CARRIED FORWARD", "MONTHLY TOTAL (£ 000)", "GRAND TOTAL"}
 
     for row_idx in range(rows_needed):
         row = table.rows[row_idx]
         row_data = table_data[row_idx]
-        label = str(row_data[0]).strip().upper() if row_data else ""
+        raw_label = str(row_data[0]) if row_data else ""
+        label = " ".join(raw_label.split()).upper()
+        is_blank_row = all(
+            (value is None or str(value).strip() in ("", "-"))
+            for value in row_data
+        )
 
         if row_idx == 0:
-            row.height = header_height
-        elif label in subtotal_labels or row_idx == rows_needed - 1:
-            row.height = subtotal_height
+            _apply_row_height(row, header_height, row_idx, lock_exact=True)
+        elif row_idx == rows_needed - 1 and is_blank_row:
+            _apply_row_height(row, trailer_height, row_idx)
+        elif label in subtotal_labels:
+            _apply_row_height(row, subtotal_height, row_idx, lock_exact=True)
         else:
-            row.height = body_height
+            _apply_row_height(row, body_height, row_idx, lock_exact=True)
 
         for col_idx in range(cols_needed):
             value = row_data[col_idx] if col_idx < len(row_data) else ""
@@ -2605,13 +2814,33 @@ def _populate_cloned_table(table_shape, table_data, cell_metadata):
                 logger,
             )
 
+    _apply_campaign_cell_merges(table, table_data)
+
     # Clear any unused rows beyond data to avoid stray template content.
-    for row_idx in range(rows_needed, len(table.rows)):
+    total_rows = len(table.rows)
+    for row_idx in range(rows_needed, total_rows):
         for col_idx in range(len(table.columns)):
             cell = table.cell(row_idx, col_idx)
             cell.text = ""
+        try:
+            _apply_row_height(table.rows[row_idx], trailer_height, row_idx)
+        except Exception as exc:
+            logger.debug("Unable to collapse unused row %s height: %s", row_idx, exc)
+
+    if total_rows > rows_needed:
+        logger.debug("Removing %s trailing empty rows from cloned table", total_rows - rows_needed)
+        for row_idx in range(total_rows - 1, rows_needed - 1, -1):
+            tr = table.rows[row_idx]._tr
+            table._tbl.remove(tr)
 
     apply_table_borders(table, TABLE_CELL_STYLE_CONTEXT.color_table_gray)
+    try:
+        table_shape.left = Inches(TEMPLATE_V4_TABLE_BOUNDS.left)
+        table_shape.top = Inches(TEMPLATE_V4_TABLE_BOUNDS.top)
+        table_shape.width = Inches(TEMPLATE_V4_TABLE_BOUNDS.width)
+        table_shape.height = Inches(TEMPLATE_V4_TABLE_BOUNDS.height)
+    except Exception as exc:
+        logger.debug("Unable to snap table geometry to template bounds: %s", exc)
     return True
 
 
