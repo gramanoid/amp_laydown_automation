@@ -3,10 +3,12 @@
 
 These instructions are for AI assistants working in this project.
 
-## Quick Project Recap (21 Oct 2025)
+## Quick Project Recap (24 Oct 2025)
+Last verified on 24-10-25
 - **Mission:** Clone-based generation of AMP laydown decks that match `Template_V4_FINAL_071025.pptx` pixel-for-pixel while binding Lumina Excel data; AutoPPTX remains disabled except for negative tests.
-- **Latest Baseline Deck:** `output/presentations/run_20251021_102357/GeneratedDeck_20251021_102357.pptx`, passing structural validation; visual diff still flags Slide 1 due to row-height/alignment/legend differences.
-- **Current Focus:** Reset table row heights/column widths to template EMUs, center-align all cells, drop the synthesized legend on Slide 1, capture multi-slide template baseline, rerun visual diff + Zen MCP/Compare, extend pytest coverage, and execute multi-market pipeline smoke tests.
+- **Latest Baseline Deck:** `output/presentations/run_20251024_161355/presentations.pptx` (88 slides, 63 brand/market combinations), passing structural validation.
+- **CRITICAL ARCHITECTURE DECISION (24 Oct 2025):** PowerPoint COM automation for bulk operations is PROHIBITED due to catastrophic performance issues (10+ hours vs Python's 10 minutes - 60x difference). See `docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md`.
+- **Current Focus:** Migrating post-processing from PowerShell COM to Python (python-pptx). Table normalization complete; merge operations and span resets in progress. Target: <20 minute end-to-end pipeline.
 
 Always open `@/openspec/AGENTS.md` when the request:
 - Mentions planning or proposals (words like proposal, spec, change, plan)

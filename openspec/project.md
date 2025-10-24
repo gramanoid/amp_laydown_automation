@@ -1,12 +1,12 @@
 # Project Context
 
-# Project Context
-
-## Immediate Next Steps (21 Oct 2025)
-1. **Slide 1 parity closure:** Reset table row heights/column widths to template EMUs, force center alignment, and drop the synthesized legend shapes so Slide 1 geometrically matches the master.
-2. **Baseline imagery & visual diff:** Export multi-slide PNGs for the template and regenerated deck, rerun full-deck `tools/visual_diff.py`, and execute Zen MCP + PowerPoint Review > Compare with archived evidence.
-3. **Regression & smoke:** Add pytest coverage for summary-tile typography, legend rebuild behaviour, and clone-toggle-off path, then run `scripts/run_pipeline_local.py` on additional markets to validate the 32-row contract once visuals are signed off.
-4. **Campaign pagination discovery:** Once current blockers clear, run a focused Q&A to design a no-campaign-splitting strategy so each campaign stays on a single slide and capture an OpenSpec change proposal for delivery.
+## Immediate Next Steps (24 Oct 2025)
+Last verified on 24-10-25
+1. **Complete Python post-processing migration:** Implement full cell merge logic (`cell_merges.py`) and span reset operations (`span_operations.py`) to replace deprecated PowerShell COM scripts. Target: <10 minutes for 88-slide deck.
+2. **Full pipeline testing:** End-to-end test of generation → Python post-processing → validation. Verify visual parity with baseline decks and measure performance against <20 minute target.
+3. **PowerShell integration:** Update `PostProcessCampaignMerges.ps1` to call Python CLI, retaining COM only for file I/O operations.
+4. **Documentation & enforcement:** Ensure all docs reference COM prohibition (`docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md`). Add code review requirements for any COM usage.
+5. **Campaign pagination discovery:** Once post-processing is stable, design no-campaign-splitting strategy and capture OpenSpec change proposal.
 
 ## Purpose
 Automate Annual Marketing Plan laydown decks by converting standardized Lumina Excel exports into pixel-accurate PowerPoint presentations that mirror the `Template_V4_FINAL_071025.pptx` master while preserving financial and media metrics.
@@ -15,7 +15,9 @@ Automate Annual Marketing Plan laydown decks by converting standardized Lumina E
 - Python 3.13.x runtime with `from __future__ import annotations`
 - Data processing: pandas, numpy, openpyxl (via pandas)
 - Presentation generation: python-pptx plus template-clone helpers
-- Tooling: pytest 8.x (`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`), PowerPoint COM automation, Zen MCP
+- Post-processing: python-pptx (bulk operations), PowerPoint COM ONLY for file I/O
+- Tooling: pytest 8.x (`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`), Zen MCP
+- **PROHIBITED:** PowerPoint COM for bulk table operations (see `docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md`)
 
 ## Project Conventions
 
@@ -57,4 +59,4 @@ Automate Annual Marketing Plan laydown decks by converting standardized Lumina E
 - Template: `template/Template_V4_FINAL_071025.pptx`
 - Lumina Excel exports (column mapping per config)
 - Python packages: pandas, numpy, python-pptx, openpyxl
-- Zen MCP server (`temp/zen-mcp-server`), PowerPoint COM, OpenSpec CLI
+- Zen MCP server (`temp/zen-mcp-server`), PowerPoint COM (file I/O only), OpenSpec CLI
