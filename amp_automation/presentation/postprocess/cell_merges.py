@@ -6,8 +6,15 @@ replacing slow COM-based PowerShell operations.
 """
 
 import logging
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.util import Pt
 
 logger = logging.getLogger(__name__)
+
+# Font sizes (matching PowerShell configuration)
+CAMPAIGN_FONT_SIZE = 9
+MONTHLY_TOTAL_FONT_SIZE = 10
+SUMMARY_FONT_SIZE = 10
 
 
 def merge_campaign_cells(table):
@@ -22,19 +29,65 @@ def merge_campaign_cells(table):
 
     Args:
         table: python-pptx table object
+
+    Returns:
+        int: Number of campaign merges performed
     """
     logger.debug("Merging campaign cells")
 
-    # Note: python-pptx provides table.cell(row, col).merge(other_cell) for merging,
-    # but we need to:
-    # 1. Identify campaign start/end rows (between MONTHLY TOTAL rows)
-    # 2. Merge cells vertically in column 1
-    # 3. Apply styling (center alignment, bold, specific font size)
-    #
-    # This requires reading cell text to identify MONTHLY TOTAL rows.
+    row_count = len(table.rows)
+    campaign_start = None
+    merges_performed = 0
 
-    logger.warning("merge_campaign_cells: Not yet fully implemented in python-pptx")
-    logger.warning("Implementation requires cell text analysis and vertical merging")
+    # Iterate through rows (skip header row index 0)
+    for row_idx in range(1, row_count):
+        cell = table.cell(row_idx, 0)  # Column 1 (0-indexed)
+        cell_text = _get_cell_text(cell)
+        normalized = normalize_label(cell_text)
+
+        is_monthly = is_monthly_total(cell_text)
+        is_grand = is_grand_total(cell_text)
+        is_carried = is_carried_forward(cell_text)
+
+        # Track campaign start (non-empty, non-special rows)
+        if normalized and not is_monthly and not is_grand and not is_carried:
+            if campaign_start is None:
+                campaign_start = row_idx
+
+        # Perform merge when we hit MONTHLY TOTAL
+        if is_monthly and campaign_start is not None:
+            campaign_end = row_idx - 1
+
+            if campaign_end > campaign_start:
+                try:
+                    # Merge cells vertically in column 1
+                    top_cell = table.cell(campaign_start, 0)
+                    bottom_cell = table.cell(campaign_end, 0)
+
+                    # Check if already merged
+                    if not _cells_are_same(top_cell, bottom_cell):
+                        top_cell.merge(bottom_cell)
+                        merges_performed += 1
+                        logger.debug(f"Merged campaign rows {campaign_start}-{campaign_end}")
+
+                    # Apply styling to merged cell
+                    merged_cell = table.cell(campaign_start, 0)
+                    _apply_cell_styling(
+                        merged_cell,
+                        text=normalized,
+                        font_size=CAMPAIGN_FONT_SIZE,
+                        bold=True,
+                        center_align=True,
+                        vertical_center=True
+                    )
+
+                except Exception as e:
+                    logger.error(f"Failed to merge campaign rows {campaign_start}-{campaign_end}: {e}")
+
+            campaign_start = None
+
+    logger.info(f"Campaign merges completed: {merges_performed} merge(s)")
+    return merges_performed
 
 
 def merge_monthly_total_cells(table):
@@ -48,17 +101,55 @@ def merge_monthly_total_cells(table):
 
     Args:
         table: python-pptx table object
+
+    Returns:
+        int: Number of monthly total merges performed
     """
     logger.debug("Merging monthly total cells")
 
-    # Note: python-pptx provides table.cell(row, col).merge(other_cell) for merging,
-    # but we need to:
-    # 1. Identify MONTHLY TOTAL rows (by reading cell text in column 1)
-    # 2. Merge cells horizontally across columns 1-3
-    # 3. Apply styling (center alignment, bold, specific font size)
+    row_count = len(table.rows)
+    col_count = len(table.columns)
+    merges_performed = 0
 
-    logger.warning("merge_monthly_total_cells: Not yet fully implemented in python-pptx")
-    logger.warning("Implementation requires cell text analysis and horizontal merging")
+    # Iterate through rows (skip header row index 0)
+    for row_idx in range(1, row_count):
+        cell = table.cell(row_idx, 0)  # Column 1 (0-indexed)
+        cell_text = _get_cell_text(cell)
+
+        if is_monthly_total(cell_text):
+            normalized = normalize_label(cell_text)
+
+            try:
+                # Merge horizontally across columns 1-3 (0-2 in 0-indexed)
+                max_merge_col = min(3, col_count)  # Don't exceed table columns
+
+                for target_col in range(1, max_merge_col):
+                    left_cell = table.cell(row_idx, 0)
+                    right_cell = table.cell(row_idx, target_col)
+
+                    # Check if already merged
+                    if not _cells_are_same(left_cell, right_cell):
+                        left_cell.merge(right_cell)
+
+                merges_performed += 1
+                logger.debug(f"Merged MONTHLY TOTAL row {row_idx} across columns 1-{max_merge_col}")
+
+                # Apply styling to merged cell
+                merged_cell = table.cell(row_idx, 0)
+                _apply_cell_styling(
+                    merged_cell,
+                    text=normalized,
+                    font_size=MONTHLY_TOTAL_FONT_SIZE,
+                    bold=True,
+                    center_align=True,
+                    vertical_center=True
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to merge MONTHLY TOTAL row {row_idx}: {e}")
+
+    logger.info(f"Monthly total merges completed: {merges_performed} merge(s)")
+    return merges_performed
 
 
 def merge_summary_cells(table):
@@ -72,17 +163,55 @@ def merge_summary_cells(table):
 
     Args:
         table: python-pptx table object
+
+    Returns:
+        int: Number of summary merges performed
     """
     logger.debug("Merging summary cells (GRAND TOTAL, CARRIED FORWARD)")
 
-    # Note: python-pptx provides table.cell(row, col).merge(other_cell) for merging,
-    # but we need to:
-    # 1. Identify GRAND TOTAL and CARRIED FORWARD rows (by reading cell text)
-    # 2. Merge cells horizontally across columns 1-3
-    # 3. Apply styling (center alignment, bold, specific font size)
+    row_count = len(table.rows)
+    col_count = len(table.columns)
+    merges_performed = 0
 
-    logger.warning("merge_summary_cells: Not yet fully implemented in python-pptx")
-    logger.warning("Implementation requires cell text analysis and horizontal merging")
+    # Iterate through rows (skip header row index 0)
+    for row_idx in range(1, row_count):
+        cell = table.cell(row_idx, 0)  # Column 1 (0-indexed)
+        cell_text = _get_cell_text(cell)
+
+        if is_grand_total(cell_text) or is_carried_forward(cell_text):
+            normalized = normalize_label(cell_text)
+
+            try:
+                # Merge horizontally across columns 1-3 (0-2 in 0-indexed)
+                max_merge_col = min(3, col_count)  # Don't exceed table columns
+
+                for target_col in range(1, max_merge_col):
+                    left_cell = table.cell(row_idx, 0)
+                    right_cell = table.cell(row_idx, target_col)
+
+                    # Check if already merged
+                    if not _cells_are_same(left_cell, right_cell):
+                        left_cell.merge(right_cell)
+
+                merges_performed += 1
+                logger.debug(f"Merged summary row {row_idx} ({normalized}) across columns 1-{max_merge_col}")
+
+                # Apply styling to merged cell
+                merged_cell = table.cell(row_idx, 0)
+                _apply_cell_styling(
+                    merged_cell,
+                    text=normalized,
+                    font_size=SUMMARY_FONT_SIZE,
+                    bold=True,
+                    center_align=True,
+                    vertical_center=True
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to merge summary row {row_idx} ({normalized}): {e}")
+
+    logger.info(f"Summary merges completed: {merges_performed} merge(s)")
+    return merges_performed
 
 
 # Helper function for future implementation
@@ -141,3 +270,84 @@ def is_carried_forward(cell_text: str) -> bool:
     """
     normalized = normalize_label(cell_text)
     return "CARRIED" in normalized and "FORWARD" in normalized
+
+
+# Private helper functions
+def _get_cell_text(cell) -> str:
+    """
+    Extract text content from a table cell.
+
+    Args:
+        cell: python-pptx cell object
+
+    Returns:
+        Text content from the cell, or empty string if no text
+    """
+    try:
+        if cell.text_frame and cell.text_frame.text:
+            return cell.text_frame.text
+        return ""
+    except Exception:
+        return ""
+
+
+def _cells_are_same(cell1, cell2) -> bool:
+    """
+    Check if two cells are already merged (reference the same underlying cell).
+
+    Args:
+        cell1: First python-pptx cell object
+        cell2: Second python-pptx cell object
+
+    Returns:
+        True if cells are already merged
+    """
+    try:
+        # In python-pptx, merged cells share the same text_frame object
+        return cell1.text_frame is cell2.text_frame
+    except Exception:
+        return False
+
+
+def _apply_cell_styling(cell, text: str = None, font_size: int = None,
+                       bold: bool = False, center_align: bool = False,
+                       vertical_center: bool = False):
+    """
+    Apply formatting to a table cell.
+
+    Args:
+        cell: python-pptx cell object
+        text: Text to set in cell (optional)
+        font_size: Font size in points (optional)
+        bold: Whether to make text bold
+        center_align: Whether to center-align text horizontally
+        vertical_center: Whether to center-align text vertically
+    """
+    try:
+        text_frame = cell.text_frame
+
+        # Set text if provided
+        if text is not None:
+            text_frame.text = text
+
+        # Apply vertical alignment
+        if vertical_center:
+            text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+
+        # Apply paragraph-level formatting
+        if text_frame.paragraphs:
+            paragraph = text_frame.paragraphs[0]
+
+            if center_align:
+                paragraph.alignment = PP_ALIGN.CENTER
+
+            # Apply run-level formatting
+            if paragraph.runs:
+                for run in paragraph.runs:
+                    if font_size is not None:
+                        run.font.size = Pt(font_size)
+                    if bold:
+                        run.font.bold = True
+
+    except Exception as e:
+        logger.error(f"Failed to apply cell styling: {e}")

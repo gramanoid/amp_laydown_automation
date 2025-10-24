@@ -541,13 +541,28 @@ def style_table_cell(
         text_frame.word_wrap = wrap_from_config
         text_frame.auto_size = MSO_AUTO_SIZE.NONE
 
-        if not p.runs:
-            run = p.add_run()
-        else:
-            run = p.runs[0]
-        run.text = processed_cell_text
-
         body_font_size = FONT_SIZE_BODY
+        empty_font_name = "Verdana"
+        empty_font_size = Pt(6)
+
+        if not processed_cell_text or processed_cell_text == "-":
+            text_frame.clear()
+            paragraph = text_frame.paragraphs[0]
+            run = paragraph.add_run()
+            run.text = "-"
+            run.font.name = empty_font_name
+            run.font.size = empty_font_size
+            run.font.bold = False
+            run.font.color.rgb = CLR_LIGHT_GRAY_TEXT
+            paragraph.font.name = empty_font_name
+            paragraph.font.size = empty_font_size
+            processed_cell_text = "-"
+        else:
+            if not p.runs:
+                run = p.add_run()
+            else:
+                run = p.runs[0]
+            run.text = processed_cell_text
 
         if row_idx == 0:
             run.font.name = DEFAULT_FONT_NAME
@@ -563,24 +578,23 @@ def style_table_cell(
             run.font.color.rgb = CLR_BLACK
 
         else:
-            run.font.name = DEFAULT_FONT_NAME
-            run.font.size = body_font_size
-
-            if is_empty_cell:
+            if processed_cell_text == "-":
+                run.font.name = empty_font_name
+                run.font.size = empty_font_size
+                run.font.bold = False
                 run.font.color.rgb = CLR_LIGHT_GRAY_TEXT
             else:
+                run.font.name = DEFAULT_FONT_NAME
+                run.font.size = body_font_size
                 run.font.color.rgb = CLR_BLACK
+                run.font.bold = col_idx < 3
 
-            if col_idx < 3:
-                run.font.bold = True
-            else:
-                run.font.bold = False
 
-        if run.font.name != DEFAULT_FONT_NAME:
+        if processed_cell_text != "-" and run.font.name != DEFAULT_FONT_NAME:
             run.font.name = DEFAULT_FONT_NAME
             logger.debug("Re-enforced Calibri font for cell (%s,%s)", row_idx, col_idx)
 
-        if not run.font.size:
+        if processed_cell_text != "-" and not run.font.size:
             run.font.size = FONT_SIZE_BODY if row_idx != 0 else FONT_SIZE_HEADER
             logger.debug("Re-enforced font size for cell (%s,%s)", row_idx, col_idx)
 
@@ -763,6 +777,7 @@ def style_table_cell(
 
             for run_idx, cell_run in enumerate(paragraph.runs):
                 expected_font_name = DEFAULT_FONT_NAME
+                expected_font_size = body_font_size if use_compact_font else FONT_SIZE_BODY
                 expected_bold = False
                 expected_color_rgb = CLR_BLACK
 
@@ -775,11 +790,14 @@ def style_table_cell(
                     expected_font_size = FONT_SIZE_MONTHLY_TOTAL if is_monthly_total_row else FONT_SIZE_HEADER
                     expected_bold = True
                 else:
-                    expected_font_size = body_font_size if use_compact_font else FONT_SIZE_BODY
                     if col_idx < 3:
                         expected_bold = True
-                    if cell_run.text == "-":
-                        expected_color_rgb = CLR_LIGHT_GRAY_TEXT
+
+                if cell_run.text.strip() in ("", "-"):
+                    expected_font_name = empty_font_name
+                    expected_font_size = empty_font_size
+                    expected_bold = False
+                    expected_color_rgb = CLR_LIGHT_GRAY_TEXT
 
                 if cell_run.font.name != expected_font_name:
                     cell_run.font.name = expected_font_name
@@ -992,4 +1010,23 @@ def add_and_style_table(
 
     apply_table_borders(table, style_context.color_table_gray)
     logger.info("Table created successfully with individual row height constraints")
+
+    empty_font_name = "Verdana"
+    empty_font_size = Pt(6)
+    for row in table.rows:
+        for cell in row.cells:
+            if not cell.text or not cell.text.strip() or cell.text.strip() == "-":
+                text_frame = cell.text_frame
+                text_frame.clear()
+                text_frame.text = "\u200b"
+                paragraph = text_frame.paragraphs[0]
+                paragraph.alignment = PP_ALIGN.CENTER
+                paragraph.font.name = empty_font_name
+                paragraph.font.size = empty_font_size
+                run = paragraph.runs[0]
+                run.font.name = empty_font_name
+                run.font.size = empty_font_size
+                run.font.bold = False
+                run.font.color.rgb = style_context.color_light_gray_text
+
     return True

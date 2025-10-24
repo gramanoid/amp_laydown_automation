@@ -95,7 +95,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     paths.output_dir.mkdir(parents=True, exist_ok=True)
     paths.output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    logger = configure_logger(paths.log_dir)
+    logging_config = {}
+    try:
+        logging_config = config.section("logging")
+    except (KeyError, TypeError):
+        logging_config = {}
+
+    default_log_level = str(logging_config.get("level", "INFO"))
+    console_output = logging_config.get("console_output", True)
+    file_output = logging_config.get("file_output", True)
+
+    logger = configure_logger(
+        paths.log_dir,
+        default_level=default_log_level,
+        console_enabled=bool(console_output),
+        file_enabled=bool(file_output),
+    )
 
     from amp_automation.presentation import assembly as presentation_assembly
 
