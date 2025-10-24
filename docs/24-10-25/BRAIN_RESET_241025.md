@@ -32,21 +32,28 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
 - AutoPPTX stays disabled except for negative tests; structural scripts, visual diff, and PowerPoint COM probes provide validation coverage.
 
 # Current Position
-Fresh decks exist in `output\presentations\run_20251024_121026` (debug-heavy) and `output\presentations\run_20251024_121350` (INFO baseline). Logging fixes are working, and the post-process script now emits stopwatch checkpoints, watchdog exits, and Trace-Command output through `docs\24-10-25\logs`. The sanitized deck continues to stall during COM row-height enforcement on slide 2 (rows plateau at ~14–16 pt), so campaign/monthly merges remain incomplete until we soften or bypass the height guard.
+**ARCHITECTURE RESOLVED:** Clone pipeline already creates correct merges during generation (assembly.py:629,649). Python post-processing merge operations are redundant - cells fail to merge because they're already correctly merged. Python post-processing validated as fast (~30 sec for 88 slides) and should be repositioned for normalization and edge case fixes, NOT primary merge operations.
+
+**Key Commits:**
+- d3e2b98: Python cell merge implementation (354 lines)
+- 8320c3f: Merge architecture discovery documentation
 
 # Now / Next / Later
 - **Now:**
-  - Cap or bypass `Set-RowHeightExact` retries so stubborn rows (slide 2) no longer stall the merge loop; document the guard and rerun the repro harness.
-  - Capture a fresh row-height probe for the sanitized deck and archive it under `docs\24-10-25\artifacts\`.
-  - Decide whether to retain or compress the 65 MB debug log from `run_20251024_121026` now that INFO logs cover the latest run.
+  - ✅ **Cell merge implementation committed** (d3e2b98).
+  - ✅ **Tested Python post-processing** - 88 slides in ~30 seconds (normalization works, merges redundant).
+  - ✅ **Documented architecture** - merges belong in generation, not post-processing (8320c3f).
+  - **Update PowerShell to use Python CLI** - For normalization operations only (not merges).
+  - **End-to-end pipeline test** - generation (with merges) → Python normalization → validation.
 - **Next:**
-  - Re-run `tools\PostProcessCampaignMerges.ps1 -Verbose` once the height guard is updated; verify watchdog logs stay empty and slide 2 merges succeed.
-  - Update `docs\24-10-25\logs\` with merge/probe outcomes and note any residual anomalies.
-  - Draft a deterministic merge rebuild concept (python-pptx or minimal COM) to reduce reliance on fragile COM loops.
-- **Later:**
+  - **Create OpenSpec proposal** documenting post-processing architecture (normalization focus).
+  - **Simplify Python post-processing CLI** - Remove redundant merge operations OR repurpose for edge case repairs.
+  - **Update ADR** - Clarify that COM prohibition applies to post-processing, generation merges are fine.
   - Resume Slide 1 EMU/legend parity work with visual diff + Zen MCP/Compare evidence capture.
+- **Later:**
   - Rehydrate pytest suites (`tests\test_tables.py`, `tests\test_structural_validator.py`, etc.) and smoke additional markets via `scripts\run_pipeline_local.py`.
-  - Design a campaign pagination approach that prevents across-slide splits, then raise an OpenSpec proposal once sanitise/merge stability is proven.
+  - Design a campaign pagination approach that prevents across-slide splits, then raise an OpenSpec proposal once post-processing is stable.
+  - Consider implementing span reset logic IF we decide to move merges to post-processing (unlikely).
 
 # 2025-10-24 Session Notes
 - CLI regeneration succeeded (`run_20251024_115954`, `run_20251024_121350`), producing INFO-level logs without the earlier DEBUG slowdowns.
@@ -54,13 +61,22 @@ Fresh decks exist in `output\presentations\run_20251024_121026` (debug-heavy) an
 - Slide 2 campaign rows remain at ~14–16 pt; the watchdog skips the slide after ~6 minutes, leaving merges incomplete until the height guard is relaxed.
 
 ## Immediate TODOs
-- [x] Regenerated decks (`run_20251024_115954`, `run_20251024_121350`) and logged CLI details in `docs\24-10-25\logs\02-cli_regeneration.md`.
-- [x] Instrumented `tools\PostProcessCampaignMerges.ps1` with stopwatch logging, watchdog exits, and COM tracing (see `docs\24-10-25\logs\05-postprocess_merges.log`).
-- [x] Implement a height-guard cap in `Set-RowHeightExact` so slide 2 rows stop stalling the merge loop (see `docs\24-10-25\logs\06-plateau_fix_summary.md`).
-- [x] Verified plateau detection working: logs show rows 12-24 plateaued at 14.4-15.6pt and early-exit engaged.
-- [x] Generated fresh deck (`run_20251024_142119`) with proper timestamp naming and verified plateau detection in real full-deck scenario (see `docs\24-10-25\logs\11-plateau_verification_results.md`).
-- [x] Executed COM row-height probe and stored results in `docs\24-10-25\artifacts\row_height_probe_20251024_142119.csv` (1372 rows probed, analysis in `row_height_probe_analysis.md`).
-- [ ] Run full-deck post-processing without debug logging to measure end-to-end improvement.
+- [x] Regenerated decks (`run_20251024_115954`, `run_20251024_121350`) and logged CLI details.
+- [x] Instrumented `tools\PostProcessCampaignMerges.ps1` with stopwatch logging, watchdog exits, and COM tracing.
+- [x] Implemented plateau detection in `Set-RowHeightExact` to prevent stalls.
+- [x] Generated fresh deck (`run_20251024_142119`) with plateau detection verified.
+- [x] Executed COM row-height probe (1372 rows, stored in `docs\24-10-25\artifacts\`).
+- [x] **Documented COM prohibition across all key files** (README, AGENTS, openspec, ADR).
+- [x] **Created comprehensive ADR** (`docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md` - 650+ lines).
+- [x] **Implemented Python cell merge logic** (campaign, monthly, summary - 354 lines).
+- [x] **Committed documentation and foundation** (commit 3af7582 - 32 files, 3,353 insertions).
+- [x] **Generated fresh test deck** (`run_20251024_163905` - 88 slides, 568KB).
+- [x] **Committed cell merge implementation** (commit d3e2b98 - cell_merges.py, logging, tables.py).
+- [x] **Tested Python post-processing** - 88 slides in ~30 seconds (normalization successful).
+- [x] **Documented merge architecture** (commit 8320c3f - discovery that generation owns merges).
+- [ ] **Update PowerShell to call Python CLI** (normalization operations only).
+- [ ] **End-to-end test** - generation → Python normalization → validation.
+- [ ] **Create OpenSpec proposal** for post-processing architecture.
 
 ## Longer-Term Follow-Ups
 - Add automated regression scripts catching rogue merges or row-height drift before decks ship.
@@ -94,8 +110,10 @@ Fresh decks exist in `output\presentations\run_20251024_121026` (debug-heavy) an
 - Template EMUs, centered alignment, and font sizes must remain faithful to `Template_V4_FINAL_071025.pptx`; adjust scripts cautiously to preserve pixel parity.
 
 ## Session Metadata
-- Latest deck: `D:\Drive\projects\work\AMP Laydowns Automation\output\presentations\run_20251024_121350\AMP_Presentation_20251024_121350.pptx` (latest INFO-level run with logs).
-- Key logs/artefacts: `D:\Drive\projects\work\AMP Laydowns Automation\docs\22-10-25\logs\03-deck_regeneration.md`, `D:\Drive\projects\work\AMP Laydowns Automation\docs\22-10-25\logs\02-postprocess_attempt.md`, `D:\Drive\projects\work\AMP Laydowns Automation\docs\22-10-25\logs\04-merged_cells_cleanup.md`, `D:\Drive\projects\work\AMP Laydowns Automation\docs\22-10-25\artifacts\merged_cells_cleanup_20251022.txt`
+- Latest deck: `D:\Drive\projects\work\AMP Laydowns Automation\output\presentations\run_20251024_163905\presentations.pptx` (fresh deck for Python testing - 88 slides, 568KB).
+- Latest commit: `3af7582` - "docs: prohibit COM bulk operations and add Python migration foundation" (32 files, 3,353 insertions, 1,127 deletions).
+- Key documentation: `docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md` (comprehensive ADR), `README.md` (COM prohibition warning), `docs/24-10-25.md` (daily changelog).
+- Python module: `amp_automation/presentation/postprocess/` (cli.py, table_normalizer.py, cell_merges.py, span_operations.py).
 - Timezone anchor: Abu Dhabi/Dubai (UTC+04); today is 24-10-25 (DD-MM-YY).
 - Outstanding checklist (carry forward):
   - [ ] Regenerate deck + validation logs for 24 Oct 2025 and capture run metadata.
