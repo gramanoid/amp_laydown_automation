@@ -325,6 +325,78 @@ COM usage PRs require approval from:
 - Technical lead
 - Developer who implemented Python migration
 
+## Clarifications and Scope (Added 24 Oct 2025 17:20)
+
+### This Prohibition Applies to POST-PROCESSING Only
+
+**IMPORTANT**: This COM prohibition specifically targets **bulk post-processing operations** on already-generated decks. It does NOT prohibit:
+
+1. **Generation-Time Merge Operations** (✅ ACCEPTABLE)
+   - Cell merges created during deck generation (assembly.py:629, 649)
+   - These are NOT bulk operations - they occur as tables are being built
+   - Performance is acceptable because:
+     - Merges happen once per table during construction
+     - No repeated COM calls over existing cells
+     - Part of the normal template cloning flow
+     - Completes in minutes for full 88-slide deck
+
+2. **File I/O Operations** (✅ ACCEPTABLE)
+   - Opening/closing presentations
+   - Saving presentations
+   - Format conversions
+   - These are O(1) operations, not O(n) bulk loops
+
+### Generation vs. Post-Processing: Key Distinction
+
+| Phase | COM Usage | Status | Rationale |
+|-------|-----------|--------|-----------|
+| **Generation** (assembly.py) | Cell merges during table creation | ✅ **ACCEPTABLE** | One-time operations during construction; not bulk post-processing |
+| **Post-Processing** (PowerShell scripts) | Bulk normalization, bulk merges on existing decks | ❌ **PROHIBITED** | Catastrophic performance (10+ hours); use Python instead |
+
+### Architecture Insight (Discovered 24 Oct 2025)
+
+Testing revealed that **post-processing merge operations are redundant** because:
+- Clone pipeline already creates correct cell merges during generation
+- Attempting to re-merge cells that are already merged fails (expected behavior)
+- Post-processing should focus on normalization and edge case repairs
+
+**Recommendation**:
+- Keep generation merges (working correctly)
+- Use Python post-processing for normalization only
+- Reserve merge operations for edge case repairs (broken decks from failed generation)
+
+See: `docs/24-10-25/15-merge_architecture_discovery.md` for detailed analysis.
+
+### When to Use COM vs. Python
+
+**Use Python (python-pptx)** for:
+- ✅ Any bulk operation (loops over cells/rows/columns)
+- ✅ Table normalization and formatting
+- ✅ Cell merge operations (post-processing repairs)
+- ✅ Text content changes across multiple cells
+- ✅ Property changes on multiple shapes/cells
+
+**Use COM (PowerShell/pywin32)** ONLY for:
+- ✅ Opening/closing/saving presentations (file I/O)
+- ✅ Features not exposed by python-pptx (specific animations, macros)
+- ✅ Format conversions (PPTX → PDF)
+- ✅ Single, isolated operations (not in loops)
+
+**NEVER Use COM for**:
+- ❌ Loops over table cells
+- ❌ Bulk property changes
+- ❌ Post-processing normalization
+- ❌ Any operation that scales with deck size (O(n))
+
+### Performance Targets
+
+| Operation Type | Target Time (88 slides) | Method |
+|----------------|------------------------|--------|
+| Generation with merges | <5 minutes | Python + generation-time COM merges ✅ |
+| Post-processing normalization | <1 minute | Python (python-pptx) ✅ |
+| Structural validation | <30 seconds | Python ✅ |
+| **Total Pipeline** | **<7 minutes** | **All Python + controlled COM** ✅ |
+
 ## Related Documents
 
 - `docs/24-10-25/logs/16-python_migration_summary.md` - Detailed migration analysis
