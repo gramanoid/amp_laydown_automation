@@ -1,15 +1,26 @@
 """
 CLI entry point for post-processing operations.
 
-This module provides a command-line interface that PowerShell scripts can call
-to perform bulk table operations using python-pptx instead of slow COM automation.
+This module provides a command-line interface for Python-based post-processing,
+replacing slow COM automation with fast python-pptx operations.
 
-Usage from PowerShell:
-    python -m amp_automation.presentation.postprocess.cli `
-        --presentation-path "path/to/deck.pptx" `
-        --operations normalize,reset-spans,merge-campaign,merge-monthly,merge-summary `
-        --slide-filter 2,3,4 `
+**IMPORTANT**: Cell merges are created during deck generation (assembly.py),
+NOT in post-processing. This CLI is primarily for normalization and edge case repairs.
+
+Typical usage:
+    python -m amp_automation.presentation.postprocess.cli \\
+        --presentation-path "path/to/deck.pptx" \\
+        --operations normalize
+
+Edge case repairs (rarely needed):
+    python -m amp_automation.presentation.postprocess.cli \\
+        --presentation-path "path/to/deck.pptx" \\
+        --operations normalize,merge-campaign,merge-monthly,merge-summary \\
+        --slide-filter 2,3,4 \\
         --verbose
+
+Performance: ~30 seconds for 88-slide deck (vs 10+ hours with COM)
+See: docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md
 """
 
 import argparse
@@ -37,11 +48,11 @@ class PostProcessorCLI:
     """CLI handler for presentation post-processing operations."""
 
     OPERATIONS = {
-        "normalize": "Normalize table layout and cell formatting",
-        "reset-spans": "Reset column spans in primary columns",
-        "merge-campaign": "Merge campaign cells vertically",
-        "merge-monthly": "Merge monthly total cells horizontally",
-        "merge-summary": "Merge summary cells (GRAND TOTAL, CARRIED FORWARD)",
+        "normalize": "Normalize table layout and cell formatting (RECOMMENDED - use by default)",
+        "reset-spans": "Reset column spans in primary columns (edge case repair)",
+        "merge-campaign": "Merge campaign cells vertically (edge case repair - generation owns merges)",
+        "merge-monthly": "Merge monthly total cells horizontally (edge case repair - generation owns merges)",
+        "merge-summary": "Merge summary cells GRAND TOTAL/CARRIED FORWARD (edge case repair - generation owns merges)",
     }
 
     def __init__(self, presentation_path: Path, slide_filter: Optional[List[int]] = None):
@@ -152,22 +163,26 @@ class PostProcessorCLI:
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="Post-process PowerPoint presentations with bulk table operations",
+        description="Post-process PowerPoint presentations with Python (replaces slow COM automation)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Available operations:
 {chr(10).join(f"  {op:15} - {desc}" for op, desc in PostProcessorCLI.OPERATIONS.items())}
 
-Examples:
-  # Normalize all slides
+IMPORTANT: Cell merges are created during generation, NOT post-processing.
+           Only use merge operations to repair decks from failed generation.
+
+Recommended usage (normalization only):
   python -m amp_automation.presentation.postprocess.cli \\
       --presentation-path deck.pptx --operations normalize
 
-  # Full post-processing on specific slides
+Edge case repairs (broken decks from failed generation):
   python -m amp_automation.presentation.postprocess.cli \\
       --presentation-path deck.pptx \\
-      --operations normalize,reset-spans,merge-campaign,merge-monthly,merge-summary \\
+      --operations normalize,merge-campaign,merge-monthly,merge-summary \\
       --slide-filter 2,3,4 --verbose
+
+Performance: ~30 seconds for 88-slide deck (vs 10+ hours COM automation)
 """,
     )
 
