@@ -11,10 +11,11 @@ from pptx.util import Pt
 
 logger = logging.getLogger(__name__)
 
-# Font sizes (matching PowerShell configuration)
-CAMPAIGN_FONT_SIZE = 9
-MONTHLY_TOTAL_FONT_SIZE = 10
-SUMMARY_FONT_SIZE = 10
+# Font configuration (matching template requirements)
+FONT_NAME = "Verdana"
+CAMPAIGN_FONT_SIZE = 6  # Body text
+MONTHLY_TOTAL_FONT_SIZE = 6  # Body text
+SUMMARY_FONT_SIZE = 7  # Bottom row
 
 
 def merge_campaign_cells(table):
@@ -37,30 +38,45 @@ def merge_campaign_cells(table):
 
     row_count = len(table.rows)
     campaign_start = None
+    campaign_name = None  # Store campaign name when we find it
     merges_performed = 0
 
     # Iterate through rows (skip header row index 0)
     for row_idx in range(1, row_count):
-        cell = table.cell(row_idx, 0)  # Column 1 (0-indexed)
+        cell = table.cell(row_idx, 0)  # Column 0 (CAMPAIGN column)
         cell_text = _get_cell_text(cell)
-        normalized = normalize_label(cell_text)
+        is_gray = _has_gray_background(cell)
 
-        is_monthly = is_monthly_total(cell_text)
-        is_grand = is_grand_total(cell_text)
-        is_carried = is_carried_forward(cell_text)
+        # CRITICAL FIX: Some WHITE cells have "MONTHLY TOTAL\nCAMPAIGN_NAME" format
+        # Extract campaign name from white cells only (preserve gray MONTHLY TOTAL cells)
+        if not is_gray:
+            actual_campaign_name = _extract_campaign_name(cell_text)
+        else:
+            # Gray cell - don't extract, use first line for detection
+            actual_campaign_name = normalize_label(cell_text)
 
-        # Track campaign start (non-empty, non-special rows)
-        if normalized and not is_monthly and not is_grand and not is_carried:
+        # Check if this is a special row using the EXTRACTED campaign name (not raw text)
+        # This prevents white cells with "MONTHLY TOTAL\nCAMPAIGN" from being misidentified
+        is_monthly = is_monthly_total(actual_campaign_name) if actual_campaign_name else False
+        is_grand = is_grand_total(actual_campaign_name) if actual_campaign_name else False
+        is_carried = is_carried_forward(actual_campaign_name) if actual_campaign_name else False
+
+        # Track campaign start (non-empty, non-special rows, non-gray)
+        # Campaign cells are WHITE cells with campaign names
+        if actual_campaign_name and not is_monthly and not is_grand and not is_carried and not is_gray:
             if campaign_start is None:
                 campaign_start = row_idx
+                campaign_name = actual_campaign_name  # Save the campaign name immediately
+                logger.debug(f"Found campaign start at row {row_idx}: {campaign_name}")
 
-        # Perform merge when we hit MONTHLY TOTAL
-        if is_monthly and campaign_start is not None:
+        # Perform merge when we hit a GRAY MONTHLY TOTAL row
+        # (White cells with "MONTHLY TOTAL\nCAMPAIGN" are campaign cells, not triggers)
+        if is_monthly and is_gray and campaign_start is not None:
             campaign_end = row_idx - 1
 
             if campaign_end > campaign_start:
                 try:
-                    # Merge cells vertically in column 1
+                    # Merge cells vertically in column 0 (CAMPAIGN column)
                     top_cell = table.cell(campaign_start, 0)
                     bottom_cell = table.cell(campaign_end, 0)
 
@@ -68,13 +84,13 @@ def merge_campaign_cells(table):
                     if not _cells_are_same(top_cell, bottom_cell):
                         top_cell.merge(bottom_cell)
                         merges_performed += 1
-                        logger.debug(f"Merged campaign rows {campaign_start}-{campaign_end}")
+                        logger.debug(f"Merged campaign rows {campaign_start}-{campaign_end}: {campaign_name}")
 
-                    # Apply styling to merged cell
+                    # Apply styling to merged cell and set cleaned campaign name
                     merged_cell = table.cell(campaign_start, 0)
                     _apply_cell_styling(
                         merged_cell,
-                        text=normalized,
+                        text=campaign_name,  # Set the cleaned campaign name (removes "MONTHLY TOTAL" prefix)
                         font_size=CAMPAIGN_FONT_SIZE,
                         bold=True,
                         center_align=True,
@@ -85,6 +101,7 @@ def merge_campaign_cells(table):
                     logger.error(f"Failed to merge campaign rows {campaign_start}-{campaign_end}: {e}")
 
             campaign_start = None
+            campaign_name = None  # Reset campaign name too
 
     logger.info(f"Campaign merges completed: {merges_performed} merge(s)")
     return merges_performed
@@ -98,6 +115,9 @@ def merge_monthly_total_cells(table):
 
     This function identifies MONTHLY TOTAL rows and merges cells horizontally
     across columns 1-3 to create a single cell for the "MONTHLY TOTAL" label.
+
+    IMPORTANT: Only merges cells with gray background. White background cells
+    with "MONTHLY TOTAL" text are campaign names and should NOT be merged.
 
     Args:
         table: python-pptx table object
@@ -116,23 +136,21 @@ def merge_monthly_total_cells(table):
         cell = table.cell(row_idx, 0)  # Column 1 (0-indexed)
         cell_text = _get_cell_text(cell)
 
-        if is_monthly_total(cell_text):
+        # Check both text content AND background color
+        if is_monthly_total(cell_text) and _has_gray_background(cell):
             normalized = normalize_label(cell_text)
 
             try:
                 # Merge horizontally across columns 1-3 (0-2 in 0-indexed)
-                max_merge_col = min(3, col_count)  # Don't exceed table columns
+                # Merge from first column to last column in ONE operation
+                left_cell = table.cell(row_idx, 0)
+                right_cell = table.cell(row_idx, 2)  # Column 3 (0-indexed as 2)
 
-                for target_col in range(1, max_merge_col):
-                    left_cell = table.cell(row_idx, 0)
-                    right_cell = table.cell(row_idx, target_col)
-
-                    # Check if already merged
-                    if not _cells_are_same(left_cell, right_cell):
-                        left_cell.merge(right_cell)
-
-                merges_performed += 1
-                logger.debug(f"Merged MONTHLY TOTAL row {row_idx} across columns 1-{max_merge_col}")
+                # Check if already merged
+                if not _cells_are_same(left_cell, right_cell):
+                    left_cell.merge(right_cell)
+                    merges_performed += 1
+                    logger.debug(f"Merged MONTHLY TOTAL row {row_idx} across columns 1-3")
 
                 # Apply styling to merged cell
                 merged_cell = table.cell(row_idx, 0)
@@ -178,23 +196,21 @@ def merge_summary_cells(table):
         cell = table.cell(row_idx, 0)  # Column 1 (0-indexed)
         cell_text = _get_cell_text(cell)
 
-        if is_grand_total(cell_text) or is_carried_forward(cell_text):
+        # Check both text content AND background color
+        if (is_grand_total(cell_text) or is_carried_forward(cell_text)) and _has_gray_background(cell):
             normalized = normalize_label(cell_text)
 
             try:
                 # Merge horizontally across columns 1-3 (0-2 in 0-indexed)
-                max_merge_col = min(3, col_count)  # Don't exceed table columns
+                # Merge from first column to last column in ONE operation
+                left_cell = table.cell(row_idx, 0)
+                right_cell = table.cell(row_idx, 2)  # Column 3 (0-indexed as 2)
 
-                for target_col in range(1, max_merge_col):
-                    left_cell = table.cell(row_idx, 0)
-                    right_cell = table.cell(row_idx, target_col)
-
-                    # Check if already merged
-                    if not _cells_are_same(left_cell, right_cell):
-                        left_cell.merge(right_cell)
-
-                merges_performed += 1
-                logger.debug(f"Merged summary row {row_idx} ({normalized}) across columns 1-{max_merge_col}")
+                # Check if already merged
+                if not _cells_are_same(left_cell, right_cell):
+                    left_cell.merge(right_cell)
+                    merges_performed += 1
+                    logger.debug(f"Merged summary row {row_idx} ({normalized}) across columns 1-3")
 
                 # Apply styling to merged cell
                 merged_cell = table.cell(row_idx, 0)
@@ -219,15 +235,20 @@ def normalize_label(text: str) -> str:
     """
     Normalize label text for comparison.
 
+    IMPORTANT: Cells may contain multiple lines (e.g., "MONTHLY TOTAL\nTELEVISION").
+    We only want the first line for labels.
+
     Args:
         text: Cell text content
 
     Returns:
-        Normalized text (uppercase, stripped whitespace)
+        Normalized text (uppercase, stripped whitespace, first line only)
     """
     if not text:
         return ""
-    return text.strip().upper()
+    # Take only the first line (before any newline character)
+    first_line = text.split('\n')[0].split('\r')[0]
+    return first_line.strip().upper()
 
 
 def is_monthly_total(cell_text: str) -> bool:
@@ -273,6 +294,77 @@ def is_carried_forward(cell_text: str) -> bool:
 
 
 # Private helper functions
+def _extract_campaign_name(cell_text: str) -> str:
+    """
+    Extract campaign name from cell text.
+
+    Some cells have format: "MONTHLY TOTAL ( 000)\nCAMPAIGN_NAME"
+    We need to extract just the campaign name (the line after MONTHLY TOTAL).
+
+    Args:
+        cell_text: Raw cell text content
+
+    Returns:
+        Campaign name (normalized, uppercase), or empty string
+    """
+    if not cell_text:
+        return ""
+
+    # Split into lines
+    lines = [line.strip() for line in cell_text.split('\n') if line.strip()]
+
+    if not lines:
+        return ""
+
+    # If first line is "MONTHLY TOTAL", use second line as campaign name
+    first_line_normalized = lines[0].upper()
+    if "MONTHLY" in first_line_normalized and "TOTAL" in first_line_normalized:
+        if len(lines) > 1:
+            # Return second line (the actual campaign name)
+            return lines[1].upper()
+        else:
+            # Just "MONTHLY TOTAL" with no campaign name - not a campaign row
+            return ""
+
+    # Otherwise, first line is the campaign name
+    return lines[0].upper()
+
+
+def _has_gray_background(cell) -> bool:
+    """
+    Check if a cell has a gray background fill.
+
+    Args:
+        cell: python-pptx cell object
+
+    Returns:
+        True if cell has gray background
+    """
+    try:
+        fill = cell.fill
+
+        # Check if solid fill
+        if fill.type == 1:  # MSO_FILL_TYPE.SOLID
+            # Get RGB color
+            color = fill.fore_color
+            if color.type == 1:  # MSO_COLOR_TYPE.RGB
+                rgb = color.rgb
+                # Gray colors have R=G=B and are not pure white (255,255,255)
+                # Typical gray values in templates: around (191,191,191) to (217,217,217)
+                r, g, b = rgb[0], rgb[1], rgb[2]
+
+                # Check if it's a gray color (R≈G≈B) and not white
+                is_gray = (abs(r - g) <= 10 and abs(g - b) <= 10 and abs(r - b) <= 10)
+                is_not_white = r < 250 and g < 250 and b < 250
+
+                return is_gray and is_not_white
+
+        return False
+    except Exception as e:
+        logger.debug(f"Error checking cell background: {e}")
+        return False
+
+
 def _get_cell_text(cell) -> str:
     """
     Extract text content from a table cell.
@@ -326,7 +418,7 @@ def _apply_cell_styling(cell, text: str = None, font_size: int = None,
     try:
         text_frame = cell.text_frame
 
-        # Set text if provided
+        # Set text if provided - this creates new runs with default formatting
         if text is not None:
             text_frame.text = text
 
@@ -341,13 +433,25 @@ def _apply_cell_styling(cell, text: str = None, font_size: int = None,
             if center_align:
                 paragraph.alignment = PP_ALIGN.CENTER
 
-            # Apply run-level formatting
+            # CRITICAL: Setting text creates new runs, so we must format them
+            # Force font formatting on all runs
             if paragraph.runs:
                 for run in paragraph.runs:
+                    # ENTRENCH Verdana font - always set it
+                    run.font.name = FONT_NAME
                     if font_size is not None:
                         run.font.size = Pt(font_size)
                     if bold:
                         run.font.bold = True
+            else:
+                # Edge case: no runs exist yet, create one
+                run = paragraph.add_run()
+                run.text = text_frame.text
+                run.font.name = FONT_NAME
+                if font_size is not None:
+                    run.font.size = Pt(font_size)
+                if bold:
+                    run.font.bold = True
 
     except Exception as e:
         logger.error(f"Failed to apply cell styling: {e}")

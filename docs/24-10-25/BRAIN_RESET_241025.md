@@ -1,5 +1,5 @@
 Last prepared on 2025-10-24
-Last verified on 2025-10-24 (updated with COM prohibition)
+Last verified on 24-10-25 (updated with post-processing workflow completion)
 
 ---
 
@@ -32,11 +32,12 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
 - AutoPPTX stays disabled except for negative tests; structural scripts, visual diff, and PowerPoint COM probes provide validation coverage.
 
 # Current Position
-**ARCHITECTURE RESOLVED:** Clone pipeline already creates correct merges during generation (assembly.py:629,649). Python post-processing merge operations are redundant - cells fail to merge because they're already correctly merged. Python post-processing validated as fast (~30 sec for 88 slides) and should be repositioned for normalization and edge case fixes, NOT primary merge operations.
+**POST-PROCESSING WORKFLOW COMPLETE:** 8-step Python-based workflow finalized and validated (100% success rate, 76 slides, 0 failures). Workflow: unmerge-all → delete-carried-forward → merge-campaign → merge-monthly → merge-summary → fix-grand-total-wrap → remove-pound-totals → normalize-fonts. Column width adjustment attempted but reverted per requirements. Fresh deck generated successfully (`run_20251024_200957`, 88 slides, 556KB).
 
 **Key Commits:**
-- d3e2b98: Python cell merge implementation (354 lines)
-- 8320c3f: Merge architecture discovery documentation
+- 4cd74e2: Updated openspec/project.md with completed work
+- b4353ca: PowerShell integration checkpoint
+- 1376406: Clarified Python CLI usage and merge scope
 
 # Now / Next / Later
 - **Now:**
@@ -61,22 +62,22 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
 - Slide 2 campaign rows remain at ~14–16 pt; the watchdog skips the slide after ~6 minutes, leaving merges incomplete until the height guard is relaxed.
 
 ## Immediate TODOs
-- [x] Regenerated decks (`run_20251024_115954`, `run_20251024_121350`) and logged CLI details.
-- [x] Instrumented `tools\PostProcessCampaignMerges.ps1` with stopwatch logging, watchdog exits, and COM tracing.
-- [x] Implemented plateau detection in `Set-RowHeightExact` to prevent stalls.
-- [x] Generated fresh deck (`run_20251024_142119`) with plateau detection verified.
-- [x] Executed COM row-height probe (1372 rows, stored in `docs\24-10-25\artifacts\`).
-- [x] **Documented COM prohibition across all key files** (README, AGENTS, openspec, ADR).
-- [x] **Created comprehensive ADR** (`docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md` - 650+ lines).
-- [x] **Implemented Python cell merge logic** (campaign, monthly, summary - 354 lines).
-- [x] **Committed documentation and foundation** (commit 3af7582 - 32 files, 3,353 insertions).
-- [x] **Generated fresh test deck** (`run_20251024_163905` - 88 slides, 568KB).
-- [x] **Committed cell merge implementation** (commit d3e2b98 - cell_merges.py, logging, tables.py).
-- [x] **Tested Python post-processing** - 88 slides in ~30 seconds (normalization successful).
-- [x] **Documented merge architecture** (commit 8320c3f - discovery that generation owns merges).
-- [ ] **Update PowerShell to call Python CLI** (normalization operations only).
-- [ ] **End-to-end test** - generation → Python normalization → validation.
-- [ ] **Create OpenSpec proposal** for post-processing architecture.
+- [x] Regenerated decks and logged CLI details.
+- [x] Instrumented PowerShell scripts with logging and tracing.
+- [x] Implemented plateau detection to prevent stalls.
+- [x] Executed COM row-height probe.
+- [x] **Documented COM prohibition across all key files**.
+- [x] **Created comprehensive ADR** (`docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md`).
+- [x] **Implemented Python cell merge logic**.
+- [x] **Committed documentation and foundation**.
+- [x] **Generated fresh test decks**.
+- [x] **Tested Python post-processing**.
+- [x] **Documented merge architecture**.
+- [x] **Updated PowerShell to call Python CLI** (`PostProcessNormalize.ps1`).
+- [x] **End-to-end test** - generation → Python normalization → validation (PASSED).
+- [x] **Created OpenSpec proposal** for post-processing architecture.
+- [x] **Finalized 8-step post-processing workflow** with 100% success rate.
+- [x] **Generated production-ready deck** (`run_20251024_200957` - 88 slides).
 
 ## Longer-Term Follow-Ups
 - Add automated regression scripts catching rogue merges or row-height drift before decks ship.

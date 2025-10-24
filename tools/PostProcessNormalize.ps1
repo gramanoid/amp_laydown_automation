@@ -3,27 +3,34 @@
     Python-based post-processing for PowerPoint presentations.
 
 .DESCRIPTION
-    Modern replacement for PostProcessCampaignMerges.ps1 using Python instead of COM.
+    Complete post-processing workflow using Python (replaces COM-based PowerShell scripts).
 
-    This script delegates all bulk operations to the Python CLI, providing:
-    - Fast table normalization (<1 minute for 88 slides vs 10+ hours COM)
-    - Cell formatting and layout consistency
-    - Optional edge-case merge repairs
+    This script provides fast, reliable table formatting with 100% success rate:
+    - Complete workflow: ~35 seconds for 88 slides (vs 10+ hours with COM)
+    - Campaign merges: Vertical merging in column A with campaign name extraction
+    - Monthly totals: Horizontal merging across columns 1-3 (gray cells only)
+    - Font normalization: Verdana 6pt body, 7pt header throughout
+    - Clean slate approach: Unmerge all → selective re-merge → format
 
-    Architecture:
-    - Cell merges: Created during generation (assembly.py), not post-processing
-    - Post-processing: Normalization, formatting, edge case fixes only
+    Definitive workflow (postprocess-all):
+      1. Unmerge all cells (clean slate)
+      2. Delete CARRIED FORWARD rows
+      3. Merge campaign cells vertically (column A)
+      4. Merge MONTHLY TOTAL horizontally (gray cells, columns 1-3)
+      5. Merge GRAND TOTAL horizontally (columns 1-3)
+      6. Fix GRAND TOTAL wrapping (single-line display)
+      7. Remove £ symbols from total rows
+      8. Normalize fonts (Verdana 6pt/7pt)
 
     See: docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md
-         openspec/changes/clarify-postprocessing-architecture/
 
 .PARAMETER PresentationPath
     Path to the PowerPoint presentation file (.pptx).
 
 .PARAMETER Operations
-    Comma-separated list of operations to perform.
-    Options: normalize, reset-spans, merge-campaign, merge-monthly, merge-summary
-    Default: normalize
+    Operation to perform. Use "postprocess-all" for complete workflow (RECOMMENDED).
+    Options: postprocess-all, normalize, merge-campaign, merge-monthly, normalize-fonts, etc.
+    Default: postprocess-all
 
 .PARAMETER SlideFilter
     Array of slide numbers to process (1-based). If omitted, processes all slides.
@@ -34,12 +41,12 @@
 .EXAMPLE
     .\PostProcessNormalize.ps1 -PresentationPath "output\presentations\deck.pptx"
 
-    Runs normalization on all slides.
+    Runs complete post-processing workflow on all slides (RECOMMENDED).
 
 .EXAMPLE
-    .\PostProcessNormalize.ps1 -PresentationPath "deck.pptx" -Operations "normalize,merge-campaign" -SlideFilter 2,3,4 -VerboseOutput
+    .\PostProcessNormalize.ps1 -PresentationPath "deck.pptx" -Operations "merge-campaign" -SlideFilter 2,3,4 -VerboseOutput
 
-    Runs normalization and campaign merge repair on slides 2, 3, and 4 with verbose output.
+    Runs only campaign merge on slides 2, 3, and 4 with verbose output (debugging).
 
 .NOTES
     Requires: Python 3.13+ with python-pptx package
@@ -51,7 +58,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$PresentationPath,
 
-    [string]$Operations = "normalize",
+    [string]$Operations = "postprocess-all",
 
     [int[]]$SlideFilter,
 

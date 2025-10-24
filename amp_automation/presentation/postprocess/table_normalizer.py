@@ -181,3 +181,251 @@ def apply_blank_cell_formatting(table):
                 logger.debug(f"Error formatting cell ({row_idx},{col_idx}): {e}")
 
     logger.debug(f"Formatted {cell_count} cells ({blank_count} blank, {error_count} errors)")
+
+
+def normalize_table_fonts(table):
+    """
+    Normalize fonts for all cells in a table.
+
+    Font rules:
+    - Header row (row 0): Verdana, 7pt
+    - Bottom row (last row): Verdana, 7pt
+    - Body rows (all others): Verdana, 6pt
+
+    Args:
+        table: python-pptx table object
+
+    Returns:
+        dict: Statistics about font normalization
+    """
+    logger.debug(f"Normalizing table fonts: {len(table.rows)} rows × {len(table.columns)} columns")
+
+    row_count = len(table.rows)
+    header_cells = 0
+    body_cells = 0
+    bottom_cells = 0
+    error_count = 0
+
+    for row_idx in range(row_count):
+        for col_idx in range(len(table.columns)):
+            try:
+                cell = table.cell(row_idx, col_idx)
+                text_frame = cell.text_frame
+
+                # Check if this is GRAND TOTAL row (needs 6pt not 7pt)
+                is_grand_total = False
+                if row_idx == row_count - 1:
+                    first_cell = table.cell(row_idx, 0)
+                    first_cell_text = first_cell.text_frame.text.strip().upper() if first_cell.text_frame else ""
+                    is_grand_total = "GRAND" in first_cell_text and "TOTAL" in first_cell_text
+
+                # Determine font size based on row position
+                if row_idx == 0:
+                    # Header row: Verdana 7pt
+                    font_size = Pt(7)
+                    header_cells += 1
+                elif row_idx == row_count - 1 and not is_grand_total:
+                    # Bottom row (but not GRAND TOTAL): Verdana 7pt
+                    font_size = Pt(7)
+                    bottom_cells += 1
+                else:
+                    # Body rows and GRAND TOTAL: Verdana 6pt
+                    font_size = Pt(6)
+                    body_cells += 1
+
+                # Check if cell is empty or whitespace only
+                cell_text = text_frame.text.strip() if text_frame.text else ""
+
+                if not cell_text or cell_text == ZERO_WIDTH_SPACE:
+                    # Empty cell - set to dash with proper font
+                    text_frame.clear()
+                    paragraph = text_frame.paragraphs[0]
+                    run = paragraph.add_run()
+                    run.text = "-"
+                    run.font.name = "Verdana"
+                    run.font.size = font_size
+                else:
+                    # Cell has content - format existing runs
+                    for paragraph in text_frame.paragraphs:
+                        if paragraph.runs:
+                            for run in paragraph.runs:
+                                run.font.name = "Verdana"
+                                run.font.size = font_size
+                        else:
+                            # Has text but no runs - create one
+                            run = paragraph.add_run()
+                            run.font.name = "Verdana"
+                            run.font.size = font_size
+
+            except Exception as e:
+                error_count += 1
+                logger.debug(f"Error normalizing font for cell ({row_idx},{col_idx}): {e}")
+
+    total_cells = header_cells + body_cells + bottom_cells
+    logger.info(f"Normalized fonts: {total_cells} cells (header: {header_cells}, body: {body_cells}, bottom: {bottom_cells}, errors: {error_count})")
+
+    return {
+        "total": total_cells,
+        "header": header_cells,
+        "body": body_cells,
+        "bottom": bottom_cells,
+        "errors": error_count
+    }
+
+
+def delete_carried_forward_rows(table):
+    """
+    Delete all CARRIED FORWARD rows from a table.
+
+    Removes rows where column 1 contains "CARRIED FORWARD" text.
+
+    Args:
+        table: python-pptx table object
+
+    Returns:
+        int: Number of rows deleted
+    """
+    logger.debug(f"Deleting CARRIED FORWARD rows from table: {len(table.rows)} rows")
+
+    rows_to_delete = []
+
+    # First pass: identify rows to delete
+    for row_idx in range(len(table.rows)):
+        try:
+            cell = table.cell(row_idx, 0)
+            cell_text = cell.text_frame.text.strip().upper() if cell.text_frame else ""
+
+            if "CARRIED" in cell_text and "FORWARD" in cell_text:
+                rows_to_delete.append(row_idx)
+                logger.debug(f"Marked row {row_idx} for deletion: CARRIED FORWARD")
+
+        except Exception as e:
+            logger.debug(f"Error checking row {row_idx}: {e}")
+
+    # Second pass: delete rows in reverse order to preserve indices
+    deleted_count = 0
+    for row_idx in reversed(rows_to_delete):
+        try:
+            # Access the table's underlying XML to delete the row
+            tbl = table._tbl
+            tr = table.rows[row_idx]._tr
+            tbl.remove(tr)
+            deleted_count += 1
+            logger.debug(f"Deleted row {row_idx}")
+        except Exception as e:
+            logger.error(f"Failed to delete row {row_idx}: {e}")
+
+    logger.info(f"Deleted {deleted_count} CARRIED FORWARD row(s)")
+    return deleted_count
+
+
+def fix_grand_total_wrapping(table):
+    """
+    Fix word wrapping in GRAND TOTAL rows to prevent multi-line values.
+
+    Uses combination approach:
+    - Font: Verdana 6pt (same as body)
+    - Margins: 0 (maximize horizontal space)
+    - Word wrap: Disabled
+    - Auto-size: Shrink to fit if needed
+
+    Args:
+        table: python-pptx table object
+
+    Returns:
+        int: Number of rows fixed
+    """
+    logger.debug(f"Fixing GRAND TOTAL wrapping in table: {len(table.rows)} rows")
+
+    fixed_count = 0
+
+    # Find GRAND TOTAL row
+    for row_idx in range(len(table.rows)):
+        try:
+            cell = table.cell(row_idx, 0)
+            cell_text = cell.text_frame.text.strip().upper() if cell.text_frame else ""
+
+            if "GRAND" in cell_text and "TOTAL" in cell_text:
+                # Fix wrapping for all cells in this row
+                for col_idx in range(len(table.columns)):
+                    cell = table.cell(row_idx, col_idx)
+                    text_frame = cell.text_frame
+
+                    # Disable word wrap to prevent multi-line values
+                    text_frame.word_wrap = False
+
+                    # Set margins to 0 for maximum horizontal space
+                    text_frame.margin_left = 0
+                    text_frame.margin_right = 0
+                    text_frame.margin_top = 0
+                    text_frame.margin_bottom = 0
+
+                    # Set auto-size to shrink text if needed
+                    text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+
+                    # Set font to Verdana 6pt (same as body)
+                    for paragraph in text_frame.paragraphs:
+                        for run in paragraph.runs:
+                            run.font.name = "Verdana"
+                            run.font.size = Pt(6)
+
+                fixed_count += 1
+                logger.debug(f"Fixed wrapping for GRAND TOTAL row {row_idx}")
+
+        except Exception as e:
+            logger.debug(f"Error fixing row {row_idx}: {e}")
+
+    logger.info(f"Fixed wrapping for {fixed_count} GRAND TOTAL row(s)")
+    return fixed_count
+
+
+def remove_pound_signs_from_totals(table):
+    """
+    Remove pound (£) signs from GRAND TOTAL and MONTHLY TOTAL rows.
+    Also applies bold and center alignment to these rows.
+
+    Args:
+        table: python-pptx table object
+
+    Returns:
+        int: Number of cells cleaned
+    """
+    logger.debug(f"Removing pound signs from total rows: {len(table.rows)} rows")
+
+    cells_cleaned = 0
+
+    for row_idx in range(len(table.rows)):
+        try:
+            cell = table.cell(row_idx, 0)
+            cell_text = cell.text_frame.text.strip().upper() if cell.text_frame else ""
+
+            # Check if this is GRAND TOTAL or MONTHLY TOTAL row
+            is_grand_total = "GRAND" in cell_text and "TOTAL" in cell_text
+            is_monthly_total = "MONTHLY" in cell_text and "TOTAL" in cell_text
+
+            if is_grand_total or is_monthly_total:
+                # Remove £ and apply formatting to all cells in this row
+                for col_idx in range(len(table.columns)):
+                    cell = table.cell(row_idx, col_idx)
+                    text_frame = cell.text_frame
+
+                    # Remove pound sign
+                    if text_frame.text and "£" in text_frame.text:
+                        text_frame.text = text_frame.text.replace("£", "")
+                        cells_cleaned += 1
+
+                    # Apply vertical center alignment
+                    text_frame.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE
+
+                    # Apply horizontal center and bold to all paragraphs
+                    for paragraph in text_frame.paragraphs:
+                        paragraph.alignment = PP_ALIGN.CENTER
+
+                        for run in paragraph.runs:
+                            run.font.bold = True
+
+        except Exception as e:
+            logger.debug(f"Error removing pound signs from row {row_idx}: {e}")
+
+    logger.info(f"Removed pound signs from {cells_cleaned} cells")
+    return cells_cleaned
