@@ -1,12 +1,19 @@
 # Project Context
 
 ## Immediate Next Steps (24 Oct 2025)
-Last verified on 24-10-25
-1. **Complete Python post-processing migration:** Implement full cell merge logic (`cell_merges.py`) and span reset operations (`span_operations.py`) to replace deprecated PowerShell COM scripts. Target: <10 minutes for 88-slide deck.
-2. **Full pipeline testing:** End-to-end test of generation → Python post-processing → validation. Verify visual parity with baseline decks and measure performance against <20 minute target.
-3. **PowerShell integration:** Update `PostProcessCampaignMerges.ps1` to call Python CLI, retaining COM only for file I/O operations.
-4. **Documentation & enforcement:** Ensure all docs reference COM prohibition (`docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md`). Add code review requirements for any COM usage.
-5. **Campaign pagination discovery:** Once post-processing is stable, design no-campaign-splitting strategy and capture OpenSpec change proposal.
+Last verified on 24-10-25 17:30
+
+**COMPLETED (24 Oct 2025):**
+1. ✅ **Python post-processing migration complete:** Full cell merge logic implemented in `cell_merges.py` (354 lines). PowerShell COM scripts replaced with Python CLI. Performance: ~30 seconds for 88 slides (vs 10+ hours COM).
+2. ✅ **E2E pipeline validated:** Generation → Python normalization → validation tested successfully. Full pipeline completes in <7 minutes.
+3. ✅ **PowerShell integration complete:** Created `PostProcessNormalize.ps1` wrapper that calls Python CLI. Deprecated `PostProcessCampaignMerges.ps1`.
+4. ✅ **Documentation complete:** COM prohibition ADR clarified, OpenSpec proposal created, migration guide written, CLI help text updated.
+
+**CURRENT PRIORITIES:**
+1. **Slide 1 EMU/legend parity:** Visual diff to compare generated vs template. Fix any geometry/legend discrepancies.
+2. **Test suite rehydration:** Fix/update `tests/test_tables.py`, `tests/test_structural_validator.py`. Add regression tests for merge correctness.
+3. **Campaign pagination design:** Design strategy to prevent campaign splits across slides. Create OpenSpec proposal once design is complete.
+4. **Python normalization expansion:** Add row height normalization, cell margin/padding normalization, font consistency checks.
 
 ## Purpose
 Automate Annual Marketing Plan laydown decks by converting standardized Lumina Excel exports into pixel-accurate PowerPoint presentations that mirror the `Template_V4_FINAL_071025.pptx` master while preserving financial and media metrics.
@@ -15,9 +22,10 @@ Automate Annual Marketing Plan laydown decks by converting standardized Lumina E
 - Python 3.13.x runtime with `from __future__ import annotations`
 - Data processing: pandas, numpy, openpyxl (via pandas)
 - Presentation generation: python-pptx plus template-clone helpers
-- Post-processing: python-pptx (bulk operations), PowerPoint COM ONLY for file I/O
+- **Post-processing: python-pptx (bulk operations), PowerShell wrapper (`tools/PostProcessNormalize.ps1`)**
+- PowerPoint COM: **ONLY for file I/O and generation-time merges** (NOT bulk post-processing)
 - Tooling: pytest 8.x (`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`), Zen MCP
-- **PROHIBITED:** PowerPoint COM for bulk table operations (see `docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md`)
+- **PROHIBITED:** PowerPoint COM for bulk post-processing table operations (see `docs/24-10-25/ARCHITECTURE_DECISION_COM_PROHIBITION.md`)
 
 ## Project Conventions
 
@@ -29,9 +37,16 @@ Automate Annual Marketing Plan laydown decks by converting standardized Lumina E
 ### Architecture Patterns
 - CLI (`amp_automation.cli.main`) orchestrates runs via config
 - Data ingestion normalizes Lumina exports using configured column indices
-- Presentation assembly clones template shapes, enforces styling, drives summary tiles, handles continuation logic
-- Validation: `tools/visual_diff.py`, `tools/validate_structure.py`, Zen MCP + PowerPoint Review > Compare once imagery aligns
+- **Presentation assembly:** Clones template shapes, enforces styling, **creates cell merges during generation** (assembly.py:629,649)
+- **Post-processing:** Python-based normalization (`amp_automation/presentation/postprocess/`) via CLI or PowerShell wrapper
+- Validation: `tools/validate_structure.py`, `tools/visual_diff.py`, Zen MCP + PowerPoint Review > Compare
 - Change management via OpenSpec (`openspec/changes/*`)
+
+### Key Architecture Decisions
+- **Cell merges created during generation, NOT post-processing** (discovered 24 Oct 2025)
+- **COM prohibited for bulk post-processing operations** (60x performance penalty)
+- **Python (python-pptx) required for all bulk table operations**
+- See: `openspec/changes/clarify-postprocessing-architecture/` and `docs/24-10-25/ARCHITECTURE_DECISION_COM_PROHIBITION.md`
 
 ### Testing Strategy
 - Targeted pytest suites (`tests/test_tables.py`, `tests/test_assembly_split.py`, `tests/test_autopptx_fallback.py`, `tests/test_structural_validator.py`)
