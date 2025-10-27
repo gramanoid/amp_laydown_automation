@@ -319,7 +319,14 @@
       "box_positioning": {}
     },
     "summary_tiles": {
+      "_comment": "Brand-level indicators (quarters, media share, funnel stage) appear ONLY on the LAST slide of each brand",
+      "_scope": "brand",
+      "_scope_options": ["brand", "campaign", "slide"],
+      "_scope_description": "Controls calculation scope for all indicators. Currently only 'brand' is implemented.",
       "quarter_budgets": {
+        "_comment": "Quarter budget totals (Q1-Q4) calculated at brand level across all campaigns",
+        "_calculation": "Q1 = Jan+Feb+Mar, Q2 = Apr+May+Jun, Q3 = Jul+Aug+Sep, Q4 = Oct+Nov+Dec",
+        "_display": "Only shown on the LAST slide when brand spans multiple slides",
         "q1": {
           "shape": "QuarterBudgetQ1",
           "label": "Q1",
@@ -374,6 +381,9 @@
         }
       },
       "media_share": {
+        "_comment": "Media share percentages calculated at brand level across all campaigns",
+        "_calculation": "(media_type_budget / total_brand_budget) * 100",
+        "_display": "Only shown on the LAST slide when brand spans multiple slides",
         "television": {
           "shape": "MediaShareTelevision",
           "label": "TV",
@@ -412,6 +422,9 @@
         }
       },
       "funnel_share": {
+        "_comment": "Funnel stage percentages calculated at brand level across all campaigns",
+        "_calculation": "(funnel_stage_budget / total_brand_budget) * 100",
+        "_display": "Only shown on the LAST slide when brand spans multiple slides",
         "awareness": {
           "shape": "FunnelShareAwareness",
           "label": "AWA",
