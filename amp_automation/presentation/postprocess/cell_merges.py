@@ -6,7 +6,7 @@ replacing slow COM-based PowerShell operations.
 """
 
 import logging
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR, MSO_AUTO_SIZE
 from pptx.util import Pt
 from pptx.dml.color import RGBColor
 
@@ -416,6 +416,17 @@ def _apply_cell_styling(cell, text: str = None, font_size: int = None,
 
         # Enable word wrap (wrap on full words only, no mid-word breaks)
         text_frame.word_wrap = True
+
+        # Enable text auto-fit: shrink text if needed to prevent overflow and mid-word breaks
+        # This allows PowerPoint to automatically reduce font size to fit text properly
+        text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+
+        # Set margins to allow text to wrap properly within cell bounds
+        # Default margins can cause text to overflow and wrap awkwardly
+        text_frame.margin_left = Pt(2)   # Small left margin
+        text_frame.margin_right = Pt(2)  # Small right margin
+        text_frame.margin_top = Pt(2)    # Small top margin
+        text_frame.margin_bottom = Pt(2) # Small bottom margin
 
         # Set text if provided - this creates new runs with default formatting
         if text is not None:
