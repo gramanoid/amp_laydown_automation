@@ -190,6 +190,7 @@ def normalize_table_fonts(table):
     Font rules:
     - Header row (row 0): Verdana, 7pt
     - Bottom row (last row): Verdana, 7pt
+    - Campaign column (column 0, non-header): Verdana, 5pt (smaller to prevent mid-word breaks)
     - Body rows (all others): Verdana, 6pt
 
     Args:
@@ -219,7 +220,7 @@ def normalize_table_fonts(table):
                     first_cell_text = first_cell.text_frame.text.strip().upper() if first_cell.text_frame else ""
                     is_grand_total = "GRAND" in first_cell_text and "TOTAL" in first_cell_text
 
-                # Determine font size based on row position
+                # Determine font size based on row position and column
                 if row_idx == 0:
                     # Header row: Verdana 7pt
                     font_size = Pt(7)
@@ -228,6 +229,10 @@ def normalize_table_fonts(table):
                     # Bottom row (but not GRAND TOTAL): Verdana 7pt
                     font_size = Pt(7)
                     bottom_cells += 1
+                elif col_idx == 0 and row_idx > 0:
+                    # Campaign column (column 0, non-header): Verdana 5pt (smaller to prevent word breaks)
+                    font_size = Pt(5)
+                    body_cells += 1
                 else:
                     # Body rows and GRAND TOTAL: Verdana 6pt
                     font_size = Pt(6)

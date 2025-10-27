@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Font configuration (matching template requirements)
 FONT_NAME = "Verdana"
-CAMPAIGN_FONT_SIZE = 6  # Body text
+CAMPAIGN_FONT_SIZE = 5  # Campaign text (smaller to prevent mid-word breaks in narrow cells)
 MEDIA_FONT_SIZE = 6  # Media column text
 MONTHLY_TOTAL_FONT_SIZE = 6  # Body text
 SUMMARY_FONT_SIZE = 7  # Bottom row
@@ -561,11 +561,11 @@ def _apply_cell_styling(cell, text: str = None, font_size: int = None,
         text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
 
         # Set margins to allow text to wrap properly within cell bounds
-        # Default margins can cause text to overflow and wrap awkwardly
-        text_frame.margin_left = Pt(2)   # Small left margin
-        text_frame.margin_right = Pt(2)  # Small right margin
-        text_frame.margin_top = Pt(2)    # Small top margin
-        text_frame.margin_bottom = Pt(2) # Small bottom margin
+        # Minimal margins to maximize available space for text wrapping
+        text_frame.margin_left = Pt(1)   # Minimal left margin
+        text_frame.margin_right = Pt(1)  # Minimal right margin
+        text_frame.margin_top = Pt(1)    # Minimal top margin
+        text_frame.margin_bottom = Pt(1) # Minimal bottom margin
 
         # Set text if provided - this creates new runs with default formatting
         if text is not None:
