@@ -2262,10 +2262,14 @@ def _split_table_data_by_campaigns(table_data, cell_metadata):
         return [(table_data, cell_metadata, False)]
 
     body_row_count = grand_total_idx - 1
+
+    logger.info(f"Smart pagination enabled: {SMART_PAGINATION_ENABLED}, Max rows: {MAX_ROWS_PER_SLIDE}, Body rows: {body_row_count}")
+
     if body_row_count <= MAX_ROWS_PER_SLIDE:
         return [(table_data, cell_metadata, False)]
 
     campaign_boundaries = _CAMPAIGN_BOUNDARIES or [(1, grand_total_idx - 1)]
+    logger.info(f"Campaign boundaries: {len(campaign_boundaries)} campaigns")
     splits: list[tuple[list[list[str]], dict[tuple[int, int], dict[str, object]], bool]] = []
 
     current_indices: list[int] = [header_idx]
@@ -2424,6 +2428,8 @@ def _split_table_data_by_campaigns(table_data, cell_metadata):
     for boundary_idx, (start, end) in enumerate(campaign_boundaries):
         # Smart pagination: Calculate campaign row count and check if it fits
         campaign_row_count = end - start + 1
+
+        logger.info(f"Processing campaign {boundary_idx + 1}/{len(campaign_boundaries)}: rows {start}-{end} ({campaign_row_count} rows), current slide: {current_body_count} rows")
 
         if SMART_PAGINATION_ENABLED and campaign_row_count <= MAX_ROWS_PER_SLIDE:
             # Small campaign - check if it fits on current slide
@@ -3225,24 +3231,27 @@ def create_presentation(template_path, excel_path, output_path):
         autopptx_payloads: list[dict[str, object]] = []
 
         current_market = None
+        current_brand = None
         for idx, combination_row in enumerate(ordered_combinations):
             # Check if we're starting a new market
             if combination_row[0] != current_market:
                 current_market = combination_row[0]
+                current_brand = None  # Reset brand when market changes
+
                 # Fix market name display
                 display_market_name = "Morocco" if current_market == "MOR" else current_market
                 # Add a market delimiter slide with black background
                 try:
-                    # Try to use a blank slide layout 
+                    # Try to use a blank slide layout
                     blank_layout = prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0]
                     delimiter_slide = prs.slides.add_slide(blank_layout)
                 except:
                     delimiter_slide = prs.slides.add_slide(prs.slide_layouts[0])
-                
+
                 # Add full black background
                 slide_width = prs.slide_width
                 slide_height = prs.slide_height
-                
+
                 # Create a black rectangle covering the entire slide
                 from pptx.enum.shapes import MSO_SHAPE
                 black_bg = delimiter_slide.shapes.add_shape(
@@ -3252,12 +3261,12 @@ def create_presentation(template_path, excel_path, output_path):
                     width=slide_width,
                     height=slide_height
                 )
-                
+
                 # Make the background solid black
                 black_bg.fill.solid()
                 black_bg.fill.fore_color.rgb = RGBColor(0, 0, 0)  # Pure black
                 black_bg.line.fill.background()  # Remove border
-                
+
                 # Create a text box in the center of the slide for the market name
                 text_box = delimiter_slide.shapes.add_textbox(
                     left=Inches(1),
@@ -3265,12 +3274,12 @@ def create_presentation(template_path, excel_path, output_path):
                     width=slide_width - Inches(2),
                     height=Inches(1.5)
                 )
-                
+
                 text_frame = text_box.text_frame
                 text_frame.text = str(display_market_name).upper() if display_market_name else "UNKNOWN"  # Make market name full caps
                 text_frame.word_wrap = False
                 text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
-                
+
                 # Format the text - large white font
                 for paragraph in text_frame.paragraphs:
                     paragraph.alignment = PP_ALIGN.CENTER
@@ -3280,7 +3289,64 @@ def create_presentation(template_path, excel_path, output_path):
                         run.font.name = FONT_FAMILY_LEGEND
                         run.font.color.rgb = RGBColor(255, 255, 255)  # Pure white
                 logger.info(f"Added market delimiter slide for: {display_market_name}")
-            
+
+            # Check if we're starting a new brand
+            brand_key = (combination_row[0], combination_row[1])  # (market, brand) tuple
+            if brand_key != current_brand:
+                current_brand = brand_key
+
+                # Fix display names
+                display_market_name = "Morocco" if combination_row[0] == "MOR" else combination_row[0]
+                display_brand_name = combination_row[1]
+
+                # Add a brand delimiter slide with black background
+                try:
+                    blank_layout = prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0]
+                    brand_delimiter_slide = prs.slides.add_slide(blank_layout)
+                except:
+                    brand_delimiter_slide = prs.slides.add_slide(prs.slide_layouts[0])
+
+                # Add full black background
+                slide_width = prs.slide_width
+                slide_height = prs.slide_height
+
+                from pptx.enum.shapes import MSO_SHAPE
+                black_bg = brand_delimiter_slide.shapes.add_shape(
+                    MSO_SHAPE.RECTANGLE,
+                    left=0,
+                    top=0,
+                    width=slide_width,
+                    height=slide_height
+                )
+
+                black_bg.fill.solid()
+                black_bg.fill.fore_color.rgb = RGBColor(0, 0, 0)  # Pure black
+                black_bg.line.fill.background()  # Remove border
+
+                # Create text box for brand name (with market context)
+                text_box = brand_delimiter_slide.shapes.add_textbox(
+                    left=Inches(1),
+                    top=int(slide_height * 0.45),  # Center vertically
+                    width=slide_width - Inches(2),
+                    height=Inches(1.5)
+                )
+
+                text_frame = text_box.text_frame
+                brand_title = f"{display_market_name} - {display_brand_name}".upper()
+                text_frame.text = brand_title
+                text_frame.word_wrap = False
+                text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+
+                # Format the text - slightly smaller than market separators
+                for paragraph in text_frame.paragraphs:
+                    paragraph.alignment = PP_ALIGN.CENTER
+                    for run in paragraph.runs:
+                        run.font.size = Pt(28)  # Slightly smaller than market (36)
+                        run.font.bold = True
+                        run.font.name = FONT_FAMILY_LEGEND
+                        run.font.color.rgb = RGBColor(255, 255, 255)  # Pure white
+                logger.info(f"Added brand delimiter slide for: {brand_title}")
+
             logger.info(f"Processing combination {idx+1}/{len(ordered_combinations)}: {combination_row[0]} - {combination_row[1]} - {combination_row[2]}")
             
             # First, prepare the table data to check if splitting is needed
