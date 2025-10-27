@@ -2733,6 +2733,42 @@ def set_title_text_detailed(title_shape, title_text, template_prs):
 
     logger.debug(f"Finished setting title for shape '{title_shape.name}'. Text frame word_wrap: {title_shape.text_frame.word_wrap}, auto_size: {title_shape.text_frame.auto_size}")
 
+def _add_table_row(table):
+    """
+    Add a row to an existing table by cloning the last row's XML structure.
+
+    Python-pptx doesn't provide a public API for adding rows to existing tables.
+    This function uses XML manipulation to clone the last row and append it.
+
+    Args:
+        table: A python-pptx Table object
+
+    Returns:
+        The newly added row object
+    """
+    from copy import deepcopy
+
+    tbl = table._tbl
+    # Clone the last row's XML element
+    last_tr = tbl.tr_lst[-1]
+    new_tr = deepcopy(last_tr)
+
+    # Clear text content from all cells in the new row
+    for tc in new_tr.tc_lst:
+        # Find text elements and clear them
+        text_frame = tc.find('.//{http://schemas.openxmlformats.org/presentationml/2006/main}txBody')
+        if text_frame is not None:
+            for paragraph in text_frame.findall('.//{http://schemas.openxmlformats.org/drawingml/2006/main}p'):
+                for run in paragraph.findall('.//{http://schemas.openxmlformats.org/drawingml/2006/main}r'):
+                    for text_elem in run.findall('.//{http://schemas.openxmlformats.org/drawingml/2006/main}t'):
+                        text_elem.text = ''
+
+    # Append the new row to the table
+    tbl.append(new_tr)
+
+    # Return the new row (table.rows refreshes automatically from XML)
+    return table.rows[-1]
+
 def _populate_cloned_table(table_shape, table_data, cell_metadata):
     table = table_shape.table
     rows_needed = len(table_data)
@@ -2751,7 +2787,7 @@ def _populate_cloned_table(table_shape, table_data, cell_metadata):
 
     # Ensure sufficient row capacity by appending rows as needed.
     while len(table.rows) < rows_needed:
-        table.rows.add_row()
+        _add_table_row(table)
 
     for col_idx, width in enumerate(TABLE_COLUMN_WIDTHS[: len(table.columns)]):
         try:

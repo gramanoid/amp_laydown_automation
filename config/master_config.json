@@ -71,7 +71,7 @@
   },
   "presentation": {
     "table": {
-      "max_rows_per_slide": 32,
+      "max_rows_per_slide": 40,
       "split_strategy": "by_campaign",
       "show_charts_on_splits": "all",
       "show_carried_subtotal": true,
