@@ -41,6 +41,22 @@ QUARTER_MONTHS: Dict[str, Sequence[str]] = {
 PERCENT_TOLERANCE = 0.005  # ±0.5% tolerance for share metrics
 NUMBER_PATTERN = re.compile(r"-?\d+(?:[.,]\d+)?")
 
+# Market code to display name mapping
+MARKET_CODE_MAP = {
+    "MOR": "MOROCCO",
+    "SOUTH AFRICA": "SOUTH AFRICA",  # No mapping needed
+    "KSA": "KSA",
+    "GINE": "GINE",
+    "EGYPT": "EGYPT",
+    "TURKEY": "TURKEY",
+    "PAKISTAN": "PAKISTAN",
+    "KENYA": "KENYA",
+    "UGANDA": "UGANDA",
+    "NIGERIA": "NIGERIA",
+    "MAURITIUS": "MAURITIUS",
+    "FWA": "FWA",
+}
+
 
 @dataclass(slots=True)
 class MetricComparison:
@@ -214,11 +230,46 @@ def write_reconciliation_report(results: Iterable[SlideReconciliation], output_p
 # --------------------------------------------------------------------------------------
 
 
+def _normalize_market_name(df: pd.DataFrame, market: str) -> str:
+    """Find the exact market name from DataFrame by case-insensitive matching and code mapping."""
+    market_str = str(market).strip()
+    market_lower = market_str.lower()
+
+    # First try the market code map (e.g., "MOROCCO" -> "MOR")
+    for code, display_name in MARKET_CODE_MAP.items():
+        if display_name.lower() == market_lower:
+            market_str = code
+            break
+
+    # Then do case-insensitive matching against the DataFrame
+    market_lower = market_str.lower()
+    for country in df["Country"].unique():
+        if str(country).lower().strip() == market_lower:
+            return str(country)
+    return market_str  # Return original if no match found
+
+
+def _normalize_brand_name(df: pd.DataFrame, market: str, brand: str) -> str:
+    """Find the exact brand name from DataFrame by case-insensitive matching for a given market."""
+    brand_lower = str(brand).lower().strip()
+    market_norm = _normalize_market_name(df, market)
+
+    market_rows = df[df["Country"].astype(str).str.strip() == str(market_norm).strip()]
+    for brand_val in market_rows["Brand"].unique():
+        if str(brand_val).lower().strip() == brand_lower:
+            return str(brand_val)
+    return brand  # Return original if no match found
+
+
 def _candidate_years(df: pd.DataFrame, market: str, brand: str) -> List[int]:
+    # Normalize market and brand for case-insensitive matching against DataFrame
+    market_norm = _normalize_market_name(df, market)
+    brand_norm = _normalize_brand_name(df, market_norm, brand)
+
     years = (
         df[
-            (df["Country"].astype(str).str.strip() == str(market).strip())
-            & (df["Brand"].astype(str).str.strip() == str(brand).strip())
+            (df["Country"].astype(str).str.strip() == str(market_norm).strip())
+            & (df["Brand"].astype(str).str.strip() == str(brand_norm).strip())
         ]["Year"]
         .dropna()
         .unique()
@@ -278,9 +329,13 @@ def _has_summary_data(summary: dict) -> bool:
 
 
 def _compute_expected_summary(df: pd.DataFrame, market: str, brand: str, year: int, summary_cfg: dict) -> Optional[dict]:
+    # Normalize market and brand for case-insensitive matching against DataFrame
+    market_norm = _normalize_market_name(df, market)
+    brand_norm = _normalize_brand_name(df, market_norm, brand)
+
     subset = df[
-        (df["Country"].astype(str).str.strip() == str(market).strip())
-        & (df["Brand"].astype(str).str.strip() == str(brand).strip())
+        (df["Country"].astype(str).str.strip() == str(market_norm).strip())
+        & (df["Brand"].astype(str).str.strip() == str(brand_norm).strip())
         & (df["Year"].astype(str) == str(year))
     ]
 
@@ -444,7 +499,8 @@ def _extract_shape_text(slide, shape_name: Optional[str]) -> str:
 
 def _parse_title_tokens(title: str) -> tuple[Optional[str], Optional[str]]:
     clean = title.strip()
-    clean = re.sub(r"\s*\(\d+ of \d+\)$", "", clean)
+    # Remove pagination markers: both "(\d+ of \d+)" and "(\d+/\d+)" formats
+    clean = re.sub(r"\s*\((?:\d+\s+of\s+\d+|\d+/\d+)\)$", "", clean)
     parts = clean.split(" - ", 1)
     if len(parts) != 2:
         return None, None
