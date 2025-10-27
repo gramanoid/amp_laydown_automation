@@ -1,5 +1,5 @@
 Last prepared on 2025-10-27
-Last verified on 27-10-25 (evening - validators & validation suite complete)
+Last verified on 27-10-25 (end of session - validators, validation suite, and Tier 6 cleanup complete)
 
 ---
 
@@ -54,23 +54,27 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
 - ✅ **Fixed validator bugs:** Table cell indexing in data_accuracy.py, metadata filtering in reconciliation.py
 
 # Now / Next / Later
-- **Now (COMPLETED):**
-  - [x] **Fix campaign cell text wrapping** - ✅ RESOLVED: Removed hyphens at source + widened column (assembly.py:1222, template_geometry.py)
-  - [x] **Fix structural validator** - ✅ RESOLVED: Updated to handle last-slide-only shapes (6e83fae)
-  - [x] **Expand data validation suite** - ✅ RESOLVED: 4 modules + unified report generator (203a90e, 28a74f0)
-  - [ ] **Reconciliation data source matching** - Investigate why Excel market/brand names don't match presentation values
+- **Now (ACTIVE):**
+  - [ ] **Reconciliation data source investigation** - 630/631 reconciliation checks failing. Investigate if Excel market/brand names don't match presentation values, or if validator needs adjustment. Includes debug output analysis and findings documentation.
+  - [ ] **Campaign cell text wrapping** - Column width causing PowerPoint auto word-wrap to break mid-word. Solutions: (1) Increase column A width, (2) Disable word-wrap + shrink to fit, (3) Force text box behavior, (4) Conditional font size.
 
 - **Next:**
   - [ ] **Slide 1 EMU/legend parity work** - Visual diff to compare generated vs template, fix geometry/legend discrepancies
   - [ ] **Test suite rehydration** - Fix/update `tests/test_tables.py`, `tests/test_structural_validator.py`
   - [ ] **Campaign pagination design** - Strategy to prevent campaign splits across slides (Phase 3-4 cancelled, but smart pagination enabled with max_rows=40)
-  - [ ] **Visual diff workflow** - Establish repeatable process with Zen MCP evidence capture
+  - [ ] **Add regression tests** - Test merge correctness, font normalization, row formatting
 
 - **Later:**
-  - [ ] **Add regression tests** - Test merge correctness, font normalization, row formatting
+  - [ ] **Visual diff workflow** - Establish repeatable process with Zen MCP evidence capture
   - [ ] **Automated regression scripts** - Catch rogue merges or row-height drift before decks ship
   - [ ] **Python normalization expansion** - Consider row height normalization, cell margin/padding if needed
   - [ ] **Smoke test additional markets** - Validate pipeline with different data sets via `scripts/run_pipeline_local.py`
+
+- **✅ Completed This Session:**
+  - [x] **Fix campaign cell text wrapping** - Removed hyphens at source + widened column (assembly.py:1222, template_geometry.py)
+  - [x] **Fix structural validator** - Updated to handle last-slide-only shapes (6e83fae)
+  - [x] **Expand data validation suite** - 4 modules + unified report generator (203a90e, 28a74f0)
+  - [x] **Repository cleanup (Tier 6)** - Tools reorganized (validate/, verify/), archives documented, logs restructured (2861d70)
 
 # 2025-10-27 Session Notes
 
@@ -95,6 +99,26 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
 - **Test results on 144-slide deck:** Data accuracy PASS, Completeness PASS, Format PASS (warnings only)
 - Commits: 6e83fae, 203a90e, 28a74f0
 
+**Late Evening Session (Repository Cleanup - Tier 6):**
+- ✅ **Complete Tier 6 repository cleanup (2861d70):**
+  - Created tools/validate/ subdirectory with __init__.py
+  - Moved validate_all_data.py and validate_structure.py to tools/validate/
+  - Created tools/verify/ subdirectory with __init__.py
+  - Moved verify_deck_fonts.py, verify_monthly_total_fonts.py, verify_unmerge.py to tools/verify/
+  - Moved inspect_fonts.py and other analysis scripts to tools/archive/analysis_scripts/
+  - Created comprehensive archive documentation (tools/archive/README_ARCHIVE.md, docs/archive/27-10-25/README.md)
+  - Reorganized 196 production logs from flat timestamp structure to date-based (2025-10-14/ through 2025-10-27/)
+  - 86 files reorganized with complete git history preservation
+- ✅ **Updated README with new tool paths (c6d42f4):**
+  - Contents section updated (tools/validate/, tools/verify/ references)
+  - Validation examples updated to new paths
+  - Testing section expanded with new validators
+- ✅ **Created cleanup completion report (c161e58):**
+  - Documented all 6 tiers of cleanup execution
+  - Impact analysis: freed 2.5MB, archived 86 files
+  - Repository now clean with clear active/archive separation
+- Commits: 2861d70, c6d42f4, c161e58
+
 ## Immediate TODOs
 - [x] Fixed timestamp to use local system time across all modules
 - [x] Implemented smart line breaking (_smart_line_break function)
@@ -104,6 +128,7 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
 - [x] Fixed structural validator to handle last-slide-only shapes ✅ COMPLETED (evening session)
 - [x] Expanded data validation suite with 4 new modules ✅ COMPLETED (evening session)
 - [x] Fixed validator bugs (table indexing, metadata filtering) ✅ COMPLETED (evening session)
+- [x] Repository cleanup (Tier 6 - tools reorganization) ✅ COMPLETED (late evening session)
 
 ## Longer-Term Follow-Ups
 - Complete campaign pagination design with Q&A-led discovery
@@ -156,4 +181,4 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
 - Check media channel vertical merging (TELEVISION, DIGITAL, OOH, OTHER)
 - Verify timestamps use local system time (Arabian Standard Time UTC+4)
 
-Last verified on 27-10-25 (end of session)
+Last verified on 27-10-25 (session complete - all work committed)
