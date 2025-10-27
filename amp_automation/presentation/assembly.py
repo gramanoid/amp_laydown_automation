@@ -591,28 +591,32 @@ def _compose_title_text(
 
 def _apply_title(slide, template_slide, combination_row, slide_title_suffix):
     shape_name = presentation_config.get("title", {}).get("shape") or SHAPE_NAME_TITLE
-    title_shape = next((s for s in slide.shapes if getattr(s, "name", "") == shape_name and getattr(s, "has_text_frame", False)), None)
+
+    # Find ALL title shapes with this name (there might be multiple in the layout)
+    title_shapes = [s for s in slide.shapes if getattr(s, "name", "") == shape_name and getattr(s, "has_text_frame", False)]
 
     title_text = _compose_title_text(combination_row, slide_title_suffix)
 
-    if not title_shape:
+    if not title_shapes:
         logger.debug("Title shape '%s' not available on slide", shape_name)
         return title_text
 
-    text_frame = title_shape.text_frame
-    text_frame.clear()
-    paragraph = text_frame.paragraphs[0]
-    paragraph.text = title_text
+    # Update ALL title shapes to ensure no static text remains
+    for title_shape in title_shapes:
+        text_frame = title_shape.text_frame
+        text_frame.clear()
+        paragraph = text_frame.paragraphs[0]
+        paragraph.text = title_text
 
-    if paragraph.runs:
-        run = paragraph.runs[0]
-        _ensure_font_consistency(
-            run.font,
-            DEFAULT_FONT_NAME,
-            FONT_SIZE_TITLE,
-            True,
-            CLR_WHITE,
-        )
+        if paragraph.runs:
+            run = paragraph.runs[0]
+            _ensure_font_consistency(
+                run.font,
+                DEFAULT_FONT_NAME,
+                FONT_SIZE_TITLE,
+                True,
+                CLR_WHITE,
+            )
 
     return title_text
 
