@@ -668,8 +668,7 @@ def _apply_campaign_cell_merges(table, table_data: list[list[str]]) -> None:
                 formatted_label = _smart_line_break(merged_label)
                 merged_cell.text = formatted_label
                 try:
-                    # Disable word wrap to force PowerPoint to respect explicit \n line breaks
-                    merged_cell.text_frame.word_wrap = False
+                    # Center align horizontally
                     merged_cell.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
                     # Make campaign names bold
                     for run in merged_cell.text_frame.paragraphs[0].runs:
@@ -677,6 +676,7 @@ def _apply_campaign_cell_merges(table, table_data: list[list[str]]) -> None:
                 except Exception:
                     pass
                 try:
+                    # Center align vertically (middle)
                     merged_cell.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE
                 except Exception:
                     pass
@@ -1218,7 +1218,8 @@ def _build_campaign_block(
         total_cost = float(media_df["Total Cost"].sum() or 0.0)
 
         row_idx = base_row_idx + len(block_rows)
-        campaign_label = str(campaign_name).upper() if first_media else "-"
+        # Remove hyphens from campaign names to prevent mid-word breaks (e.g., "FACES-CONDITION" → "FACES CONDITION")
+        campaign_label = str(campaign_name).upper().replace("-", " ") if first_media else "-"
 
         row = _build_budget_row(
             campaign_label,

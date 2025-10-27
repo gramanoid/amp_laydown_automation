@@ -9,7 +9,7 @@ from pptx.util import Inches
 
 
 TEMPLATE_V4_COLUMN_WIDTHS_EMU: list[int] = [
-    812_364,
+    1_000_000,  # Campaign column - widened to ~1.09 inches to fit words like "CONDITION"
     729_251,
     831_384,
     338_274,

@@ -32,6 +32,9 @@ def _smart_line_break(text: str) -> str:
     - 3 words: split into 2 lines (2 words on first line, 1 word on second line)
     - 4+ words: split into 2 lines (half words on each line, rounded up on first line)
 
+    Edge cases:
+    - "FACES-CONDITION" → "FACES\nCONDITION" (explicit split at hyphen)
+
     Args:
         text: Campaign name text
 
@@ -40,6 +43,16 @@ def _smart_line_break(text: str) -> str:
     """
     if not text or text.strip() == "":
         return text
+
+    # EDGE CASE: Explicit handling for hyphenated compound words
+    # Force split at hyphen for cases like "FACES-CONDITION"
+    if "-" in text:
+        parts = text.split("-")
+        # If we have exactly 2 parts separated by hyphen, split them
+        if len(parts) == 2:
+            result = f"{parts[0].strip()}\n{parts[1].strip()}"
+            logger.debug(f"Smart line break (hyphen split): '{text}' -> '{result}'")
+            return result
 
     # Replace dashes with spaces, then split by whitespace
     normalized_text = text.replace("-", " ")
@@ -606,10 +619,8 @@ def _apply_cell_styling(cell, text: str = None, font_size: int = None,
     try:
         text_frame = cell.text_frame
 
-        # DISABLE word wrap to force PowerPoint to respect explicit \n line breaks
-        # The _smart_line_break function inserts strategic \n characters to break
-        # campaign names cleanly (e.g., "FACES\nCONDITION" instead of "FACES-CONDITIO\nN")
-        text_frame.word_wrap = False
+        # Enable word wrap
+        text_frame.word_wrap = True
 
         # Enable text auto-fit: shrink text if needed to prevent overflow
         # This allows PowerPoint to automatically reduce font size to fit text properly
@@ -622,40 +633,37 @@ def _apply_cell_styling(cell, text: str = None, font_size: int = None,
         text_frame.margin_top = Pt(1)    # Minimal top margin
         text_frame.margin_bottom = Pt(1) # Minimal bottom margin
 
-        # Set text if provided - this creates new runs with default formatting
+        # Set text if provided - split by newlines and create separate paragraphs
         if text is not None:
-            text_frame.text = text
+            # Split by newlines and filter out empty lines
+            lines = [line.strip() for line in text.split('\n') if line.strip()]
+            text_frame.clear()  # Clear existing content (leaves one empty paragraph)
+
+            for idx, line in enumerate(lines):
+                # Use the existing first paragraph after clear(), don't create a new one
+                if idx == 0:
+                    p = text_frame.paragraphs[0]
+                else:
+                    p = text_frame.add_paragraph()
+
+                p.text = line
+
+                # Apply paragraph formatting
+                if center_align:
+                    p.alignment = PP_ALIGN.CENTER
+
+                # Apply run formatting
+                if p.runs:
+                    for run in p.runs:
+                        run.font.name = FONT_NAME
+                        if font_size is not None:
+                            run.font.size = Pt(font_size)
+                        if bold:
+                            run.font.bold = True
 
         # Apply vertical alignment
         if vertical_center:
             text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
-
-        # Apply paragraph-level formatting
-        if text_frame.paragraphs:
-            paragraph = text_frame.paragraphs[0]
-
-            if center_align:
-                paragraph.alignment = PP_ALIGN.CENTER
-
-            # CRITICAL: Setting text creates new runs, so we must format them
-            # Force font formatting on all runs
-            if paragraph.runs:
-                for run in paragraph.runs:
-                    # ENTRENCH Verdana font - always set it
-                    run.font.name = FONT_NAME
-                    if font_size is not None:
-                        run.font.size = Pt(font_size)
-                    if bold:
-                        run.font.bold = True
-            else:
-                # Edge case: no runs exist yet, create one
-                run = paragraph.add_run()
-                run.text = text_frame.text
-                run.font.name = FONT_NAME
-                if font_size is not None:
-                    run.font.size = Pt(font_size)
-                if bold:
-                    run.font.bold = True
 
     except Exception as e:
         logger.error(f"Failed to apply cell styling: {e}")
