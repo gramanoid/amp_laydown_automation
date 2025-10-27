@@ -11,6 +11,7 @@ from typing import Iterable, Sequence
 
 from amp_automation.config import Config, load_master_config
 from amp_automation.utils import configure_logger
+from amp_automation.presentation.postprocess.cli import PostProcessorCLI
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -130,6 +131,22 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if success:
         logger.info("Presentation generated successfully: %s", paths.output_file)
+
+        # AUTOMATIC POST-PROCESSING: Run complete workflow on generated deck
+        # This applies cell merging, font normalization, and styling
+        logger.info("Running automatic post-processing...")
+        try:
+            postprocessor = PostProcessorCLI(paths.output_file, slide_filter=None)
+            exit_code = postprocessor.process(PostProcessorCLI.POSTPROCESS_ALL_WORKFLOW)
+
+            if exit_code == 0:
+                logger.info("Post-processing completed successfully")
+            else:
+                logger.warning("Post-processing completed with warnings/errors")
+        except Exception as e:
+            logger.error(f"Post-processing failed: {e}")
+            logger.warning("Presentation generated but post-processing incomplete")
+
         print(paths.output_file)
         _run_reconciliation_if_requested(args, paths, config, logger)
         return 0

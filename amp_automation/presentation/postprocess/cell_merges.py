@@ -60,11 +60,10 @@ def merge_campaign_cells(table):
         # This prevents white cells with "MONTHLY TOTAL\nCAMPAIGN" from being misidentified
         is_monthly = is_monthly_total(actual_campaign_name) if actual_campaign_name else False
         is_grand = is_grand_total(actual_campaign_name) if actual_campaign_name else False
-        is_carried = is_carried_forward(actual_campaign_name) if actual_campaign_name else False
 
         # Track campaign start (non-empty, non-special rows, non-gray)
         # Campaign cells are WHITE cells with campaign names
-        if actual_campaign_name and not is_monthly and not is_grand and not is_carried and not is_gray:
+        if actual_campaign_name and not is_monthly and not is_grand and not is_gray:
             if campaign_start is None:
                 campaign_start = row_idx
                 campaign_name = actual_campaign_name  # Save the campaign name immediately
