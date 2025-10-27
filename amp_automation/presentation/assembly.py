@@ -1720,6 +1720,7 @@ FONT_SIZE_COMMENTS = Pt(float(font_sizes.get("comments", 9.0)))
 # for the carried-forward subtotal and slide-level GRAND TOTAL rows we append during splitting.
 MAX_ROWS_PER_SLIDE = int(table_config.get("max_rows_per_slide", 32))
 SPLIT_STRATEGY = table_config.get("split_strategy", "by_campaign")
+SMART_PAGINATION_ENABLED = bool(table_config.get("smart_pagination_enabled", False))
 SHOW_CHARTS_ON_SPLITS = table_config.get("show_charts_on_splits", "all")
 SHOW_CARRIED_SUBTOTAL = bool(table_config.get("show_carried_subtotal", True))
 CONTINUATION_INDICATOR = table_config.get("continuation_indicator", " (Continued)")
@@ -2421,35 +2422,68 @@ def _split_table_data_by_campaigns(table_data, cell_metadata):
         current_body_count = 0
 
     for boundary_idx, (start, end) in enumerate(campaign_boundaries):
-        idx = start
-        while idx <= end:
-            block_length = _determine_block_length(idx, end)
-            if block_length <= 0:
-                idx += 1
-                continue
+        # Smart pagination: Calculate campaign row count and check if it fits
+        campaign_row_count = end - start + 1
 
-            if (
-                current_body_count > 0
-                and current_body_count + block_length > MAX_ROWS_PER_SLIDE
-            ):
+        if SMART_PAGINATION_ENABLED and campaign_row_count <= MAX_ROWS_PER_SLIDE:
+            # Small campaign - check if it fits on current slide
+            if current_body_count > 0 and current_body_count + campaign_row_count > MAX_ROWS_PER_SLIDE:
+                # Doesn't fit - finalize current slide and start fresh
+                logger.debug(
+                    f"Smart pagination: Campaign with {campaign_row_count} rows doesn't fit on current slide "
+                    f"({current_body_count} rows used). Starting fresh slide."
+                )
                 finalize_split(has_remaining=True)
                 slide_contains_continuation = False
-                continue
 
-            if block_length > MAX_ROWS_PER_SLIDE:
-                logger.warning(
-                    "Media block starting at row %s spans %s rows exceeding MAX_ROWS_PER_SLIDE=%s; forcing slide overflow.",
-                    idx,
-                    block_length,
-                    MAX_ROWS_PER_SLIDE,
-                )
+            # Add entire campaign to current slide
+            logger.debug(
+                f"Smart pagination: Adding campaign with {campaign_row_count} rows to slide "
+                f"(current: {current_body_count}, new total: {current_body_count + campaign_row_count})"
+            )
+            current_indices.extend(range(start, end + 1))
+            current_body_count += campaign_row_count
+        else:
+            # Large campaign (>MAX_ROWS_PER_SLIDE) or smart pagination disabled - use block-by-block splitting
+            if SMART_PAGINATION_ENABLED and campaign_row_count > MAX_ROWS_PER_SLIDE:
+                # Finalize current slide before starting large campaign
+                if current_body_count > 0:
+                    logger.debug(
+                        f"Smart pagination: Large campaign with {campaign_row_count} rows detected. "
+                        f"Finalizing current slide first."
+                    )
+                    finalize_split(has_remaining=True)
+                    slide_contains_continuation = False
 
-            if current_body_count == 0 and idx > start:
-                slide_contains_continuation = True
+            idx = start
+            while idx <= end:
+                block_length = _determine_block_length(idx, end)
+                if block_length <= 0:
+                    idx += 1
+                    continue
 
-            current_indices.extend(range(idx, idx + block_length))
-            current_body_count += block_length
-            idx += block_length
+                if (
+                    current_body_count > 0
+                    and current_body_count + block_length > MAX_ROWS_PER_SLIDE
+                ):
+                    finalize_split(has_remaining=True)
+                    slide_contains_continuation = False
+                    continue
+
+                if block_length > MAX_ROWS_PER_SLIDE:
+                    logger.warning(
+                        "Media block starting at row %s spans %s rows exceeding MAX_ROWS_PER_SLIDE=%s; forcing slide overflow.",
+                        idx,
+                        block_length,
+                        MAX_ROWS_PER_SLIDE,
+                    )
+
+                if current_body_count == 0 and idx > start:
+                    slide_contains_continuation = True
+
+                current_indices.extend(range(idx, idx + block_length))
+                current_body_count += block_length
+                idx += block_length
 
         if slide_contains_continuation and current_body_count > 0:
             finalize_split(has_remaining=boundary_idx < len(campaign_boundaries) - 1)

@@ -73,6 +73,7 @@
     "table": {
       "max_rows_per_slide": 40,
       "split_strategy": "by_campaign",
+      "smart_pagination_enabled": true,
       "show_charts_on_splits": "all",
       "show_carried_subtotal": true,
       "continuation_indicator": " (Continued)",
