@@ -125,8 +125,28 @@ def _remove_shape_by_name(container, shape_name):
     return removed
 
 
-def _populate_summary_tiles(slide, template_slide, df, combination_row, excel_path):
+def _populate_summary_tiles(slide, template_slide, df, combination_row, excel_path, is_last_slide=False):
+    """
+    Populate brand-level indicator tiles (quarters, media share, funnel stage).
+
+    IMPORTANT: Brand-level indicators should only appear on the LAST slide of each brand.
+    This prevents duplicate indicators when a brand spans multiple slides.
+
+    Args:
+        slide: Current slide to populate
+        template_slide: Template slide for cloning shapes
+        df: Full dataframe
+        combination_row: (market, brand, year) tuple
+        excel_path: Path to source Excel file
+        is_last_slide: True if this is the last slide for this brand
+    """
     if not SUMMARY_TILE_CONFIG:
+        return
+
+    # CRITICAL: Only populate brand-level indicators on LAST slide
+    # This ensures multi-slide brands show indicators once (on final slide only)
+    if not is_last_slide:
+        logger.debug("Skipping brand indicators - not the last slide for this brand")
         return
 
     for section in ("quarter_budgets", "media_share", "funnel_share"):
@@ -155,6 +175,8 @@ def _populate_summary_tiles(slide, template_slide, df, combination_row, excel_pa
 
     total_cost = subset["Total Cost"].sum()
 
+    # Populate brand-level indicators (Q1-Q4, TV/DIG/OTHER, AWA/CON/PUR)
+    logger.info(f"Populating brand-level indicators on LAST slide for {brand}")
     _populate_quarter_tiles(slide, template_slide, subset)
     _populate_media_share_tiles(slide, template_slide, subset, total_cost)
     _populate_funnel_share_tiles(slide, template_slide, subset, total_cost)
@@ -2333,6 +2355,16 @@ def _split_table_data_by_campaigns(table_data, cell_metadata):
         return month_totals, total_budget, grp_total
 
     def finalize_split(has_remaining: bool) -> None:
+        """
+        Finalize the current split by adding it to the splits list.
+
+        CRITICAL: BRAND TOTAL row should ONLY appear on the LAST slide.
+        - If has_remaining=True: More campaigns to process, do NOT add BRAND TOTAL
+        - If has_remaining=False: This is the last split, ADD BRAND TOTAL with brand-level totals
+
+        Args:
+            has_remaining: True if there are more campaigns to process after this split
+        """
         nonlocal current_indices, current_body_count, cumulative_months, cumulative_total, cumulative_grp, slide_contains_continuation
 
         if len(current_indices) <= 1:
@@ -2361,16 +2393,26 @@ def _split_table_data_by_campaigns(table_data, cell_metadata):
             inserted_meta_rows,
         )
 
-        per_slide_row = _build_grand_total_row(slide_months, slide_total, slide_grp)
-        output_rows.append(per_slide_row)
-        per_slide_row_idx = len(output_rows) - 1
-        per_slide_metadata = _build_grand_total_metadata_values(
-            slide_months,
-            slide_total,
-            slide_grp,
-        )
-        for col_idx, meta in per_slide_metadata.items():
-            output_metadata[(per_slide_row_idx, col_idx)] = meta
+        # CRITICAL FIX: Only add BRAND TOTAL on the LAST slide
+        # Multi-slide brands should show BRAND TOTAL only once (on final slide)
+        is_last_slide = not has_remaining
+
+        if is_last_slide:
+            # This is the LAST slide - use cumulative brand-level totals for BRAND TOTAL
+            logger.info("Adding BRAND TOTAL row to LAST slide with cumulative brand totals")
+            per_slide_row = _build_grand_total_row(cumulative_months, cumulative_total, cumulative_grp)
+            output_rows.append(per_slide_row)
+            per_slide_row_idx = len(output_rows) - 1
+            per_slide_metadata = _build_grand_total_metadata_values(
+                cumulative_months,
+                cumulative_total,
+                cumulative_grp,
+            )
+            for col_idx, meta in per_slide_metadata.items():
+                output_metadata[(per_slide_row_idx, col_idx)] = meta
+        else:
+            # Not the last slide - no BRAND TOTAL row
+            logger.debug("Skipping BRAND TOTAL row - not the last slide for this brand")
 
         splits.append((output_rows, output_metadata, len(splits) > 0))
         slide_contains_continuation = False
@@ -3047,25 +3089,40 @@ def _add_pie_chart(slide, chart_data, chart_title, position_info, chart_name=Non
         chart_name=chart_name,
     )
 
-def _populate_slide_content(new_slide, prs, combination_row, slide_title_suffix, 
-                          split_table_data, split_metadata, split_idx, df, excel_path):
-    """Populate a single slide with all content (title, table, charts, comments)."""
+def _populate_slide_content(new_slide, prs, combination_row, slide_title_suffix,
+                          split_table_data, split_metadata, split_idx, df, excel_path, is_last_slide=False):
+    """
+    Populate a single slide with all content (title, table, charts, comments).
+
+    Args:
+        new_slide: Slide to populate
+        prs: Presentation object
+        combination_row: (market, brand, year) tuple
+        slide_title_suffix: Suffix for title (e.g., " (1 of 3)")
+        split_table_data: Table data for this slide
+        split_metadata: Metadata for this slide
+        split_idx: Index of this split
+        df: Full dataframe
+        excel_path: Path to source Excel file
+        is_last_slide: True if this is the last slide for this brand
+    """
 
     template_slide = prs.slides[0]
 
     title_text = _apply_title(new_slide, template_slide, combination_row, slide_title_suffix)
     _clear_comments(new_slide)
-    
+
     # Create and populate the main data table
     logger.info(f"Creating table for {combination_row[0]} - {combination_row[1]} - {combination_row[2]}{slide_title_suffix}")
-    
+
     table_success = _add_and_style_table(new_slide, split_table_data, split_metadata, prs.slides[0])
     if table_success:
         logger.info(f"Table created successfully for slide")
     else:
         logger.warning(f"Failed to create table for slide")
-    
-    _populate_summary_tiles(new_slide, template_slide, df, combination_row, excel_path)
+
+    # Populate brand-level indicators ONLY on last slide
+    _populate_summary_tiles(new_slide, template_slide, df, combination_row, excel_path, is_last_slide)
     _ensure_legend_shapes(new_slide, template_slide)
 
     return {
@@ -3321,14 +3378,18 @@ def create_presentation(template_path, excel_path, output_path):
                     slide_title_suffix = f" ({split_idx + 1} of {len(table_splits)})"
                 else:
                     slide_title_suffix = ""
-                
+
+                # CRITICAL: Determine if this is the LAST slide for this brand
+                # Brand-level indicators (quarters, media share, funnel stage) only appear on last slide
+                is_last_slide = (split_idx == len(table_splits) - 1)
+
                 new_slide = prs.slides.add_slide(prs.slide_layouts[0])
                 # logger.debug(f"Added new slide for {combination_row[0]} - {combination_row[1]} - {combination_row[2]}{slide_title_suffix}")
-                
+
                 # Populate this slide with content immediately
                 payload = _populate_slide_content(
-                    new_slide, prs, combination_row, slide_title_suffix, 
-                    split_table_data, split_metadata, split_idx, df, excel_path
+                    new_slide, prs, combination_row, slide_title_suffix,
+                    split_table_data, split_metadata, split_idx, df, excel_path, is_last_slide
                 )
 
                 if payload:
