@@ -3262,7 +3262,7 @@ def create_presentation(template_path, excel_path, output_path):
 
                 # Fix market name display
                 display_market_name = "Morocco" if current_market == "MOR" else current_market
-                # Add a modern market delimiter slide with Haleon branding
+                # Add a clean minimal market delimiter slide
                 try:
                     blank_layout = prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0]
                     delimiter_slide = prs.slides.add_slide(blank_layout)
@@ -3274,7 +3274,7 @@ def create_presentation(template_path, excel_path, output_path):
 
                 from pptx.enum.shapes import MSO_SHAPE
 
-                # Background: Black
+                # Clean black background
                 black_bg = delimiter_slide.shapes.add_shape(
                     MSO_SHAPE.RECTANGLE,
                     left=0,
@@ -3286,38 +3286,12 @@ def create_presentation(template_path, excel_path, output_path):
                 black_bg.fill.fore_color.rgb = RGBColor(0, 0, 0)  # Black
                 black_bg.line.fill.background()
 
-                # Green accent bar at top (Haleon green #30ea03)
-                green_bar_height = int(slide_height * 0.08)  # 8% of slide height
-                green_bar = delimiter_slide.shapes.add_shape(
-                    MSO_SHAPE.RECTANGLE,
-                    left=0,
-                    top=0,
-                    width=slide_width,
-                    height=green_bar_height
-                )
-                green_bar.fill.solid()
-                green_bar.fill.fore_color.rgb = RGBColor(0x30, 0xea, 0x03)  # Haleon green
-                green_bar.line.fill.background()
-
-                # Green accent stripe on left side
-                green_stripe_width = int(slide_width * 0.015)  # 1.5% of slide width
-                green_stripe = delimiter_slide.shapes.add_shape(
-                    MSO_SHAPE.RECTANGLE,
-                    left=0,
-                    top=green_bar_height,
-                    width=green_stripe_width,
-                    height=slide_height - green_bar_height
-                )
-                green_stripe.fill.solid()
-                green_stripe.fill.fore_color.rgb = RGBColor(0x30, 0xea, 0x03)  # Haleon green
-                green_stripe.line.fill.background()
-
-                # Market name text (large, bold, white)
+                # Market name - large, centered, white text with subtle green accent
                 text_box = delimiter_slide.shapes.add_textbox(
-                    left=Inches(1.5),
-                    top=int(slide_height * 0.42),
-                    width=slide_width - Inches(3),
-                    height=Inches(2)
+                    left=Inches(1),
+                    top=int(slide_height * 0.45),
+                    width=slide_width - Inches(2),
+                    height=Inches(1.5)
                 )
 
                 text_frame = text_box.text_frame
@@ -3328,27 +3302,10 @@ def create_presentation(template_path, excel_path, output_path):
                 for paragraph in text_frame.paragraphs:
                     paragraph.alignment = PP_ALIGN.CENTER
                     for run in paragraph.runs:
-                        run.font.size = Pt(54)  # Larger, more impactful
+                        run.font.size = Pt(48)
                         run.font.bold = True
                         run.font.name = FONT_FAMILY_LEGEND
-                        run.font.color.rgb = RGBColor(255, 255, 255)  # White
-
-                # Subtitle "MARKET" label above the market name
-                subtitle_box = delimiter_slide.shapes.add_textbox(
-                    left=Inches(1.5),
-                    top=int(slide_height * 0.32),
-                    width=slide_width - Inches(3),
-                    height=Inches(0.5)
-                )
-                subtitle_frame = subtitle_box.text_frame
-                subtitle_frame.text = "MARKET"
-                for paragraph in subtitle_frame.paragraphs:
-                    paragraph.alignment = PP_ALIGN.CENTER
-                    for run in paragraph.runs:
-                        run.font.size = Pt(16)
-                        run.font.bold = False
-                        run.font.name = FONT_FAMILY_LEGEND
-                        run.font.color.rgb = RGBColor(0x30, 0xea, 0x03)  # Green
+                        run.font.color.rgb = RGBColor(0x30, 0xea, 0x03)  # Haleon green
 
                 logger.info(f"Added market delimiter slide for: {display_market_name}")
 
@@ -3361,7 +3318,7 @@ def create_presentation(template_path, excel_path, output_path):
                 display_market_name = "Morocco" if combination_row[0] == "MOR" else combination_row[0]
                 display_brand_name = combination_row[1]
 
-                # Add a modern brand delimiter slide with gray background
+                # Add a clean minimal brand delimiter slide
                 try:
                     blank_layout = prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0]
                     brand_delimiter_slide = prs.slides.add_slide(blank_layout)
@@ -3373,7 +3330,7 @@ def create_presentation(template_path, excel_path, output_path):
 
                 from pptx.enum.shapes import MSO_SHAPE
 
-                # Background: Dark gray to differentiate from market slides
+                # Clean dark gray background (differentiate from market)
                 gray_bg = brand_delimiter_slide.shapes.add_shape(
                     MSO_SHAPE.RECTANGLE,
                     left=0,
@@ -3382,41 +3339,15 @@ def create_presentation(template_path, excel_path, output_path):
                     height=slide_height
                 )
                 gray_bg.fill.solid()
-                gray_bg.fill.fore_color.rgb = RGBColor(45, 45, 45)  # Dark gray
+                gray_bg.fill.fore_color.rgb = RGBColor(35, 35, 35)  # Very dark gray
                 gray_bg.line.fill.background()
 
-                # Green accent bar at top (Haleon green #30ea03)
-                green_bar_height = int(slide_height * 0.06)  # Slightly thinner than market
-                green_bar = brand_delimiter_slide.shapes.add_shape(
-                    MSO_SHAPE.RECTANGLE,
-                    left=0,
-                    top=0,
-                    width=slide_width,
-                    height=green_bar_height
-                )
-                green_bar.fill.solid()
-                green_bar.fill.fore_color.rgb = RGBColor(0x30, 0xea, 0x03)  # Haleon green
-                green_bar.line.fill.background()
-
-                # Green accent stripe on left side
-                green_stripe_width = int(slide_width * 0.015)
-                green_stripe = brand_delimiter_slide.shapes.add_shape(
-                    MSO_SHAPE.RECTANGLE,
-                    left=0,
-                    top=green_bar_height,
-                    width=green_stripe_width,
-                    height=slide_height - green_bar_height
-                )
-                green_stripe.fill.solid()
-                green_stripe.fill.fore_color.rgb = RGBColor(0x30, 0xea, 0x03)  # Haleon green
-                green_stripe.line.fill.background()
-
-                # Brand name text (white, bold)
+                # Brand name - large, centered, white text
                 brand_title = f"{display_brand_name}".upper()
                 text_box = brand_delimiter_slide.shapes.add_textbox(
-                    left=Inches(1.5),
-                    top=int(slide_height * 0.44),
-                    width=slide_width - Inches(3),
+                    left=Inches(1),
+                    top=int(slide_height * 0.45),
+                    width=slide_width - Inches(2),
                     height=Inches(1.5)
                 )
 
@@ -3428,27 +3359,10 @@ def create_presentation(template_path, excel_path, output_path):
                 for paragraph in text_frame.paragraphs:
                     paragraph.alignment = PP_ALIGN.CENTER
                     for run in paragraph.runs:
-                        run.font.size = Pt(44)  # Slightly smaller than market
+                        run.font.size = Pt(40)  # Slightly smaller than market
                         run.font.bold = True
                         run.font.name = FONT_FAMILY_LEGEND
                         run.font.color.rgb = RGBColor(255, 255, 255)  # White
-
-                # Market context above brand name (gray text)
-                market_box = brand_delimiter_slide.shapes.add_textbox(
-                    left=Inches(1.5),
-                    top=int(slide_height * 0.34),
-                    width=slide_width - Inches(3),
-                    height=Inches(0.5)
-                )
-                market_frame = market_box.text_frame
-                market_frame.text = display_market_name.upper()
-                for paragraph in market_frame.paragraphs:
-                    paragraph.alignment = PP_ALIGN.CENTER
-                    for run in paragraph.runs:
-                        run.font.size = Pt(16)
-                        run.font.bold = False
-                        run.font.name = FONT_FAMILY_LEGEND
-                        run.font.color.rgb = RGBColor(180, 180, 180)  # Light gray
 
                 logger.info(f"Added brand delimiter slide for: {brand_title}")
 
