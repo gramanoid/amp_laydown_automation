@@ -605,18 +605,24 @@ def _apply_title(slide, template_slide, combination_row, slide_title_suffix):
     for title_shape in title_shapes:
         text_frame = title_shape.text_frame
         text_frame.clear()
+
+        # Center align vertically (middle)
+        text_frame.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE
+
         paragraph = text_frame.paragraphs[0]
-        paragraph.text = title_text
+        # Convert to uppercase
+        paragraph.text = title_text.upper()
+
+        # Center align horizontally
+        paragraph.alignment = PP_ALIGN.CENTER
 
         if paragraph.runs:
             run = paragraph.runs[0]
-            _ensure_font_consistency(
-                run.font,
-                DEFAULT_FONT_NAME,
-                FONT_SIZE_TITLE,
-                True,
-                CLR_WHITE,
-            )
+            # Format with Verdana, 13pt, Bold, Green (#30ea03)
+            run.font.name = "Verdana"
+            run.font.size = Pt(13)
+            run.font.bold = True
+            run.font.color.rgb = RGBColor(0x30, 0xea, 0x03)
 
     return title_text
 
@@ -3431,7 +3437,7 @@ def create_presentation(template_path, excel_path, output_path):
             for split_idx, (split_table_data, split_metadata, is_continuation) in enumerate(table_splits):
                 # Add slide number to title if there are multiple splits
                 if len(table_splits) > 1:
-                    slide_title_suffix = f" ({split_idx + 1} of {len(table_splits)})"
+                    slide_title_suffix = f" ({split_idx + 1}/{len(table_splits)})"
                 else:
                     slide_title_suffix = ""
 
@@ -3578,7 +3584,7 @@ def _generate_autopptx_only(
         table_data, cell_metadata = table_result
         table_splits = _split_table_data_by_campaigns(table_data, cell_metadata)
         for split_idx, (split_table_data, _, _is_continuation) in enumerate(table_splits):
-            suffix = f" ({split_idx + 1} of {len(table_splits)})" if len(table_splits) > 1 else ""
+            suffix = f" ({split_idx + 1}/{len(table_splits)})" if len(table_splits) > 1 else ""
             title_text = _compose_title_text(combination_row, suffix)
             subtitle = suffix.strip() if suffix else None
 
