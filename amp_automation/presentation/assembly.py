@@ -2745,12 +2745,23 @@ def _add_table_row(table):
 
     Returns:
         The newly added row object
+
+    Raises:
+        ValueError: If the table has no rows to clone from
     """
     from copy import deepcopy
 
+    if len(table.rows) == 0:
+        raise ValueError("Cannot add row to table with no existing rows")
+
+    # Get the last row's XML element through the table rows
     tbl = table._tbl
-    # Clone the last row's XML element
-    last_tr = tbl.tr_lst[-1]
+    tr_list = list(tbl.iter_trs())
+
+    if not tr_list:
+        raise ValueError("Table XML contains no row elements")
+
+    last_tr = tr_list[-1]
     new_tr = deepcopy(last_tr)
 
     # Clear text content from all cells in the new row

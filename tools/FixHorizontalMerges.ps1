@@ -1,3 +1,23 @@
+<#
+.SYNOPSIS
+    Fix horizontal merges in PowerPoint tables using JSON instructions (COM-based).
+
+.DESCRIPTION
+    ⚠️ WARNING - DEPRECATED: COM AUTOMATION FOR DIAGNOSTIC TOOLS ⚠️
+
+    This diagnostic script uses PowerPoint COM automation and is DEPRECATED.
+    COM-based tools are slow and error-prone compared to Python alternatives.
+
+    **Replacement:**
+    Python-based post-processing handles merge operations automatically:
+      .\tools\PostProcessNormalize.ps1 -PresentationPath deck.pptx
+
+    **Status:** DEPRECATED as of 27 Oct 2025
+    **Documentation:** docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md
+
+    Only use for emergency repairs on legacy decks with specific merge issues!
+#>
+
 param(
     [Parameter(Mandatory = $true)]
     [string]$PresentationPath,

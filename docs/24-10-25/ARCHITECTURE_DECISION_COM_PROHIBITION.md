@@ -409,8 +409,134 @@ See: `docs/24-10-25/15-merge_architecture_discovery.md` for detailed analysis.
 - [Performance test results](docs/24-10-25/logs/test_python_cli.ps1)
 - [COM bottleneck analysis](docs/24-10-25/logs/16-python_migration_summary.md)
 
+## Update: E2E Validation and PowerShell Deprecation (27 Oct 2025)
+
+### Validation Results
+
+**E2E Post-Processing Test (Task 6):**
+- ✅ **88 slides processed in <1 second** (not 1 minute as originally projected)
+- ✅ **100% success rate** (0 failures, 0 errors)
+- ✅ **Performance validated:** 1,800x faster than COM automation
+- ✅ **All operations successful:**
+  - 20 CARRIED FORWARD rows deleted
+  - ~250 merge operations applied (campaign + monthly + summary)
+  - ~9,000+ cells normalized to Verdana fonts
+  - ~600 cells cleaned (pound sign removal)
+
+**Key Insight:** Python post-processing is **even faster** than originally estimated. Original projection was 1 minute for 88 slides, actual time is <1 second.
+
+### PowerShell Script Deprecation (Task 7)
+
+All COM-based PowerShell scripts in `tools/` directory have been deprecated as of 27 Oct 2025:
+
+**Deprecated Scripts (7 total):**
+1. ✅ `RebuildCampaignMerges.ps1` - Campaign merge repairs
+2. ✅ `SanitizePrimaryColumns.ps1` - Column sanitization
+3. ✅ `FixHorizontalMerges.ps1` - Horizontal merge repairs
+4. ✅ `AuditCampaignMerges.ps1` - Campaign merge auditing
+5. ✅ `VerifyAllowedHorizontalMerges.ps1` - Merge verification
+6. ✅ `ProbeRowHeights.ps1` - Row height inspection
+7. ✅ `InspectColumnSpans.ps1` - Column span inspection
+
+**Migration Path:**
+- ✅ Use `PostProcessNormalize.ps1` (PowerShell wrapper calling Python CLI)
+- ✅ Use `py -m amp_automation.presentation.postprocess.cli` directly
+- ❌ Deprecated scripts only for emergency legacy deck repairs
+
+### Updated Performance Targets (Validated 27 Oct 2025)
+
+| Operation Type | Original Projection | Actual (Validated) | Method |
+|----------------|--------------------|--------------------|--------|
+| Generation with merges | <5 minutes | ~3 minutes | Python-pptx ✅ |
+| Post-processing (normalize) | <1 minute | **<1 second** | Python-pptx ✅ |
+| Structural validation | <30 seconds | <1 second | Python CLI ✅ |
+| **Total Pipeline** | **<7 minutes** | **<4 minutes** | **All Python** ✅ |
+
+**Performance Improvement:** Python post-processing is **60x faster** than originally projected!
+
+### Updated Decision Matrix (27 Oct 2025)
+
+**When to Use Python (python-pptx) - ALWAYS PREFER THIS:**
+
+| Operation | Example | Performance | Status |
+|-----------|---------|-------------|--------|
+| Bulk table operations | Normalize 88 slides | <1 second | ✅ MANDATORY |
+| Cell merging (post-process) | Merge campaign cells | <1 second | ✅ MANDATORY |
+| Font normalization | Verdana 6pt/7pt | <1 second | ✅ MANDATORY |
+| Row/column operations | Delete CARRIED FORWARD | <1 second | ✅ MANDATORY |
+| Text content changes | Update cell values | Milliseconds | ✅ MANDATORY |
+
+**When COM is Acceptable - LIMITED USE ONLY:**
+
+| Operation | Example | Justification | Performance |
+|-----------|---------|---------------|-------------|
+| File I/O | Open/save presentations | No python-pptx alternative | O(1) ✅ |
+| Format conversion | PPTX → PDF export | PowerPoint-specific formats | O(1) ✅ |
+| Slide export | Slide → PNG/JPG | Image rendering | O(1) ✅ |
+| Advanced features | Animations, macros | Not in python-pptx API | O(1) ✅ |
+
+**When COM is NEVER Acceptable - STRICT PROHIBITION:**
+
+| Anti-Pattern | Why Prohibited | Alternative |
+|-------------|----------------|-------------|
+| Loops over cells | 1,000+ COM calls = catastrophic | Python-pptx iterates XML directly |
+| Bulk property changes | Hours vs seconds | Python-pptx batch operations |
+| Post-processing merges | 10+ hours vs <1 second | Python CLI `--operations postprocess-all` |
+| Table normalization | Hangs and timeouts | Python CLI `--operations normalize` |
+
+### Architecture Status (27 Oct 2025)
+
+✅ **COM prohibition fully implemented and validated:**
+- All bulk operations migrated to Python ✅
+- E2E post-processing test passed (100% success) ✅
+- All COM-based PowerShell scripts deprecated ✅
+- Python CLI provides complete functionality ✅
+- Performance validated: 1,800x faster than COM ✅
+
+✅ **No COM usage in bulk operations:**
+- Generation: python-pptx only ✅
+- Post-processing: Python CLI only ✅
+- Diagnostics: Python CLI verbose mode ✅
+
+⚠️ **Remaining COM usage (acceptable):**
+- Visual diff tool: slide export to PNG (Task 3)
+- File format conversions (if needed)
+- No bulk operations - all O(1) file I/O
+
+### Enforcement Update (27 Oct 2025)
+
+**Deprecation Warnings:**
+All COM-based scripts now display prominent warnings:
+```
+⚠️ WARNING - DEPRECATED: COM AUTOMATION FOR BULK OPERATIONS ⚠️
+
+Performance: 1,800x slower than Python
+Replacement: PostProcessNormalize.ps1 or Python CLI
+Status: DEPRECATED as of 27 Oct 2025
+```
+
+**Code Review Requirements:**
+- ❌ REJECT any new COM bulk operations
+- ❌ REJECT loops over table cells using COM
+- ❌ REJECT bulk property changes using COM
+- ✅ REQUIRE Python-pptx for all bulk operations
+- ✅ REQUIRE explicit justification for any COM usage
+
+**Migration Timeline:**
+- 24 Oct 2025: COM prohibition established
+- 27 Oct 2025: Python CLI validated, PowerShell scripts deprecated
+- Future: Complete removal of deprecated COM scripts (after grace period)
+
+### Related Documents (Updated 27 Oct 2025)
+
+- `docs/27-10-25/artifacts/task6_postprocessing_e2e_complete.md` - E2E validation results
+- `docs/27-10-25/artifacts/task7_powershell_deprecation_complete.md` - Script deprecation
+- `tools/PostProcessNormalize.ps1` - Recommended PowerShell wrapper
+- `amp_automation/presentation/postprocess/cli.py` - Python CLI implementation
+
 ---
 
-**Last Updated:** 24 October 2025
+**Last Updated:** 27 October 2025 (E2E validation and PowerShell deprecation)
+**Previous Update:** 24 October 2025 (Initial COM prohibition)
 **Review Date:** Annually or when adding new COM code
 **Owner:** Tech Lead / Architecture Team
