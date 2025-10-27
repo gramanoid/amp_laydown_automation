@@ -9,7 +9,9 @@ Automates PowerPoint presentation generation for Advertising Media Planning (AMP
 ## Contents
 - `amp_automation/` - Python pipeline (CLI, data processing, presentation generation)
 - `amp_automation/presentation/postprocess/` - Python post-processing (normalization, merges)
-- `tools/` - Validation scripts and DEPRECATED PowerShell COM scripts
+- `tools/validate/` - Data and structural validation tools
+- `tools/verify/` - Verification and post-processing checks
+- `docs/archive/` - Deprecated scripts and historical session documentation
 - `template/` - Excel data and PowerPoint template (V4 FINAL)
 - `docs/` - Architecture decisions, daily logs, project status
 - `openspec/` - Change proposals and project context
@@ -30,18 +32,20 @@ python -m amp_automation.presentation.postprocess.cli \
 
 Validate:
 ```bash
-python tools/validate_structure.py output/presentations/run_*/presentations.pptx \
+python tools/validate/validate_all_data.py output/presentations/run_*/presentations.pptx \
   --excel template/BulkPlanData_2025_10_14.xlsx
 ```
 
 ## Dependencies
 - Python 3.9+, python-pptx 1.0.2, pandas, openpyxl
-- PowerShell 7+ and PowerPoint (legacy scripts only)
+- See `requirements.txt` for full package list
 
 ## Testing & Validation
 ```bash
 pytest tests/  # Unit tests
-python tools/validate_structure.py  # Structural validation
+python tools/validate/validate_all_data.py  # Comprehensive validation (accuracy, format, completeness, reconciliation)
+python tools/validate/validate_structure.py  # Structural contract validation
+python tools/verify/verify_deck_fonts.py  # Font verification
 ```
 
 Full pipeline: generation → Python post-processing → validation. Target: <20 minutes for 88 slides.
