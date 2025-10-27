@@ -376,6 +376,34 @@ def _set_legend_text(shape, template_shape, text):
     run.font.bold = True
 
 
+def _ensure_title_shape(slide, slide_layout):
+    """
+    Ensure the title shape exists on the slide by copying from layout if needed.
+
+    Args:
+        slide: Target slide
+        slide_layout: Slide layout to copy from
+    """
+    shape_name = presentation_config.get("title", {}).get("shape") or SHAPE_NAME_TITLE
+
+    # Check if title shape already exists on the slide
+    title_shape = next((s for s in slide.shapes if getattr(s, "name", "") == shape_name), None)
+
+    if title_shape:
+        return  # Title shape already exists
+
+    # Copy title shape from layout
+    if slide_layout:
+        layout_title = next((s for s in slide_layout.shapes if getattr(s, "name", "") == shape_name and hasattr(s, "has_text_frame") and s.has_text_frame), None)
+        if layout_title:
+            try:
+                # Manually copy the text box from layout
+                _copy_text_box(layout_title, slide, new_name=shape_name)
+                logger.debug(f"Copied title shape '{shape_name}' from layout to slide")
+            except Exception as e:
+                logger.warning(f"Failed to copy title shape from layout: {e}")
+
+
 def _ensure_legend_shapes(slide, template_slide):
     if not LEGEND_GROUPS_CONFIG:
         return
@@ -3131,6 +3159,10 @@ def _populate_slide_content(new_slide, prs, combination_row, slide_title_suffix,
     """
 
     template_slide = prs.slides[0]
+    slide_layout = prs.slide_layouts[0]
+
+    # Ensure title shape exists on the slide (copy from layout if needed)
+    _ensure_title_shape(new_slide, slide_layout)
 
     title_text = _apply_title(new_slide, template_slide, combination_row, slide_title_suffix)
     _clear_comments(new_slide)
