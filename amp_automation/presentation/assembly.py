@@ -573,7 +573,7 @@ def _derive_campaign_blocks_for_table(table_data: list[list[str]]) -> list[tuple
     blocks: list[tuple[int, int]] = []
     idx = 1  # skip header
     total_label = "MONTHLY TOTAL (£ 000)"
-    skip_labels = {"", "-", total_label, "CARRIED FORWARD", "GRAND TOTAL"}
+    skip_labels = {"", "-", total_label, "GRAND TOTAL"}
 
     while idx < len(table_data) - 1:
         label = _normalize_row_label(table_data[idx][0] if idx < len(table_data) and table_data[idx] else "")
@@ -909,6 +909,7 @@ def _collect_monthly_values(media_df: pd.DataFrame) -> list[float]:
 def _build_campaign_monthly_total_row(
     row_idx: int,
     month_totals: list[float],
+    campaign_grp_total: float,
     cell_metadata: dict[tuple[int, int], dict[str, object]],
 ) -> list[str]:
     row: list[str] = ["MONTHLY TOTAL (£ 000)", "", ""]
@@ -931,7 +932,21 @@ def _build_campaign_monthly_total_row(
         not is_empty_formatted_value(total_formatted),
     )
 
-    row.extend(["", ""])
+    # Add GRP total for campaign (column 16)
+    grp_col_idx = total_col_idx + 1
+    grp_formatted = format_number(campaign_grp_total, is_grp=True) if campaign_grp_total > 0 else ""
+    row.append(grp_formatted)
+    _set_cell_metadata(
+        cell_metadata,
+        row_idx,
+        grp_col_idx,
+        campaign_grp_total,
+        "GRPs",
+        not is_empty_formatted_value(grp_formatted),
+    )
+
+    # % column remains blank (column 17)
+    row.append("")
     return row
 
 
@@ -1199,6 +1214,7 @@ def _build_campaign_block(
     total_row = _build_campaign_monthly_total_row(
         base_row_idx + len(block_rows),
         block_month_totals,
+        block_grp_total,
         cell_metadata,
     )
     block_rows.append(total_row)
@@ -1211,7 +1227,7 @@ def _build_grand_total_row(
     total_budget: float,
     grand_total_grp: float,
 ) -> list[str]:
-    row: list[str] = ["GRAND TOTAL", "", ""]
+    row: list[str] = ["BRAND TOTAL", "", ""]
     for value in monthly_totals:
         row.append(_format_budget_cell(value))
 
@@ -1219,54 +1235,6 @@ def _build_grand_total_row(
     row.append(format_number(grand_total_grp, is_grp=True))
     row.append(_format_percentage_cell(100.0))
     return row
-
-
-def _build_carried_forward_row(
-    month_totals: list[float],
-    total_budget: float,
-    grp_total: float,
-) -> list[str]:
-    row: list[str] = ["CARRIED FORWARD", "", ""]
-    for value in month_totals:
-        row.append(_format_budget_cell(value))
-
-    row.append(_format_total_budget(total_budget))
-    row.append(format_number(grp_total, is_grp=True) if grp_total else "")
-    row.append("")
-    return row
-
-
-def _build_carried_forward_metadata_values(
-    month_totals: list[float],
-    total_budget: float,
-    grp_total: float,
-) -> dict[int, dict[str, object]]:
-    metadata: dict[int, dict[str, object]] = {}
-    month_start_col = 3
-    for idx, value in enumerate(month_totals):
-        col_idx = month_start_col + idx
-        metadata[col_idx] = {
-            "has_data": abs(value) > ZERO_THRESHOLD,
-            "media_type": "Subtotal",
-            "value": value,
-        }
-
-    total_col_idx = month_start_col + len(month_totals)
-    metadata[total_col_idx] = {
-        "has_data": abs(total_budget) > ZERO_THRESHOLD,
-        "media_type": "Subtotal",
-        "value": total_budget,
-    }
-
-    grp_col_idx = total_col_idx + 1
-    if abs(grp_total) > ZERO_THRESHOLD:
-        metadata[grp_col_idx] = {
-            "has_data": True,
-            "media_type": "GRPs",
-            "value": grp_total,
-        }
-
-    return metadata
 
 
 def _build_grand_total_metadata_values(
@@ -2299,7 +2267,7 @@ def _split_table_data_by_campaigns(table_data, cell_metadata):
         media = _media_label(idx)
         if label in {"", "-"}:
             return bool(media and media != "-")
-        if label in {"MONTHLY TOTAL (� 000)", "GRAND TOTAL", "CARRIED FORWARD"}:
+        if label in {"MONTHLY TOTAL (� 000)", "GRAND TOTAL"}:
             return False
         return True
 
@@ -2381,26 +2349,10 @@ def _split_table_data_by_campaigns(table_data, cell_metadata):
         output_indices = current_indices.copy()
         inserted_meta_rows: dict[int, dict[int, dict[str, object]]] = {}
 
-        if has_remaining and SHOW_CARRIED_SUBTOTAL:
-            output_indices.append(-1)
-
+        # Build output rows from current indices (no CARRIED FORWARD rows)
         output_rows: list[list[str]] = []
-        for new_row_idx, original_idx in enumerate(output_indices):
-            if original_idx == -1:
-                carried_months = list(cumulative_months)
-                carried_row = _build_carried_forward_row(
-                    carried_months,
-                    cumulative_total,
-                    cumulative_grp,
-                )
-                output_rows.append(carried_row)
-                inserted_meta_rows[new_row_idx] = _build_carried_forward_metadata_values(
-                    carried_months,
-                    cumulative_total,
-                    cumulative_grp,
-                )
-            else:
-                output_rows.append(table_data[original_idx])
+        for original_idx in output_indices:
+            output_rows.append(table_data[original_idx])
 
         output_metadata = _extract_metadata_for_indices(
             cell_metadata,
@@ -2869,7 +2821,7 @@ def _populate_cloned_table(table_shape, table_data, cell_metadata):
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.debug("Unable to set atLeast row %s height rule: %s", row_index, exc)
 
-    subtotal_labels = {"SUBTOTAL", "CARRIED FORWARD", "MONTHLY TOTAL (£ 000)", "GRAND TOTAL"}
+    subtotal_labels = {"SUBTOTAL", "MONTHLY TOTAL (£ 000)", "GRAND TOTAL"}
 
     for row_idx in range(rows_needed):
         row = table.rows[row_idx]

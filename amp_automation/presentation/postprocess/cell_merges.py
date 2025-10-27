@@ -8,6 +8,7 @@ replacing slow COM-based PowerShell operations.
 import logging
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.util import Pt
+from pptx.dml.color import RGBColor
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +198,7 @@ def merge_summary_cells(table):
         cell_text = _get_cell_text(cell)
 
         # Check both text content AND background color
-        if (is_grand_total(cell_text) or is_carried_forward(cell_text)) and _has_gray_background(cell):
+        if is_grand_total(cell_text) and _has_gray_background(cell):
             normalized = normalize_label(cell_text)
 
             try:
@@ -222,6 +223,16 @@ def merge_summary_cells(table):
                     center_align=True,
                     vertical_center=True
                 )
+
+                # Apply green background if this is BRAND TOTAL
+                if "BRAND" in normalized:
+                    try:
+                        fill = merged_cell.fill
+                        fill.solid()
+                        fill.fore_color.rgb = RGBColor(0x30, 0xea, 0x03)  # Green #30ea03
+                        logger.debug(f"Applied green background to BRAND TOTAL row {row_idx}")
+                    except Exception as bg_error:
+                        logger.warning(f"Failed to apply green background to BRAND TOTAL: {bg_error}")
 
             except Exception as e:
                 logger.error(f"Failed to merge summary row {row_idx} ({normalized}): {e}")
@@ -267,30 +278,16 @@ def is_monthly_total(cell_text: str) -> bool:
 
 def is_grand_total(cell_text: str) -> bool:
     """
-    Check if cell text represents a GRAND TOTAL row.
+    Check if cell text represents a GRAND TOTAL or BRAND TOTAL row.
 
     Args:
         cell_text: Text content from cell in column 1
 
     Returns:
-        True if this is a GRAND TOTAL row
+        True if this is a GRAND TOTAL or BRAND TOTAL row
     """
     normalized = normalize_label(cell_text)
-    return "GRAND" in normalized and "TOTAL" in normalized
-
-
-def is_carried_forward(cell_text: str) -> bool:
-    """
-    Check if cell text represents a CARRIED FORWARD row.
-
-    Args:
-        cell_text: Text content from cell in column 1
-
-    Returns:
-        True if this is a CARRIED FORWARD row
-    """
-    normalized = normalize_label(cell_text)
-    return "CARRIED" in normalized and "FORWARD" in normalized
+    return ("GRAND" in normalized or "BRAND" in normalized) and "TOTAL" in normalized
 
 
 # Private helper functions
@@ -417,6 +414,9 @@ def _apply_cell_styling(cell, text: str = None, font_size: int = None,
     """
     try:
         text_frame = cell.text_frame
+
+        # Enable word wrap (wrap on full words only, no mid-word breaks)
+        text_frame.word_wrap = True
 
         # Set text if provided - this creates new runs with default formatting
         if text is not None:
