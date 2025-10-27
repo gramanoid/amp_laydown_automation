@@ -41,6 +41,7 @@ from . import (
     reset_primary_column_spans,
     reset_column_group,
     merge_campaign_cells,
+    merge_media_cells,
     merge_monthly_total_cells,
     merge_summary_cells,
     unmerge_all_cells,
@@ -73,6 +74,7 @@ class PostProcessorCLI:
         "unmerge-all",
         "delete-carried-forward",
         "merge-campaign",
+        "merge-media",
         "merge-monthly",
         "merge-summary",
         "fix-grand-total-wrap",
@@ -140,6 +142,8 @@ class PostProcessorCLI:
                 reset_column_group(table, max_cols=3)
             elif operation == "merge-campaign":
                 merge_campaign_cells(table)
+            elif operation == "merge-media":
+                merge_media_cells(table)
             elif operation == "merge-monthly":
                 merge_monthly_total_cells(table)
             elif operation == "merge-summary":

@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 # Font configuration (matching template requirements)
 FONT_NAME = "Verdana"
 CAMPAIGN_FONT_SIZE = 6  # Body text
+MEDIA_FONT_SIZE = 6  # Media column text
 MONTHLY_TOTAL_FONT_SIZE = 6  # Body text
 SUMMARY_FONT_SIZE = 7  # Bottom row
 
@@ -104,6 +105,144 @@ def merge_campaign_cells(table):
             campaign_name = None  # Reset campaign name too
 
     logger.info(f"Campaign merges completed: {merges_performed} merge(s)")
+    return merges_performed
+
+
+def merge_media_cells(table):
+    """
+    Merge media channel cells vertically in column 1 (MEDIA column).
+
+    This function identifies media channels (TELEVISION, DIGITAL, OOH, OTHER)
+    and merges the cells vertically to span all metric rows for that media channel.
+
+    Args:
+        table: python-pptx table object
+
+    Returns:
+        int: Number of media channel merges performed
+    """
+    logger.debug("Merging media channel cells")
+
+    row_count = len(table.rows)
+    merges_performed = 0
+
+    # Known media channels to look for
+    MEDIA_CHANNELS = ["TELEVISION", "DIGITAL", "OOH", "OTHER", "RADIO", "PRINT", "CINEMA"]
+
+    media_start = None
+    media_name = None
+
+    # Iterate through rows (skip header row index 0)
+    for row_idx in range(1, row_count):
+        cell = table.cell(row_idx, 1)  # Column 1 (0-indexed) is MEDIA column
+        cell_text = _get_cell_text(cell).strip().upper()
+
+        # Check if this is a media channel name
+        is_media_channel = any(channel in cell_text for channel in MEDIA_CHANNELS)
+
+        # Check if this row is empty or has dash (metric row)
+        is_empty_or_dash = cell_text in ["", "-"]
+
+        if is_media_channel:
+            # If we were tracking a previous media channel, merge it now
+            if media_start is not None and media_start < row_idx - 1:
+                media_end = row_idx - 1
+                try:
+                    top_cell = table.cell(media_start, 1)
+                    bottom_cell = table.cell(media_end, 1)
+
+                    # Check if already merged
+                    if not _cells_are_same(top_cell, bottom_cell):
+                        top_cell.merge(bottom_cell)
+                        merges_performed += 1
+                        logger.debug(f"Merged {media_name} rows {media_start}-{media_end}")
+
+                    # Apply styling to merged cell
+                    merged_cell = table.cell(media_start, 1)
+                    _apply_cell_styling(
+                        merged_cell,
+                        text=media_name,
+                        font_size=MEDIA_FONT_SIZE,
+                        bold=True,
+                        center_align=True,
+                        vertical_center=True
+                    )
+
+                except Exception as e:
+                    logger.error(f"Failed to merge {media_name} rows {media_start}-{media_end}: {e}")
+
+            # Start tracking this new media channel
+            media_start = row_idx
+            media_name = cell_text
+            logger.debug(f"Found media channel at row {row_idx}: {media_name}")
+
+        # Check if this row ends the current media channel (MONTHLY TOTAL or campaign name)
+        campaign_cell = table.cell(row_idx, 0)  # Column 0 (CAMPAIGN)
+        campaign_text = _get_cell_text(campaign_cell).strip().upper()
+        is_special_row = (
+            "MONTHLY" in campaign_text and "TOTAL" in campaign_text
+        ) or (
+            "GRAND" in campaign_text or "BRAND" in campaign_text
+        )
+
+        # If we hit a special row and were tracking a media channel, merge it
+        if is_special_row and media_start is not None:
+            media_end = row_idx - 1
+
+            if media_end >= media_start:
+                try:
+                    top_cell = table.cell(media_start, 1)
+                    bottom_cell = table.cell(media_end, 1)
+
+                    # Check if already merged
+                    if not _cells_are_same(top_cell, bottom_cell):
+                        top_cell.merge(bottom_cell)
+                        merges_performed += 1
+                        logger.debug(f"Merged {media_name} rows {media_start}-{media_end}")
+
+                    # Apply styling to merged cell
+                    merged_cell = table.cell(media_start, 1)
+                    _apply_cell_styling(
+                        merged_cell,
+                        text=media_name,
+                        font_size=MEDIA_FONT_SIZE,
+                        bold=True,
+                        center_align=True,
+                        vertical_center=True
+                    )
+
+                except Exception as e:
+                    logger.error(f"Failed to merge {media_name} rows {media_start}-{media_end}: {e}")
+
+            media_start = None
+            media_name = None
+
+    # Handle case where table ends while still tracking a media channel
+    if media_start is not None and media_start < row_count - 1:
+        media_end = row_count - 1
+        try:
+            top_cell = table.cell(media_start, 1)
+            bottom_cell = table.cell(media_end, 1)
+
+            if not _cells_are_same(top_cell, bottom_cell):
+                top_cell.merge(bottom_cell)
+                merges_performed += 1
+                logger.debug(f"Merged {media_name} rows {media_start}-{media_end}")
+
+            merged_cell = table.cell(media_start, 1)
+            _apply_cell_styling(
+                merged_cell,
+                text=media_name,
+                font_size=MEDIA_FONT_SIZE,
+                bold=True,
+                center_align=True,
+                vertical_center=True
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to merge {media_name} rows {media_start}-{media_end}: {e}")
+
+    logger.info(f"Media channel merges completed: {merges_performed} merge(s)")
     return merges_performed
 
 

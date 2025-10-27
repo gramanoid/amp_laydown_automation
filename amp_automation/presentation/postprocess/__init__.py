@@ -14,11 +14,12 @@ Definitive Post-Processing Workflow:
   1. unmerge_all_cells         - Clean slate: remove all rogue merges
   2. delete_carried_forward_rows - Remove invalid CARRIED FORWARD rows
   3. merge_campaign_cells      - Merge campaign names vertically (column A)
-  4. merge_monthly_total_cells - Merge MONTHLY TOTAL horizontally (gray cells, cols 1-3)
-  5. merge_summary_cells       - Merge GRAND TOTAL horizontally (cols 1-3)
-  6. fix_grand_total_wrapping  - Ensure single-line display in GRAND TOTAL
-  7. remove_pound_signs_from_totals - Remove £ symbols from total rows
-  8. normalize_table_fonts     - Enforce Verdana 6pt body, 7pt header
+  4. merge_media_cells         - Merge media channels vertically (column B: TELEVISION, DIGITAL, OOH, etc.)
+  5. merge_monthly_total_cells - Merge MONTHLY TOTAL horizontally (gray cells, cols 1-3)
+  6. merge_summary_cells       - Merge GRAND TOTAL horizontally (cols 1-3)
+  7. fix_grand_total_wrapping  - Ensure single-line display in GRAND TOTAL
+  8. remove_pound_signs_from_totals - Remove £ symbols from total rows
+  9. normalize_table_fonts     - Enforce Verdana 6pt body, 7pt header
 
 Performance: ~40 seconds for 88-slide deck (vs 10+ hours COM automation)
 Validation: 684 operations, 0 failures, 100% success rate
@@ -36,6 +37,7 @@ from .table_normalizer import (
 )
 from .cell_merges import (
     merge_campaign_cells,
+    merge_media_cells,
     merge_monthly_total_cells,
     merge_summary_cells,
 )
@@ -60,6 +62,7 @@ __all__ = [
     "remove_pound_signs_from_totals",
     # Cell merges
     "merge_campaign_cells",
+    "merge_media_cells",
     "merge_monthly_total_cells",
     "merge_summary_cells",
     # Span operations
