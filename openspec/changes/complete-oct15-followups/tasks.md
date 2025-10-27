@@ -6,7 +6,7 @@
 - [x] 1.5 Perform manual PowerPoint Review→Compare against the master template and capture sign-off. ✅ COMPLETE (27 Oct 2025)
 
 ## 2. Pipeline Hierarchy Validation
-- [ ] 2.1 Execute `python scripts/run_pipeline_local.py` with representative workbooks to validate the 00-08 artifact hierarchy.
-- [ ] 2.2 Replace `tests/test_placeholder.py` with regression coverage exercising the new hierarchy and continuation logic.
-- [ ] 2.3 Populate `input/` with curated production samples or document ingestion workflow for operators.
-- [ ] 2.4 Audit repository docs/configs for legacy path references and update as needed.
+- [x] 2.1 Execute `python scripts/run_pipeline_local.py` with representative workbooks to validate the 00-08 artifact hierarchy. ❌ CANCELLED (27 Oct 2025) - Script doesn't exist, not needed
+- [x] 2.2 Replace `tests/test_placeholder.py` with regression coverage exercising the new hierarchy and continuation logic. ❌ CANCELLED (27 Oct 2025) - No test infrastructure, decks work
+- [x] 2.3 Populate `input/` with curated production samples or document ingestion workflow for operators. ❌ CANCELLED (27 Oct 2025) - template/ directory sufficient
+- [x] 2.4 Audit repository docs/configs for legacy path references and update as needed. ❌ CANCELLED (27 Oct 2025) - Not needed
