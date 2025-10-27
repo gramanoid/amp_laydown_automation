@@ -2751,11 +2751,13 @@ def _add_table_row(table):
     """
     from copy import deepcopy
 
-    if len(table.rows) == 0:
+    num_rows = len(table.rows)
+    if num_rows == 0:
         raise ValueError("Cannot add row to table with no existing rows")
 
     # Get the last row's XML element directly from the table rows
-    last_row = table.rows[-1]
+    # Use positive indexing since _RowCollection may not support negative indexing
+    last_row = table.rows[num_rows - 1]
     last_tr = last_row._tr
     new_tr = deepcopy(last_tr)
 
@@ -2774,8 +2776,8 @@ def _add_table_row(table):
     tbl = table._tbl
     tbl.append(new_tr)
 
-    # Return the new row (table.rows refreshes automatically from XML)
-    return table.rows[-1]
+    # Return the new row (access via positive indexing)
+    return table.rows[len(table.rows) - 1]
 
 def _populate_cloned_table(table_shape, table_data, cell_metadata):
     table = table_shape.table
@@ -2793,8 +2795,12 @@ def _populate_cloned_table(table_shape, table_data, cell_metadata):
         )
         return False
 
+    # Debug: Log current table state
+    logger.debug(f"Cloned table has {len(table.rows)} rows, need {rows_needed} rows")
+
     # Ensure sufficient row capacity by appending rows as needed.
     while len(table.rows) < rows_needed:
+        logger.debug(f"Adding row {len(table.rows) + 1}/{rows_needed}")
         _add_table_row(table)
 
     for col_idx, width in enumerate(TABLE_COLUMN_WIDTHS[: len(table.columns)]):
