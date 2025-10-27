@@ -240,7 +240,9 @@ def _resolve_output_locations(
     folder_pattern = output_section.get("folder_pattern", "run_{timestamp}")
     create_timestamped = output_section.get("create_timestamped_folders", True)
 
-    timestamp = datetime.now().strftime(timestamp_format)
+    # Explicitly use local system time (not UTC)
+    from datetime import timezone
+    timestamp = datetime.now().astimezone().strftime(timestamp_format)
     run_dir = base / folder_pattern.format(timestamp=timestamp) if create_timestamped else base
 
     if args.output:

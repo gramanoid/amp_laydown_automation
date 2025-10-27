@@ -503,11 +503,13 @@ def _extract_export_date(excel_path, output_format):
             logger.debug("Failed to parse export date from filename '%s'", path_str)
 
     try:
+        # fromtimestamp() uses local time by default
         file_time = datetime.fromtimestamp(Path(excel_path).stat().st_mtime)
         return file_time.strftime(output_format)
     except Exception as exc:
         logger.debug("Falling back to current timestamp for export date: %s", exc)
-        return datetime.now().strftime(output_format)
+        # Explicitly use local system time (not UTC)
+        return datetime.now().astimezone().strftime(output_format)
 
 
 def _format_tile_value(config, value):
@@ -662,9 +664,16 @@ def _apply_campaign_cell_merges(table, table_data: list[list[str]]) -> None:
                     table.cell(merge_row, 0).text = ""
                 merged_cell = top_cell.merge(table.cell(merge_end, 0))
                 merged_label = str(table_data[start_idx][0] or "")
-                merged_cell.text = merged_label
+                # Apply smart line breaking to prevent mid-word breaks
+                print(f"DEBUG: Before smart_line_break: '{merged_label}'")
+                formatted_label = _smart_line_break(merged_label)
+                print(f"DEBUG: After smart_line_break: '{formatted_label}'")
+                merged_cell.text = formatted_label
                 try:
                     merged_cell.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
+                    # Make campaign names bold
+                    for run in merged_cell.text_frame.paragraphs[0].runs:
+                        run.font.bold = True
                 except Exception:
                     pass
                 try:
@@ -766,6 +775,7 @@ from amp_automation.presentation.tables import (
     ensure_font_consistency as _ensure_font_consistency,
     style_table_cell,
 )
+from amp_automation.presentation.postprocess.cell_merges import _smart_line_break
 from amp_automation.presentation.template_clone import TemplateCloneError, clone_template_shape, clone_template_table
 from amp_automation.utils.media import normalize_media_type
 from amp_automation.tooling import autopptx_adapter, aspose_converter, docstrange_validator

@@ -64,7 +64,8 @@ def configure_logger(
     logger.setLevel(level)
 
     log_directory.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Explicitly use local system time (not UTC)
+    timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
     log_path = log_directory / f"{prefix}_{timestamp}.log"
 
     if file_enabled:

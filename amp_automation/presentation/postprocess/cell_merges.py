@@ -14,10 +14,57 @@ logger = logging.getLogger(__name__)
 
 # Font configuration (matching template requirements)
 FONT_NAME = "Verdana"
-CAMPAIGN_FONT_SIZE = 5  # Campaign text (smaller to prevent mid-word breaks in narrow cells)
+CAMPAIGN_FONT_SIZE = 6  # Campaign text
 MEDIA_FONT_SIZE = 6  # Media column text
 MONTHLY_TOTAL_FONT_SIZE = 6  # Body text
-SUMMARY_FONT_SIZE = 7  # Bottom row
+BRAND_TOTAL_FONT_SIZE = 7  # BRAND TOTAL row (larger to stand out)
+SUMMARY_FONT_SIZE = 6  # Bottom row (regular rows)
+
+
+def _smart_line_break(text: str) -> str:
+    """
+    Intelligently break campaign names into multiple lines to prevent mid-word breaks.
+
+    Rules:
+    - Replace dashes with spaces (e.g., "FACES-CONDITION" becomes "FACES CONDITION")
+    - 1 word: keep as-is
+    - 2 words: split into 2 lines (1 word per line)
+    - 3 words: split into 2 lines (2 words on first line, 1 word on second line)
+    - 4+ words: split into 2 lines (half words on each line, rounded up on first line)
+
+    Args:
+        text: Campaign name text
+
+    Returns:
+        Text with newline characters inserted for optimal wrapping
+    """
+    if not text or text.strip() == "":
+        return text
+
+    # Replace dashes with spaces, then split by whitespace
+    normalized_text = text.replace("-", " ")
+    words = [word for word in normalized_text.split() if word]
+
+    logger.debug(f"Smart line break: '{text}' -> normalized: '{normalized_text}' -> words: {words}")
+
+    if len(words) <= 1:
+        # Single word or empty - no breaking needed, but use normalized text
+        result = normalized_text.strip()
+    elif len(words) == 2:
+        # 2 words: put each on separate line
+        result = "\n".join(words)
+    elif len(words) == 3:
+        # 3 words: 2 on first line, 1 on second line
+        result = f"{words[0]} {words[1]}\n{words[2]}"
+    else:
+        # 4+ words: split roughly in half
+        mid_point = (len(words) + 1) // 2  # Round up
+        first_line = " ".join(words[:mid_point])
+        second_line = " ".join(words[mid_point:])
+        result = f"{first_line}\n{second_line}"
+
+    logger.debug(f"Smart line break result: '{result}'")
+    return result
 
 
 def merge_campaign_cells(table):
@@ -87,11 +134,13 @@ def merge_campaign_cells(table):
                         merges_performed += 1
                         logger.debug(f"Merged campaign rows {campaign_start}-{campaign_end}: {campaign_name}")
 
-                    # Apply styling to merged cell and set cleaned campaign name
+                    # Apply styling to merged cell and set cleaned campaign name with smart line breaks
                     merged_cell = table.cell(campaign_start, 0)
+                    # Apply smart line breaking to prevent mid-word breaks
+                    formatted_campaign_name = _smart_line_break(campaign_name)
                     _apply_cell_styling(
                         merged_cell,
-                        text=campaign_name,  # Set the cleaned campaign name (removes "MONTHLY TOTAL" prefix)
+                        text=formatted_campaign_name,  # Set the campaign name with smart line breaks
                         font_size=CAMPAIGN_FONT_SIZE,
                         bold=True,
                         center_align=True,
@@ -352,18 +401,22 @@ def merge_summary_cells(table):
                     logger.debug(f"Merged summary row {row_idx} ({normalized}) across columns 1-3")
 
                 # Apply styling to merged cell
+                # Use 7pt for BRAND TOTAL, 6pt for other summary rows
                 merged_cell = table.cell(row_idx, 0)
+                is_brand_total = "BRAND" in normalized
+                font_size_to_use = BRAND_TOTAL_FONT_SIZE if is_brand_total else SUMMARY_FONT_SIZE
+
                 _apply_cell_styling(
                     merged_cell,
                     text=normalized,
-                    font_size=SUMMARY_FONT_SIZE,
+                    font_size=font_size_to_use,
                     bold=True,
                     center_align=True,
                     vertical_center=True
                 )
 
                 # Apply green background if this is BRAND TOTAL
-                if "BRAND" in normalized:
+                if is_brand_total:
                     try:
                         fill = merged_cell.fill
                         fill.solid()

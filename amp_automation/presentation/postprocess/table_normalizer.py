@@ -189,9 +189,10 @@ def normalize_table_fonts(table):
 
     Font rules:
     - Header row (row 0): Verdana, 7pt
-    - Bottom row (last row): Verdana, 7pt
-    - Campaign column (column 0, non-header): Verdana, 5pt (smaller to prevent mid-word breaks)
+    - BRAND TOTAL row (bottom row containing "BRAND" and "TOTAL"): Verdana, 7pt
+    - Campaign column (column 0, non-header): Verdana, 6pt
     - Body rows (all others): Verdana, 6pt
+    - Bottom row (other bottom rows): Verdana, 6pt
 
     Args:
         table: python-pptx table object
@@ -213,28 +214,24 @@ def normalize_table_fonts(table):
                 cell = table.cell(row_idx, col_idx)
                 text_frame = cell.text_frame
 
-                # Check if this is GRAND TOTAL row (needs 6pt not 7pt)
-                is_grand_total = False
+                # Check if this is BRAND TOTAL row (needs 7pt)
+                is_brand_total = False
                 if row_idx == row_count - 1:
                     first_cell = table.cell(row_idx, 0)
                     first_cell_text = first_cell.text_frame.text.strip().upper() if first_cell.text_frame else ""
-                    is_grand_total = "GRAND" in first_cell_text and "TOTAL" in first_cell_text
+                    is_brand_total = "BRAND" in first_cell_text and "TOTAL" in first_cell_text
 
                 # Determine font size based on row position and column
                 if row_idx == 0:
                     # Header row: Verdana 7pt
                     font_size = Pt(7)
                     header_cells += 1
-                elif row_idx == row_count - 1 and not is_grand_total:
-                    # Bottom row (but not GRAND TOTAL): Verdana 7pt
+                elif row_idx == row_count - 1 and is_brand_total:
+                    # BRAND TOTAL row: Verdana 7pt
                     font_size = Pt(7)
                     bottom_cells += 1
-                elif col_idx == 0 and row_idx > 0:
-                    # Campaign column (column 0, non-header): Verdana 5pt (smaller to prevent word breaks)
-                    font_size = Pt(5)
-                    body_cells += 1
                 else:
-                    # Body rows and GRAND TOTAL: Verdana 6pt
+                    # All other rows (campaign column, body, other bottom rows): Verdana 6pt
                     font_size = Pt(6)
                     body_cells += 1
 
