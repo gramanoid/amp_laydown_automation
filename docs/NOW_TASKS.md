@@ -1,34 +1,40 @@
 # NOW Tasks - Priority Work Items
 
-**LAST UPDATED:** 27 Oct 2025, 23:23 UTC+4
+**LAST UPDATED:** 27 Oct 2025, 23:31 UTC+4
 
-## Active Priority
+## Status: All Critical Issues Resolved ✓
 
-### 1. Reconciliation Data Source Investigation
-
-**PRIORITY: HIGH**
-
-**Problem:** Validation reports "expected data missing" for all reconciliation summary tiles.
-
-**Root Cause:** Analysis needed on Excel market/brand name mapping vs generated presentation values.
-
-**Investigation Steps:**
-1. Check Lumina Excel column mapping (`config.yaml`) against actual data
-2. Verify market/brand consolidation logic in data ingestion
-3. Compare expected vs actual summary tile values
-4. Validate reconciliation validator logic
-
-**Files Involved:**
-- `amp_automation/data/ingest.py` - data ingestion and consolidation
-- `amp_automation/validation/data_accuracy.py` - reconciliation validation
-- `config.yaml` - Lumina column mapping
-- Latest deck: `output/presentations/run_20251027_215710/`
-
-**Status:** Not started - requires data analysis
+The reconciliation validator now passes **100% (630/630 records)** on production decks.
 
 ---
 
 ## Archived/Completed Tasks
+
+✅ **Reconciliation Data Source Investigation** - FIXED (27 Oct, 23:31)
+- **Root Cause:** Three interrelated issues in validation/reconciliation.py:
+  1. Case-sensitivity mismatch: Market names in PPT titles vs DataFrame (e.g., "SOUTH AFRICA" vs inconsistent capitalization)
+  2. Pagination marker parsing: Regex expected "(n of m)" format but decks use "(n/m)" format (e.g., "(2/2)")
+  3. Market code mapping: Excel data uses abbreviations (e.g., "MOR") but presentations display full names (e.g., "MOROCCO")
+
+- **Solution Implemented:**
+  1. Added `_normalize_market_name()` function for case-insensitive country matching with MARKET_CODE_MAP translation
+  2. Added `_normalize_brand_name()` function for case-insensitive brand matching within markets
+  3. Fixed `_parse_title_tokens()` regex pattern to handle both pagination formats: `\((?:\d+\s+of\s+\d+|\d+/\d+)\)`
+  4. Updated `_candidate_years()` and `_compute_expected_summary()` to use normalization functions
+
+- **Files Modified:**
+  - `amp_automation/validation/reconciliation.py` (added 61 lines, updated 3 functions)
+
+- **Validation Results:**
+  - Before fix: 0% pass rate (0 records matched)
+  - After fix: 100% pass rate (630/630 records matched)
+  - Test deck: 144 slides, 63 unique market/brand combinations
+
+- **Commit:** `e27af1e`
+
+---
+
+## Archived/Previous Tasks
 
 ✅ **Campaign Cell Text Wrapping** - FIXED (27 Oct, 19:58)
 - Solution: Disabled word wrap (`text_frame.word_wrap = False`) to respect explicit `\n` line breaks
