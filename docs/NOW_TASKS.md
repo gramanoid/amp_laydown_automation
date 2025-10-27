@@ -1,102 +1,60 @@
 # NOW Tasks - Priority Work Items
 
-## 2025-10-27 - Campaign Cell Text Wrapping Issue
+**LAST UPDATED:** 27 Oct 2025, 23:23 UTC+4
+
+## Active Priority
+
+### 1. Reconciliation Data Source Investigation
 
 **PRIORITY: HIGH**
 
-### Problem
-Campaign names in column A are still breaking mid-word despite smart line breaking implementation:
-- "FACES-CONDITION" displays as "FACES-CONDITIO\nN" (breaks mid-word)
-- Should display as "FACES\nCONDITION" (two lines, clean break)
+**Problem:** Validation reports "expected data missing" for all reconciliation summary tiles.
 
-### What We've Tried
-1. ✅ Implemented `_smart_line_break()` function in `cell_merges.py`
-   - Replaces dashes with spaces
-   - Intelligently splits words: 2 words = 1 per line, 3 words = 2+1, etc.
-   - Function CONFIRMED WORKING via debug output
+**Root Cause:** Analysis needed on Excel market/brand name mapping vs generated presentation values.
 
-2. ✅ Applied smart breaks during table generation in `assembly.py:668`
-   - Text is correctly formatted with `\n` characters
-   - Debug confirmed: "FACES-CONDITION" → "FACES\nCONDITION"
+**Investigation Steps:**
+1. Check Lumina Excel column mapping (`config.yaml`) against actual data
+2. Verify market/brand consolidation logic in data ingestion
+3. Compare expected vs actual summary tile values
+4. Validate reconciliation validator logic
 
-3. ✅ Set font to 6pt Verdana, bold, centered
-4. ✅ Applied vertical cell merging
+**Files Involved:**
+- `amp_automation/data/ingest.py` - data ingestion and consolidation
+- `amp_automation/validation/data_accuracy.py` - reconciliation validation
+- `config.yaml` - Lumina column mapping
+- Latest deck: `output/presentations/run_20251027_215710/`
 
-### Root Cause
-PowerPoint is overriding our `\n` line breaks with its own word wrapping because:
-- Cell width is too narrow for campaign text
-- PowerPoint's auto word-wrap is breaking words mid-character
-- Our explicit line breaks are being ignored
-
-### Potential Solutions to Try Tomorrow
-
-#### Option 1: Increase Campaign Column Width
-- Widen column A to accommodate longer campaign names
-- File: `assembly.py` - find column width settings
-- May need to adjust overall table layout
-
-#### Option 2: Disable Word Wrap + Shrink to Fit
-- Set `text_frame.word_wrap = False`
-- Set `text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE`
-- File: `assembly.py` or `cell_merges.py`
-
-#### Option 3: Force Text Box Behavior
-- Investigate if we can set fixed text box properties that respect `\n`
-- May need to set different text properties during merge
-
-#### Option 4: Reduce Font Size Conditionally
-- For long campaign names (>15 chars), use 5pt instead of 6pt
-- User previously rejected 5pt globally, but might accept conditional
-
-### Files Involved
-- `amp_automation/presentation/assembly.py` (line 668)
-- `amp_automation/presentation/postprocess/cell_merges.py` (_smart_line_break)
-- Reference screenshot: Shows "FACES-CONDITIO\nN" breaking mid-word
-
-### Current Workaround
-None - issue remains unfixed
+**Status:** Not started - requires data analysis
 
 ---
 
-## 2025-10-27 - Campaign Cell Text Wrapping - FIXED ✅
+## Archived/Completed Tasks
 
-**FIX APPLIED:** 27 October 2025
+✅ **Campaign Cell Text Wrapping** - FIXED (27 Oct, 19:58)
+- Solution: Disabled word wrap (`text_frame.word_wrap = False`) to respect explicit `\n` line breaks
+- Files: `assembly.py:672`, `cell_merges.py:612`
+- Status: Verified working on production deck
 
-### Solution Implemented
-**Option 2: Disabled Word Wrap** to force PowerPoint to respect explicit `\n` line breaks.
+✅ **Slide 1 EMU/Legend Parity** - ARCHIVED (visual diff not required at this stage)
+- Decision: Archive as low-priority; focus on data validation first
+- Commit: `e32445b`
 
-### Changes Made
-1. **assembly.py:672** - Added `text_frame.word_wrap = False` during generation
-2. **cell_merges.py:612** - Changed from `word_wrap = True` to `word_wrap = False` during post-processing
+✅ **Test Suite Rehydration** - ARCHIVED (cancelled as not critical for current phase)
+- Decision: Defer regression tests until validation suite complete
+- Commit: `951bb14`
 
-### Root Cause
-The `_apply_cell_styling` function in `cell_merges.py` was explicitly enabling word wrap (`text_frame.word_wrap = True`), which caused PowerPoint to override the explicit `\n` line breaks inserted by `_smart_line_break()`.
-
-### How It Works Now
-1. `_smart_line_break()` converts "FACES-CONDITION" → "FACES\nCONDITION"
-2. Text is set with explicit `\n` characters
-3. `word_wrap = False` forces PowerPoint to respect the `\n` breaks
-4. Result: Clean two-line display without mid-word breaks
-
-### Files Modified
-- `amp_automation/presentation/assembly.py` (line 672)
-- `amp_automation/presentation/postprocess/cell_merges.py` (line 612)
-
-### Test Deck
-Generated: `output\presentations\run_20251027_195850\presentations.pptx`
-
-### Test Case
-Generate deck and check slide "RSA - SENSODYNE (25)":
-- CLINICAL WHITE ✓ (should be 2 lines)
-- DUOFLEX BODYGUARD ✓ (should be 2 lines)
-- FACES-CONDITION ✗ (currently breaks as "FACES-CONDITIO\nN")
-- FEEL FAMILIAR ✓ (should be 2 lines)
+✅ **Campaign Pagination Enhancement** - COMPLETED (max_rows=40 strategy verified)
+- 144-slide production deck validates successfully
+- Commit: `951bb14`
 
 ---
 
-## Completed Today (2025-10-27)
-- ✅ Fixed timestamp to use local system time (Arabian Standard Time UTC+4)
-- ✅ Implemented smart line breaking function
-- ✅ Added media channel vertical merging
-- ✅ Corrected font sizes: 6pt body, 7pt BRAND TOTAL
-- ✅ Removed debug print statements
+## Session Summary (27-10-25)
+- ✅ Timestamp fix (local system time, UTC+4)
+- ✅ Smart line breaking function implemented
+- ✅ Media channel vertical merging added
+- ✅ Font size corrections applied
+- ✅ Campaign text wrapping resolved
+- ✅ Structural validator enhanced
+- ✅ Data validation suite expanded (1,200+ lines)
+- ✅ Production 144-slide deck generated
