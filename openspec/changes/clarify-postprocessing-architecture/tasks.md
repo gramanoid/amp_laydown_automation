@@ -1,8 +1,8 @@
 # Tasks for Post-Processing Architecture Clarification
 
-## Status: In Progress
+## Status: Phase 2 Complete
 - **Created**: 2025-10-24
-- **Last Updated**: 2025-10-24 17:10
+- **Last Updated**: 2025-10-27 22:00
 - **Owner**: Architecture Team
 
 ## Completed Tasks
@@ -32,25 +32,27 @@
 - [x] **Create OpenSpec proposal**
   - This document and proposal.md
 
+### Phase 2: Integration & Testing (Completed 2025-10-27)
+- [x] **Update PowerShell scripts to call Python CLI** ✅ COMPLETE (27 Oct 2025)
+  - Modified `tools/PostProcessCampaignMerges.ps1` with deprecation warnings
+  - Created `tools/PostProcessNormalize.ps1` as Python wrapper
+  - All 7 legacy COM scripts deprecated with migration notices
+  - See: `docs/27-10-25/artifacts/task6_postprocessing_e2e_complete.md`
+
+- [x] **Run end-to-end pipeline test** ✅ COMPLETE (27 Oct 2025)
+  - Generated fresh deck: `run_20251027_215710` (144 slides, 603KB)
+  - Applied Python normalization: 100% success rate, <1 second execution
+  - Structural validation: All tables processed correctly, 0 errors
+  - Merge correctness verified: Campaign, monthly, summary merges all correct
+  - Results documented in: `docs/27-10-25/artifacts/task6_postprocessing_e2e_complete.md`
+
+- [x] **Update COM prohibition ADR** ✅ COMPLETE (27 Oct 2025)
+  - Updated `docs/24-10-25/ARCHITECTURE_DECISION_COM_PROHIBITION.md`
+  - Added decision matrix (lines 457-464)
+  - Clarified generation vs post-processing scope
+  - Added comprehensive guidance on when to use COM vs python-pptx
+
 ## Pending Tasks
-
-### Phase 2: Integration & Testing (Next Session)
-- [ ] **Update PowerShell scripts to call Python CLI**
-  - Modify `tools/PostProcessCampaignMerges.ps1` to use Python for normalization
-  - Remove or document merge operations as edge-case repairs
-  - Add error handling and logging integration
-
-- [ ] **Run end-to-end pipeline test**
-  - Generate fresh deck via CLI
-  - Apply Python normalization (no merge operations)
-  - Run structural validation
-  - Verify merge correctness and table formatting
-  - Document results and any issues found
-
-- [ ] **Update COM prohibition ADR**
-  - Clarify that COM restriction applies to post-processing bulk operations
-  - Note that generation-time merges are acceptable (not bulk operations)
-  - Add guidance on when to use COM vs. python-pptx
 
 ### Phase 3: Cleanup & Standardization (Future)
 - [ ] **Audit and deprecate redundant PowerShell scripts**
@@ -78,10 +80,10 @@
 ## Success Metrics
 - ✅ Python implementation completed and committed
 - ✅ Architecture discovery documented
-- ✅ Performance validated (<1 minute for 88 slides)
-- ⏭️ End-to-end test passes without errors
-- ⏭️ PowerShell scripts updated or deprecated
-- ⏭️ Documentation reflects new architecture
+- ✅ Performance validated (<1 second for 144 slides!)
+- ✅ End-to-end test passes without errors (100% success rate)
+- ✅ PowerShell scripts updated or deprecated (7 scripts)
+- ✅ Documentation reflects new architecture (ADR updated with guidance)
 
 ## Dependencies
 - Python 3.13+ with python-pptx
