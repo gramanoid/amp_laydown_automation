@@ -254,14 +254,17 @@ def _extract_slide_summary(slide, summary_cfg: dict) -> dict:
         "quarter_budgets": {
             key: _extract_shape_text(slide, config.get("shape"))
             for key, config in (summary_cfg.get("quarter_budgets", {}) or {}).items()
+            if not key.startswith("_") and isinstance(config, dict)
         },
         "media_share": {
             key: _extract_shape_text(slide, config.get("shape"))
             for key, config in (summary_cfg.get("media_share", {}) or {}).items()
+            if not key.startswith("_") and isinstance(config, dict)
         },
         "funnel_share": {
             key: _extract_shape_text(slide, config.get("shape"))
             for key, config in (summary_cfg.get("funnel_share", {}) or {}).items()
+            if not key.startswith("_") and isinstance(config, dict)
         },
     }
 
@@ -288,6 +291,8 @@ def _compute_expected_summary(df: pd.DataFrame, market: str, brand: str, year: i
 
     quarter_expectations = {}
     for key, config in (summary_cfg.get("quarter_budgets", {}) or {}).items():
+        if key.startswith("_") or not isinstance(config, dict):
+            continue
         months = QUARTER_MONTHS.get(key.lower())
         if not months:
             continue
@@ -301,6 +306,8 @@ def _compute_expected_summary(df: pd.DataFrame, market: str, brand: str, year: i
     media_expectations = {}
     media_group = subset.groupby("Mapped Media Type")["Total Cost"].sum()
     for key, config in (summary_cfg.get("media_share", {}) or {}).items():
+        if key.startswith("_") or not isinstance(config, dict):
+            continue
         lookup = _media_lookup_key(key)
         value = float(media_group.get(lookup, 0.0))
         proportion = 0.0 if total_cost <= 0 else value / total_cost
@@ -313,6 +320,8 @@ def _compute_expected_summary(df: pd.DataFrame, market: str, brand: str, year: i
     funnel_expectations = {}
     funnel_group = subset.groupby("Funnel Stage")["Total Cost"].sum()
     for key, config in (summary_cfg.get("funnel_share", {}) or {}).items():
+        if key.startswith("_") or not isinstance(config, dict):
+            continue
         lookup = _funnel_lookup_key(key)
         value = float(funnel_group.get(lookup, 0.0))
         proportion = 0.0 if total_cost <= 0 else value / total_cost

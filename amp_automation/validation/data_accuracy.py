@@ -138,7 +138,7 @@ def _parse_table_rows(rows) -> List[dict]:
             "is_monthly_total": campaign_cell.upper() == "MONTHLY TOTAL (£ 000)",
             "is_brand_total": campaign_cell.upper() == "BRAND TOTAL",
             "is_campaign": media_cell and media_cell != "-",
-            "values": _extract_month_values(cells[3:]),
+            "values": _extract_month_values(cells, start_index=3),
         }
 
         parsed.append(row_data)
@@ -146,14 +146,15 @@ def _parse_table_rows(rows) -> List[dict]:
     return parsed
 
 
-def _extract_month_values(cells) -> dict:
-    """Extract monthly values from table cells."""
+def _extract_month_values(cells, start_index: int = 0) -> dict:
+    """Extract monthly values from table cells starting at given index."""
     months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
     values = {}
 
     for month_idx, month in enumerate(months):
-        if month_idx < len(cells):
-            text = cells[month_idx].text.strip()
+        cell_idx = start_index + month_idx
+        if cell_idx < len(cells):
+            text = cells[cell_idx].text.strip()
             values[month] = parse_currency_value(text) if text and text != "-" else None
 
     return values
