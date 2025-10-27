@@ -101,11 +101,11 @@
       },
       "row_heights": {
         "header_inches": 0.176869,
-        "body_inches": 0.116667,
-        "subtotal_inches": 0.116667,
+        "body_inches": 0.001,
+        "subtotal_inches": 0.001,
         "header_emu": 161729,
-        "body_emu": 106680,
-        "subtotal_emu": 106680,
+        "body_emu": 914,
+        "subtotal_emu": 914,
         "trailer_emu": 0
       },
       "column_widths_emu": [

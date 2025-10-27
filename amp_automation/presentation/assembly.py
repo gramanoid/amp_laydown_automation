@@ -1459,8 +1459,8 @@ def _initialize_from_config(config: Config) -> None:
     TABLE_TOP_OVERRIDE = Inches(table_top_inches)
 
     TABLE_CELL_STYLE_CONTEXT = CellStyleContext(
-        margin_left_right_pt=3.6,
-        margin_emu_lr=MARGIN_EMU_LR,
+        margin_left_right_pt=0.0,
+        margin_emu_lr=0,
         default_font_name=TABLE_FONT_NAME,
         font_size_header=FONT_SIZE_HEADER,
         font_size_body=FONT_SIZE_BODY,
@@ -1666,8 +1666,8 @@ TABLE_TOP_OVERRIDE = Inches(
 )
 
 TABLE_CELL_STYLE_CONTEXT = CellStyleContext(
-    margin_left_right_pt=3.6,
-    margin_emu_lr=MARGIN_EMU_LR,
+    margin_left_right_pt=0.0,
+    margin_emu_lr=0,
     default_font_name=DEFAULT_FONT_NAME,
     font_size_header=FONT_SIZE_HEADER,
     font_size_body=FONT_SIZE_BODY,
@@ -2855,7 +2855,7 @@ def _populate_cloned_table(table_shape, table_data, cell_metadata):
     trailer_height = TABLE_ROW_HEIGHT_TRAILER
 
     def _apply_row_height(target_row, target_height, row_index, *, lock_exact=False):
-        """Assign height and optionally pin it via hRule='exact'."""
+        """Assign height and optionally pin it via hRule='exact' or 'atLeast'."""
         target_row.height = target_height
         if lock_exact:
             try:
@@ -2863,11 +2863,11 @@ def _populate_cloned_table(table_shape, table_data, cell_metadata):
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.debug("Unable to lock row %s height rule: %s", row_index, exc)
         else:
-            if target_row._tr.get("hRule") is not None:
-                try:
-                    del target_row._tr.attrib["hRule"]
-                except Exception as exc:  # pragma: no cover - defensive logging
-                    logger.debug("Unable to clear row %s height rule: %s", row_index, exc)
+            # Use 'atLeast' to allow rows to grow based on content but maintain minimum height
+            try:
+                target_row._tr.set("hRule", "atLeast")
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.debug("Unable to set atLeast row %s height rule: %s", row_index, exc)
 
     subtotal_labels = {"SUBTOTAL", "CARRIED FORWARD", "MONTHLY TOTAL (£ 000)", "GRAND TOTAL"}
 
@@ -2888,6 +2888,7 @@ def _populate_cloned_table(table_shape, table_data, cell_metadata):
         elif label in subtotal_labels:
             _apply_row_height(row, subtotal_height, row_idx, lock_exact=True)
         else:
+            # Body rows: use exact height for maximum compression
             _apply_row_height(row, body_height, row_idx, lock_exact=True)
 
         for col_idx in range(cols_needed):
