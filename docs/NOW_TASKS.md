@@ -56,6 +56,35 @@ PowerPoint is overriding our `\n` line breaks with its own word wrapping because
 ### Current Workaround
 None - issue remains unfixed
 
+---
+
+## 2025-10-27 - Campaign Cell Text Wrapping - FIXED ✅
+
+**FIX APPLIED:** 27 October 2025
+
+### Solution Implemented
+**Option 2: Disabled Word Wrap** to force PowerPoint to respect explicit `\n` line breaks.
+
+### Changes Made
+1. **assembly.py:672** - Added `text_frame.word_wrap = False` during generation
+2. **cell_merges.py:612** - Changed from `word_wrap = True` to `word_wrap = False` during post-processing
+
+### Root Cause
+The `_apply_cell_styling` function in `cell_merges.py` was explicitly enabling word wrap (`text_frame.word_wrap = True`), which caused PowerPoint to override the explicit `\n` line breaks inserted by `_smart_line_break()`.
+
+### How It Works Now
+1. `_smart_line_break()` converts "FACES-CONDITION" → "FACES\nCONDITION"
+2. Text is set with explicit `\n` characters
+3. `word_wrap = False` forces PowerPoint to respect the `\n` breaks
+4. Result: Clean two-line display without mid-word breaks
+
+### Files Modified
+- `amp_automation/presentation/assembly.py` (line 672)
+- `amp_automation/presentation/postprocess/cell_merges.py` (line 612)
+
+### Test Deck
+Generated: `output\presentations\run_20251027_195850\presentations.pptx`
+
 ### Test Case
 Generate deck and check slide "RSA - SENSODYNE (25)":
 - CLINICAL WHITE ✓ (should be 2 lines)

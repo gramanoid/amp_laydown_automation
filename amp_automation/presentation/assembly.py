@@ -668,6 +668,8 @@ def _apply_campaign_cell_merges(table, table_data: list[list[str]]) -> None:
                 formatted_label = _smart_line_break(merged_label)
                 merged_cell.text = formatted_label
                 try:
+                    # Disable word wrap to force PowerPoint to respect explicit \n line breaks
+                    merged_cell.text_frame.word_wrap = False
                     merged_cell.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
                     # Make campaign names bold
                     for run in merged_cell.text_frame.paragraphs[0].runs:

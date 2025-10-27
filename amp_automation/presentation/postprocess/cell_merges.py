@@ -606,10 +606,12 @@ def _apply_cell_styling(cell, text: str = None, font_size: int = None,
     try:
         text_frame = cell.text_frame
 
-        # Enable word wrap (wrap on full words only, no mid-word breaks)
-        text_frame.word_wrap = True
+        # DISABLE word wrap to force PowerPoint to respect explicit \n line breaks
+        # The _smart_line_break function inserts strategic \n characters to break
+        # campaign names cleanly (e.g., "FACES\nCONDITION" instead of "FACES-CONDITIO\nN")
+        text_frame.word_wrap = False
 
-        # Enable text auto-fit: shrink text if needed to prevent overflow and mid-word breaks
+        # Enable text auto-fit: shrink text if needed to prevent overflow
         # This allows PowerPoint to automatically reduce font size to fit text properly
         text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
 
