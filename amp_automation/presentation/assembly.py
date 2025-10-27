@@ -566,7 +566,7 @@ def _apply_title(slide, template_slide, combination_row, slide_title_suffix):
     title_text = _compose_title_text(combination_row, slide_title_suffix)
 
     if not title_shape:
-        logger.warning("Title shape '%s' not available on slide", shape_name)
+        logger.debug("Title shape '%s' not available on slide", shape_name)
         return title_text
 
     text_frame = title_shape.text_frame
