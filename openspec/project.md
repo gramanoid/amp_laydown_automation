@@ -1,21 +1,22 @@
 # Project Context
 
-## Immediate Next Steps (24 Oct 2025)
-Last verified on 24-10-25 (end of session)
+## Immediate Next Steps (27 Oct 2025)
+Last verified on 27-10-25 (end of session)
 
-**COMPLETED (24 Oct 2025):**
-1. ✅ **Python post-processing migration complete:** Full cell merge logic implemented in `cell_merges.py` (354 lines). PowerShell COM scripts replaced with Python CLI. Performance: ~30 seconds for 88 slides (vs 10+ hours COM).
-2. ✅ **E2E pipeline validated:** Generation → Python normalization → validation tested successfully. Full pipeline completes in <7 minutes.
-3. ✅ **PowerShell integration complete:** Created `PostProcessNormalize.ps1` wrapper that calls Python CLI. Deprecated `PostProcessCampaignMerges.ps1`.
-4. ✅ **Documentation complete:** COM prohibition ADR clarified, OpenSpec proposal created, migration guide written, CLI help text updated.
-5. ✅ **8-step workflow finalized:** unmerge-all → delete-carried-forward → merge-campaign → merge-monthly → merge-summary → fix-grand-total-wrap → remove-pound-totals → normalize-fonts. Validated: 76 slides, 0 failures, 100% success.
-6. ✅ **Production deck generated:** `run_20251024_200957` (88 slides, 556KB) with complete post-processing applied.
+**COMPLETED (24-27 Oct 2025):**
+1. ✅ **Python post-processing migration complete:** Full cell merge logic implemented in `cell_merges.py`. PowerShell COM scripts replaced with Python CLI. Performance: ~30 seconds for 88 slides (vs 10+ hours COM).
+2. ✅ **8-step workflow finalized:** unmerge-all → delete-carried-forward → merge-campaign → merge-media → merge-monthly → merge-summary → fix-grand-total-wrap → remove-pound-totals → normalize-fonts. Validated: 100% success rate.
+3. ✅ **Timestamp fix (27 Oct):** Local system time (Arabian Standard Time UTC+4) used across all modules (cli.py, logging.py, assembly.py).
+4. ✅ **Media channel merging (27 Oct):** Vertical cell merging for TELEVISION, DIGITAL, OOH, OTHER media channels.
+5. ✅ **Font corrections (27 Oct):** 6pt body/campaign/bottom rows, 7pt header/BRAND TOTAL.
+6. ✅ **Smart line breaking (27 Oct):** _smart_line_break function implemented (dash handling, word-count-based splitting).
+7. ✅ **Production deck generated:** `run_20251027_193259` (88 slides) with all formatting improvements.
 
 **CURRENT PRIORITIES:**
-1. **Slide 1 EMU/legend parity:** Visual diff to compare generated vs template. Fix any geometry/legend discrepancies.
-2. **Test suite rehydration:** Fix/update `tests/test_tables.py`, `tests/test_structural_validator.py`. Add regression tests for merge correctness.
-3. **Campaign pagination design:** Design strategy to prevent campaign splits across slides. Create OpenSpec proposal once design is complete.
-4. **Python normalization expansion:** Consider row height normalization, cell margin/padding (if needed based on validation results).
+1. **Fix campaign cell text wrapping:** PowerPoint overriding explicit line breaks. Solutions: widen column A, disable word-wrap, or conditional font size. See `docs/NOW_TASKS.md`.
+2. **Slide 1 EMU/legend parity:** Visual diff to compare generated vs template. Fix any geometry/legend discrepancies.
+3. **Test suite rehydration:** Fix/update `tests/test_tables.py`, `tests/test_structural_validator.py`. Add regression tests for merge correctness.
+4. **Campaign pagination design:** Design strategy to prevent campaign splits across slides. Create OpenSpec proposal once design is complete.
 
 ## Purpose
 Automate Annual Marketing Plan laydown decks by converting standardized Lumina Excel exports into pixel-accurate PowerPoint presentations that mirror the `Template_V4_FINAL_071025.pptx` master while preserving financial and media metrics.
@@ -39,8 +40,8 @@ Automate Annual Marketing Plan laydown decks by converting standardized Lumina E
 ### Architecture Patterns
 - CLI (`amp_automation.cli.main`) orchestrates runs via config
 - Data ingestion normalizes Lumina exports using configured column indices
-- **Presentation assembly:** Clones template shapes, enforces styling, **creates cell merges during generation** (assembly.py:629,649)
-- **Post-processing:** Python-based normalization (`amp_automation/presentation/postprocess/`) via CLI or PowerShell wrapper
+- **Presentation assembly:** Clones template shapes, enforces styling, **creates cell merges during generation** (assembly.py with _smart_line_break for campaign names)
+- **Post-processing:** Python-based normalization (`amp_automation/presentation/postprocess/`) via CLI or PowerShell wrapper. Includes media channel vertical merging, font normalization, and smart text formatting.
 - Validation: `tools/validate_structure.py`, `tools/visual_diff.py`, Zen MCP + PowerPoint Review > Compare
 - Change management via OpenSpec (`openspec/changes/*`)
 

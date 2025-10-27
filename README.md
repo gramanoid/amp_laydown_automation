@@ -1,5 +1,5 @@
 # AMP Laydowns Automation
-**Last Updated:** 24-10-25
+**Last Updated:** 27-10-25
 
 ## Purpose
 Automates PowerPoint presentation generation for Advertising Media Planning (AMP) laydowns. Converts Lumina Excel exports into decks that mirror `Template_V4_FINAL_071025.pptx` while preserving template geometry, fonts, and layout.
@@ -47,7 +47,10 @@ python tools/validate_structure.py  # Structural validation
 Full pipeline: generation → Python post-processing → validation. Target: <20 minutes for 88 slides.
 
 ## Notes
+SKIPPED: Section content remains current as of 27-10-25
 - Use Python (python-pptx) for ALL bulk table operations
 - COM permitted ONLY for file I/O, exports, features unavailable in python-pptx
 - Performance targets: deck generation <5min, normalization <5min, merges <10min
-- See `docs/24-10-25/BRAIN_RESET_241025.md` for current project status
+- See `docs/27-10-25/BRAIN_RESET_271025.md` for current project status
+
+Last verified on 27-10-25

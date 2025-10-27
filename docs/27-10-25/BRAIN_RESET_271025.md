@@ -32,15 +32,19 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
 - AutoPPTX stays disabled except for negative tests; structural scripts, visual diff, and PowerPoint COM probes provide validation coverage.
 
 # Current Position
-**POST-PROCESSING WORKFLOW COMPLETE:** 8-step Python-based workflow finalized and validated (100% success rate, 76 slides, 0 failures). Workflow: unmerge-all → delete-carried-forward → merge-campaign → merge-monthly → merge-summary → fix-grand-total-wrap → remove-pound-totals → normalize-fonts. Fresh deck generated successfully (`run_20251024_200957`, 88 slides, 556KB).
+**POST-PROCESSING WORKFLOW COMPLETE:** 8-step Python-based workflow finalized and validated (100% success rate, 76 slides, 0 failures). Workflow: unmerge-all → delete-carried-forward → merge-campaign → merge-media → merge-monthly → merge-summary → fix-grand-total-wrap → remove-pound-totals → normalize-fonts. Fresh deck generated successfully with all formatting improvements applied.
 
-**Session 27-10-25 Starting Point:**
-- Fresh session with clean slate
-- Production-ready pipeline available
-- Ready to tackle next priorities
+**Session 27-10-25 Work Completed:**
+- ✅ Fixed timestamp generation to use local system time (Arabian Standard Time UTC+4) across all modules
+- ✅ Implemented smart line breaking for campaign names (prevents mid-word breaks via _smart_line_break function)
+- ✅ Added media channel vertical merging (TELEVISION, DIGITAL, OOH, OTHER, etc.)
+- ✅ Corrected font sizes: 6pt body/bottom rows, 7pt BRAND TOTAL, 6pt campaign column
+- ✅ Removed debug output from production code
+- ⚠️ Campaign text wrapping issue identified: PowerPoint overriding explicit line breaks (documented in NOW_TASKS.md)
 
 # Now / Next / Later
 - **Now:**
+  - [ ] **Fix campaign cell text wrapping** - Investigate column width increase or word-wrap disable (see NOW_TASKS.md)
   - [ ] **Slide 1 EMU/legend parity work** - Visual diff to compare generated vs template, fix geometry/legend discrepancies
   - [ ] **Test suite rehydration** - Fix/update `tests/test_tables.py`, `tests/test_structural_validator.py`
   - [ ] **Add regression tests** - Test merge correctness, font normalization, row formatting
@@ -55,15 +59,17 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
   - [ ] **Performance profiling** - Identify any bottlenecks in generation or post-processing pipeline
 
 # 2025-10-27 Session Notes
-- Session started fresh with context from 24-10-25
-- No commits yet today
-- Repository has untracked files from previous sessions (scripts/, tools/debug/, diagnostic utilities)
+- Completed formatting improvements: timestamp fix, smart line breaking, media merging, font corrections
+- Latest deck: `run_20251027_193259` (generated with correct local timestamp 19:32:59 AST)
+- Commits: d6f044a (timestamp fix), ace42e4 (5pt font attempt), 54df939 (media merging)
+- Untracked: docs/NOW_TASKS.md (campaign wrapping issue documentation)
 
 ## Immediate TODOs
-- [ ] Review Slide 1 geometry requirements from template
-- [ ] Set up visual diff workflow with baseline comparison
-- [ ] Identify which pytest suites need immediate attention
-- [ ] Document test rehydration priorities
+- [x] Fixed timestamp to use local system time across all modules
+- [x] Implemented smart line breaking (_smart_line_break function)
+- [x] Added media channel vertical merging
+- [x] Corrected font sizes (6pt body, 7pt BRAND TOTAL)
+- [ ] Fix campaign cell width to prevent PowerPoint word-wrap override (tomorrow's priority)
 
 ## Longer-Term Follow-Ups
 - Complete campaign pagination design with Q&A-led discovery
@@ -96,19 +102,24 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
 - Template EMUs, centered alignment, and font sizes must remain faithful to `Template_V4_FINAL_071025.pptx`; adjust scripts cautiously to preserve pixel parity.
 
 ## Session Metadata
-- Latest deck: `D:\Drive\projects\work\AMP Laydowns Automation\output\presentations\run_20251024_200957\AMP_Presentation_20251024_200957.pptx` (production deck - 88 slides, 556KB).
-- Latest commit: `6c6f65e` - "docs: finalize 8-step post-processing workflow and end-of-session docs"
-- Key documentation: `docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md` (comprehensive ADR), `README.md` (COM prohibition warning), `docs/24-10-25.md` (previous session).
-- Python module: `amp_automation/presentation/postprocess/` (cli.py, table_normalizer.py, cell_merges.py, unmerge_operations.py, span_operations.py).
+- Latest deck: `D:\Drive\projects\work\AMP Laydowns Automation\output\presentations\run_20251027_193259\AMP_Presentation_20251027_193259.pptx` (88 slides, with media merging and formatting improvements).
+- Latest commit: `d6f044a` - "fix: use local system time for all timestamps instead of UTC"
+- Key documentation: `docs/ARCHITECTURE_DECISION_COM_PROHIBITION.md` (comprehensive ADR), `README.md` (COM prohibition warning), `docs/NOW_TASKS.md` (campaign wrapping issue).
+- Python module: `amp_automation/presentation/postprocess/` (cli.py, table_normalizer.py, cell_merges.py with _smart_line_break, unmerge_operations.py, span_operations.py).
 - Timezone anchor: Abu Dhabi/Dubai (UTC+04); today is 27-10-25 (DD-MM-YY).
 - Outstanding checklist (carry forward):
+  - [ ] Fix campaign cell text wrapping (PowerPoint override issue)
   - [ ] Set up visual diff baseline for Slide 1 geometry comparison
   - [ ] Rehydrate pytest test suites with current pipeline state
   - [ ] Design campaign pagination to prevent across-slide splits
   - [ ] Document Zen MCP evidence capture workflow
 
 ## How to validate this doc
-- Confirm the production PPTX exists at `output\presentations\run_20251024_200957\AMP_Presentation_20251024_200957.pptx` and passes structural validation.
-- Run the CLI deck generation with logging at INFO to ensure completion within ~5 minutes.
-- Execute Python post-processing on a test deck and verify 100% success rate with 0 failures.
-- Verify all fonts normalized to Verdana 6-7pt (except GRAND TOTAL at 6pt with special formatting).
+- Confirm the latest PPTX exists at `output\presentations\run_20251027_193259\AMP_Presentation_20251027_193259.pptx`
+- Run the CLI deck generation with logging at INFO to ensure completion within ~5 minutes
+- Execute Python post-processing on a test deck and verify 100% success rate with 0 failures
+- Verify fonts: 6pt body/campaign/bottom rows, 7pt header/BRAND TOTAL
+- Check media channel vertical merging (TELEVISION, DIGITAL, OOH, OTHER)
+- Verify timestamps use local system time (Arabian Standard Time UTC+4)
+
+Last verified on 27-10-25 (end of session)

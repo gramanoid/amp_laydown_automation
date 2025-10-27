@@ -1,5 +1,5 @@
 # OpenSpec Instructions
-Last verified on 2025-10-21
+Last verified on 27-10-25
 
 Instructions for AI coding assistants using OpenSpec for spec-driven development.
 

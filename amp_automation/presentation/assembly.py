@@ -665,9 +665,7 @@ def _apply_campaign_cell_merges(table, table_data: list[list[str]]) -> None:
                 merged_cell = top_cell.merge(table.cell(merge_end, 0))
                 merged_label = str(table_data[start_idx][0] or "")
                 # Apply smart line breaking to prevent mid-word breaks
-                print(f"DEBUG: Before smart_line_break: '{merged_label}'")
                 formatted_label = _smart_line_break(merged_label)
-                print(f"DEBUG: After smart_line_break: '{formatted_label}'")
                 merged_cell.text = formatted_label
                 try:
                     merged_cell.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
