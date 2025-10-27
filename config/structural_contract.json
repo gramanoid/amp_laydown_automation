@@ -59,9 +59,11 @@
     ]
   },
   "campaign_total_label": "MONTHLY TOTAL (£ 000)",
-  "grand_total_label": "GRAND TOTAL",
+  "grand_total_label": "BRAND TOTAL",
   "required_shapes": [
-    "MainDataTable",
+    "MainDataTable"
+  ],
+  "last_slide_only_shapes": [
     "QuarterBudgetQ1",
     "QuarterBudgetQ2",
     "QuarterBudgetQ3",

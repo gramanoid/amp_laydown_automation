@@ -69,6 +69,25 @@ def _validate_required_shapes(slide, required_shapes: List[str]) -> List[str]:
     return missing
 
 
+def _table_has_grand_total(table, grand_total_label: str) -> bool:
+    """Check if the table contains a grand total row (indicates last slide of brand/market)."""
+    grand_total_normalized = _normalize_metric(grand_total_label)
+    for row in _iter_table_rows(table)[1:]:  # Skip header
+        cells = row.cells
+        if cells:
+            campaign_cell = _normalize_metric(cells[0].text)
+            if campaign_cell == grand_total_normalized:
+                return True
+    return False
+
+
+def _validate_last_slide_shapes(slide, last_slide_only_shapes: List[str]) -> List[str]:
+    """Validate that all last-slide-only shapes exist on the slide."""
+    available = {shape.name for shape in slide.shapes}
+    missing = [shape for shape in last_slide_only_shapes if shape not in available]
+    return missing
+
+
 def _validate_table_header(table, expected_header: List[str]) -> Optional[str]:
     header_cells = [cell for cell in table.rows[0].cells]
     observed = [_normalize(cell.text).upper() for cell in header_cells]
@@ -81,6 +100,7 @@ def _validate_table_header(table, expected_header: List[str]) -> Optional[str]:
 def _validate_media_sections(
     table,
     contract: dict[str, object],
+    is_final_slide: bool = True,
 ) -> List[str]:
     issues: List[str] = []
     expected_order = {media: idx for idx, media in enumerate(contract["media_order"])}
@@ -148,7 +168,8 @@ def _validate_media_sections(
                 f"Metric '{metric_cell}' in row {idx + 1} is not allowed for media '{current_media}'."
             )
 
-    if not seen_grand_total:
+    # Only check for grand total on final slides (indicated by is_final_slide parameter)
+    if is_final_slide and not seen_grand_total:
         issues.append("Grand total row not found in table.")
 
     return issues
@@ -206,16 +227,34 @@ def validate_presentation(
         if header_error:
             issues.append(Issue(slide_index, header_error))
 
-        for message in _validate_media_sections(table_shape.table, contract):
+        # Determine if this is a final slide (has grand total row)
+        is_final_slide = _table_has_grand_total(table_shape.table, contract["grand_total_label"])
+
+        for message in _validate_media_sections(table_shape.table, contract, is_final_slide):
             issues.append(Issue(slide_index, message))
 
-        footer_shape = next(
-            (shape for shape in slide.shapes if shape.name == contract["footer_shape"]),
-            None,
-        )
-        footer_error = _validate_footer(footer_shape, expected_date)
-        if footer_error:
-            issues.append(Issue(slide_index, footer_error))
+        if is_final_slide:
+            # Check for last-slide-only shapes if they're defined in the contract
+            if "last_slide_only_shapes" in contract:
+                missing_last_slide_shapes = _validate_last_slide_shapes(
+                    slide, contract["last_slide_only_shapes"]
+                )
+                if missing_last_slide_shapes:
+                    issues.append(
+                        Issue(
+                            slide_index,
+                            f"Missing last-slide-only shapes: {', '.join(missing_last_slide_shapes)}",
+                        )
+                    )
+
+            # Validate footer (which appears on final slides)
+            footer_shape = next(
+                (shape for shape in slide.shapes if shape.name == contract["footer_shape"]),
+                None,
+            )
+            footer_error = _validate_footer(footer_shape, expected_date)
+            if footer_error:
+                issues.append(Issue(slide_index, footer_error))
 
     return issues
 
