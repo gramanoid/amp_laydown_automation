@@ -44,7 +44,7 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
 
 # Now / Next / Later
 - **Now:**
-  - [ ] **Fix campaign cell text wrapping** - Investigate column width increase or word-wrap disable (see NOW_TASKS.md)
+  - [x] **Fix campaign cell text wrapping** - ✅ RESOLVED: Disabled word_wrap in assembly.py and cell_merges.py (see NOW_TASKS.md)
   - [ ] **Slide 1 EMU/legend parity work** - Visual diff to compare generated vs template, fix geometry/legend discrepancies
   - [ ] **Test suite rehydration** - Fix/update `tests/test_tables.py`, `tests/test_structural_validator.py`
   - [ ] **Add regression tests** - Test merge correctness, font normalization, row formatting
@@ -60,16 +60,17 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
 
 # 2025-10-27 Session Notes
 - Completed formatting improvements: timestamp fix, smart line breaking, media merging, font corrections
-- Latest deck: `run_20251027_193259` (generated with correct local timestamp 19:32:59 AST)
-- Commits: d6f044a (timestamp fix), ace42e4 (5pt font attempt), 54df939 (media merging)
-- Untracked: docs/NOW_TASKS.md (campaign wrapping issue documentation)
+- ✅ **Campaign word wrap fix (evening session):** Disabled word_wrap in assembly.py:672 and cell_merges.py:612
+- Latest deck: `run_20251027_195850` (145 slides, with word wrap fix applied)
+- Previous deck: `run_20251027_193259` (88 slides, correct local timestamp 19:32:59 AST)
+- Commits: d6f044a (timestamp fix), ace42e4 (5pt font attempt), 54df939 (media merging), 395025b (word wrap fix)
 
 ## Immediate TODOs
 - [x] Fixed timestamp to use local system time across all modules
 - [x] Implemented smart line breaking (_smart_line_break function)
 - [x] Added media channel vertical merging
 - [x] Corrected font sizes (6pt body, 7pt BRAND TOTAL)
-- [ ] Fix campaign cell width to prevent PowerPoint word-wrap override (tomorrow's priority)
+- [x] Fix campaign cell width to prevent PowerPoint word-wrap override ✅ COMPLETED (evening session)
 
 ## Longer-Term Follow-Ups
 - Complete campaign pagination design with Q&A-led discovery
