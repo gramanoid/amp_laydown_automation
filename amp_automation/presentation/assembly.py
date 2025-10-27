@@ -188,6 +188,10 @@ def _populate_quarter_tiles(slide, template_slide, subset):
     month_values = {month: float(subset[month].sum()) for month in months}
 
     for quarter_key, config in SUMMARY_TILE_CONFIG.get("quarter_budgets", {}).items():
+        # Skip configuration metadata fields (keys starting with underscore)
+        if quarter_key.startswith("_") or not isinstance(config, dict):
+            continue
+
         shape_name = config.get("shape")
         if not shape_name:
             continue
@@ -215,6 +219,10 @@ def _populate_media_share_tiles(slide, template_slide, subset, total_cost):
     media_group = subset.groupby("Mapped Media Type")["Total Cost"].sum()
 
     for media_key, config in SUMMARY_TILE_CONFIG.get("media_share", {}).items():
+        # Skip configuration metadata fields (keys starting with underscore)
+        if media_key.startswith("_") or not isinstance(config, dict):
+            continue
+
         shape_name = config.get("shape")
         if not shape_name:
             continue
@@ -245,6 +253,10 @@ def _populate_funnel_share_tiles(slide, template_slide, subset, total_cost):
     funnel_group = subset.groupby("Funnel Stage")["Total Cost"].sum()
 
     for funnel_key, config in SUMMARY_TILE_CONFIG.get("funnel_share", {}).items():
+        # Skip configuration metadata fields (keys starting with underscore)
+        if funnel_key.startswith("_") or not isinstance(config, dict):
+            continue
+
         shape_name = config.get("shape")
         if not shape_name:
             continue
