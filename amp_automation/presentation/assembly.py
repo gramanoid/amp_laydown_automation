@@ -2754,27 +2754,24 @@ def _add_table_row(table):
     if len(table.rows) == 0:
         raise ValueError("Cannot add row to table with no existing rows")
 
-    # Get the last row's XML element through the table rows
-    tbl = table._tbl
-    tr_list = list(tbl.iter_trs())
-
-    if not tr_list:
-        raise ValueError("Table XML contains no row elements")
-
-    last_tr = tr_list[-1]
+    # Get the last row's XML element directly from the table rows
+    last_row = table.rows[-1]
+    last_tr = last_row._tr
     new_tr = deepcopy(last_tr)
 
     # Clear text content from all cells in the new row
-    for tc in new_tr.tc_lst:
+    from pptx.oxml.ns import qn
+    for tc in new_tr.findall(qn('a:tc')):
         # Find text elements and clear them
-        text_frame = tc.find('.//{http://schemas.openxmlformats.org/presentationml/2006/main}txBody')
+        text_frame = tc.find(qn('a:txBody'))
         if text_frame is not None:
-            for paragraph in text_frame.findall('.//{http://schemas.openxmlformats.org/drawingml/2006/main}p'):
-                for run in paragraph.findall('.//{http://schemas.openxmlformats.org/drawingml/2006/main}r'):
-                    for text_elem in run.findall('.//{http://schemas.openxmlformats.org/drawingml/2006/main}t'):
+            for paragraph in text_frame.findall(qn('a:p')):
+                for run in paragraph.findall(qn('a:r')):
+                    for text_elem in run.findall(qn('a:t')):
                         text_elem.text = ''
 
     # Append the new row to the table
+    tbl = table._tbl
     tbl.append(new_tr)
 
     # Return the new row (table.rows refreshes automatically from XML)
