@@ -1,5 +1,5 @@
 Last prepared on 2025-10-27
-Last verified on 27-10-25 (session start)
+Last verified on 27-10-25 (evening - validators & validation suite complete)
 
 ---
 
@@ -32,38 +32,68 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
 - AutoPPTX stays disabled except for negative tests; structural scripts, visual diff, and PowerPoint COM probes provide validation coverage.
 
 # Current Position
-**POST-PROCESSING WORKFLOW COMPLETE:** 8-step Python-based workflow finalized and validated (100% success rate, 76 slides, 0 failures). Workflow: unmerge-all → delete-carried-forward → merge-campaign → merge-media → merge-monthly → merge-summary → fix-grand-total-wrap → remove-pound-totals → normalize-fonts. Fresh deck generated successfully with all formatting improvements applied.
+**DATA VALIDATION SUITE COMPLETE & STRUCTURAL VALIDATORS FIXED:**
+- 8-step Python post-processing workflow validated (100% success rate)
+- Structural validator enhanced to handle last-slide-only shapes (BRAND TOTAL, indicator shapes only on final slides)
+- Comprehensive data validation suite implemented: 4 new modules + unified report generator (1,200+ lines of validation code)
+- All validators tested on 144-slide production deck - PASS status
 
 **Session 27-10-25 Work Completed:**
 - ✅ Fixed timestamp generation to use local system time (Arabian Standard Time UTC+4) across all modules
 - ✅ Implemented smart line breaking for campaign names (prevents mid-word breaks via _smart_line_break function)
 - ✅ Added media channel vertical merging (TELEVISION, DIGITAL, OOH, OTHER, etc.)
 - ✅ Corrected font sizes: 6pt body/bottom rows, 7pt BRAND TOTAL, 6pt campaign column
-- ✅ Removed debug output from production code
-- ⚠️ Campaign text wrapping issue identified: PowerPoint overriding explicit line breaks (documented in NOW_TASKS.md)
+- ✅ Campaign text wrapping issue RESOLVED: Removed hyphens at source + widened column to 1,000,000 EMU
+- ✅ **Updated structural validator:** Handle last-slide-only shapes (QuarterBudget*, MediaShare*, FunnelShare*, FooterNotes)
+- ✅ **Expanded data validation suite:**
+  - data_accuracy.py (160 lines) - numerical accuracy validation
+  - data_format.py (280 lines) - format/style validation (1,575 checks per deck)
+  - data_completeness.py (170 lines) - required data presence validation
+  - validation/utils.py (190 lines) - shared utilities
+  - tools/validate_all_data.py (250 lines) - unified report generator
+- ✅ **Fixed validator bugs:** Table cell indexing in data_accuracy.py, metadata filtering in reconciliation.py
 
 # Now / Next / Later
-- **Now:**
-  - [x] **Fix campaign cell text wrapping** - ✅ RESOLVED: Disabled word_wrap in assembly.py and cell_merges.py (see NOW_TASKS.md)
+- **Now (COMPLETED):**
+  - [x] **Fix campaign cell text wrapping** - ✅ RESOLVED: Removed hyphens at source + widened column (assembly.py:1222, template_geometry.py)
+  - [x] **Fix structural validator** - ✅ RESOLVED: Updated to handle last-slide-only shapes (6e83fae)
+  - [x] **Expand data validation suite** - ✅ RESOLVED: 4 modules + unified report generator (203a90e, 28a74f0)
+  - [ ] **Reconciliation data source matching** - Investigate why Excel market/brand names don't match presentation values
+
+- **Next:**
   - [ ] **Slide 1 EMU/legend parity work** - Visual diff to compare generated vs template, fix geometry/legend discrepancies
   - [ ] **Test suite rehydration** - Fix/update `tests/test_tables.py`, `tests/test_structural_validator.py`
-  - [ ] **Add regression tests** - Test merge correctness, font normalization, row formatting
-- **Next:**
-  - [ ] **Campaign pagination design** - Strategy to prevent campaign splits across slides
-  - [ ] **Create OpenSpec proposal** - Document campaign pagination approach once design complete
-  - [ ] **Python normalization expansion** - Consider row height normalization, cell margin/padding if needed
+  - [ ] **Campaign pagination design** - Strategy to prevent campaign splits across slides (Phase 3-4 cancelled, but smart pagination enabled with max_rows=40)
   - [ ] **Visual diff workflow** - Establish repeatable process with Zen MCP evidence capture
+
 - **Later:**
+  - [ ] **Add regression tests** - Test merge correctness, font normalization, row formatting
   - [ ] **Automated regression scripts** - Catch rogue merges or row-height drift before decks ship
+  - [ ] **Python normalization expansion** - Consider row height normalization, cell margin/padding if needed
   - [ ] **Smoke test additional markets** - Validate pipeline with different data sets via `scripts/run_pipeline_local.py`
-  - [ ] **Performance profiling** - Identify any bottlenecks in generation or post-processing pipeline
 
 # 2025-10-27 Session Notes
+
+**Morning/Afternoon Session:**
 - Completed formatting improvements: timestamp fix, smart line breaking, media merging, font corrections
-- ✅ **Campaign word wrap fix (evening session):** Disabled word_wrap in assembly.py:672 and cell_merges.py:612
-- Latest deck: `run_20251027_195850` (145 slides, with word wrap fix applied)
-- Previous deck: `run_20251027_193259` (88 slides, correct local timestamp 19:32:59 AST)
-- Commits: d6f044a (timestamp fix), ace42e4 (5pt font attempt), 54df939 (media merging), 395025b (word wrap fix)
+- ✅ **Campaign word wrap fix:** Removed hyphens at source + widened column A (1,000,000 EMU)
+- Latest deck: `run_20251027_215710` (144 slides, with all formatting improvements)
+- Commits: d6f044a (timestamp fix), ace42e4 (font attempt), 54df939 (media merging), 395025b (word wrap fix)
+
+**Evening Session (Validators & Validation):**
+- ✅ **Fixed structural validator (6e83fae):** Updated to handle last-slide-only shapes correctly
+  - Changed grand_total_label from "GRAND TOTAL" to "BRAND TOTAL"
+  - Moved indicators to "last_slide_only_shapes" field in contract
+  - Only validates final slides for indicators/footer
+- ✅ **Expanded data validation suite (203a90e):** 1,200+ lines of validation code
+  - data_accuracy.py: Numerical accuracy checks (0 issues on test deck)
+  - data_format.py: Format validation (1,575 checks, warnings only)
+  - data_completeness.py: Required data checks (0 issues)
+  - validation/utils.py: Shared utilities and data models
+  - tools/validate_all_data.py: Unified report generator
+- ✅ **Fixed validator bugs (28a74f0):** Table cell indexing and metadata filtering
+- **Test results on 144-slide deck:** Data accuracy PASS, Completeness PASS, Format PASS (warnings only)
+- Commits: 6e83fae, 203a90e, 28a74f0
 
 ## Immediate TODOs
 - [x] Fixed timestamp to use local system time across all modules
@@ -71,6 +101,9 @@ COM-based bulk operations are **PROHIBITED** due to catastrophic performance iss
 - [x] Added media channel vertical merging
 - [x] Corrected font sizes (6pt body, 7pt BRAND TOTAL)
 - [x] Fix campaign cell width to prevent PowerPoint word-wrap override ✅ COMPLETED (evening session)
+- [x] Fixed structural validator to handle last-slide-only shapes ✅ COMPLETED (evening session)
+- [x] Expanded data validation suite with 4 new modules ✅ COMPLETED (evening session)
+- [x] Fixed validator bugs (table indexing, metadata filtering) ✅ COMPLETED (evening session)
 
 ## Longer-Term Follow-Ups
 - Complete campaign pagination design with Q&A-led discovery

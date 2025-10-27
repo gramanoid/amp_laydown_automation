@@ -1,0 +1,340 @@
+AMP LAYDOWNS AUTOMATION - PROJECT STRUCTURE MAP
+Generated: 27 October 2025
+Evaluated for: File organization, redundancy, best practices compliance
+
+================================================================================
+ROOT LEVEL STRUCTURE (Good - Compliant)
+================================================================================
+
+./
+├── AGENTS.md                          - OpenSpec agent instructions [CURRENT]
+├── README.md                          - Project overview [CURRENT]
+├── amp_automation/                    - Python package (core implementation)
+├── config/                            - Configuration files
+├── docs/                              - Project documentation (session-organized)
+├── logs/                              - Production execution logs (NEEDS REORGANIZATION)
+├── openspec/                          - Change proposals and project specs
+├── output/                            - Generated artifacts
+├── scripts/                           - Build/deployment scripts (SPARSE)
+├── temp/                              - Temporary/external dependencies
+├── template/                          - Source data and PowerPoint template
+└── tools/                             - Validation and diagnostic utilities (MIXED)
+
+STATUS: Root level is well-organized. No extraneous files.
+
+================================================================================
+PYTHON SOURCE STRUCTURE (Good - Follows PEP Standards)
+================================================================================
+
+./amp_automation/
+├── __init__.py
+├── cli/
+│   ├── main.py                       - CLI entry point [ACTIVE]
+│   └── __pycache__/
+├── config/
+│   ├── loader.py                     - Config loading utilities [ACTIVE]
+│   └── __pycache__/
+├── data/
+│   ├── ingestion.py                  - Excel data loading [ACTIVE]
+│   └── __pycache__/
+├── presentation/
+│   ├── assembly.py                   - Deck assembly logic [ACTIVE]
+│   ├── postprocess/
+│   │   ├── __init__.py
+│   │   ├── cli.py                    - Post-processing CLI [ACTIVE]
+│   │   ├── cell_merges.py            - Cell merging logic [ACTIVE]
+│   │   ├── table_normalizer.py       - Font/format normalization [ACTIVE]
+│   │   ├── unmerge_operations.py     - Cell unmerging [ACTIVE]
+│   │   ├── span_operations.py        - Column span resets [ACTIVE]
+│   │   └── __pycache__/
+│   └── __pycache__/
+├── tooling/
+│   ├── docstrange_validator.py       - Visual diff validator [REFERENCE ONLY]
+│   └── __pycache__/
+├── utils/
+│   ├── logging.py                    - Logger configuration [ACTIVE]
+│   └── __pycache__/
+├── validation/
+│   ├── __init__.py
+│   ├── reconciliation.py             - Summary tile validation [ACTIVE]
+│   ├── utils.py                      - Shared validation utilities [NEW]
+│   ├── data_accuracy.py              - Numerical accuracy checks [NEW]
+│   ├── data_format.py                - Format validation [NEW]
+│   ├── data_completeness.py          - Data presence validation [NEW]
+│   └── __pycache__/
+└── __pycache__/
+
+STATUS: Well-organized by concern. Follows PEP 420 implicit namespace packages.
+RECOMMENDATION: No changes needed.
+
+================================================================================
+DOCUMENTATION STRUCTURE (Good with Archive Opportunities)
+================================================================================
+
+./docs/
+├── 14_10_25/                          - OLD session [ARCHIVE CANDIDATE]
+│   ├── artifacts/
+│   └── logs/
+├── 15_10_25/                          - OLD session [ARCHIVE CANDIDATE]
+│   └── logs/
+├── 17_10_25/                          - OLD session [ARCHIVE CANDIDATE]
+│   ├── artifacts/
+│   ├── end_day/
+│   └── logs/
+├── 20_10_25/                          - OLD session [ARCHIVE CANDIDATE]
+│   ├── artifacts/
+│   └── logs/
+├── 21_10_25/                          - OLD session [ARCHIVE CANDIDATE - 1.8MB]
+│   ├── artifacts/ (large)
+│   ├── differential_visual_analysis/
+│   ├── end_day/
+│   └── logs/
+├── 22-10-25/                          - OLD session [ARCHIVE CANDIDATE]
+│   ├── artifacts/
+│   ├── logs/
+│   └── merged_cells_analysis/
+├── 23-10-25/                          - OLD session [ARCHIVE CANDIDATE]
+│   ├── artifacts/
+│   ├── end_day/
+│   ├── logs/
+│   └── qna/
+├── 24-10-25/                          - RECENT session [KEEP - 54MB artifacts]
+│   ├── artifacts/ (large)
+│   ├── checkpoints/
+│   ├── end_day/
+│   ├── logs/
+│   ├── resume/
+│   └── snapshot_sync/
+└── 27-10-25/                          - CURRENT session [KEEP]
+    ├── artifacts/
+    ├── clean/                         - NEW cleanup directory
+    ├── end_day/
+    ├── logs/
+    ├── resume/
+    └── snapshot_sync/
+
+SIZE ANALYSIS:
+- 24-10-25: 54MB (recent baseline)
+- 21_10_25: 1.8MB
+- Others: <500KB each
+
+TOTAL OLD DOCS: ~2.5MB across 7 directories
+
+STATUS: Sessions organized by date. Old sessions should be archived.
+RECOMMENDATION: Move 14-23 October docs to archive/; keep 24-10-25 and 27-10-25 as active.
+
+================================================================================
+LOGS STRUCTURE (PROBLEMATIC - Needs Reorganization)
+================================================================================
+
+./logs/production/
+├── run_20251014_145051/               - Oct 14, 2025 (196 total dirs)
+├── run_20251014_145224/
+├── run_20251014_145323/
+├── ... (repeated for Oct 15, 17, 19, 20, 21, 22, 23, 24, 27)
+└── run_20251027_215710/               - Current session
+
+CURRENT STRUCTURE: 196 flat directories by execution timestamp
+PROBLEM: Difficult to navigate; no date-based organization
+SIZE: Estimated 50-100MB total
+
+RECOMMENDED STRUCTURE:
+./logs/production/
+├── 2025-10-14/
+│   ├── run_145051/
+│   ├── run_145224/
+│   └── ...
+├── 2025-10-15/
+│   ├── run_134745/
+│   └── ...
+└── 2025-10-27/
+    ├── run_135242/
+    └── ...
+
+STATUS: Needs reorganization for maintainability.
+RECOMMENDATION: Reorganize by date (YYYY-MM-DD) with sub-runs, move old logs to archive.
+
+================================================================================
+TOOLS & SCRIPTS STRUCTURE (NEEDS REORGANIZATION)
+================================================================================
+
+./tools/
+├── analyze_campaign_sizes.py          - Analysis script [SINGLE-USE]
+├── analyze_campaign_sizes_threshold.py - Analysis script variant [SINGLE-USE]
+├── AuditCampaignMerges.ps1            - Legacy PowerShell [DEPRECATED]
+├── debug/
+│   └── PostProcessCampaignMerges-Repro.ps1  - Debug script [ARCHIVE]
+├── diagnose_merge_conflict.py         - Diagnostic script [SINGLE-USE]
+├── dump_template_shapes.py            - One-off utility [SINGLE-USE]
+├── FixHorizontalMerges.ps1            - Legacy PowerShell [DEPRECATED]
+├── inspect_campaign_column.py         - Diagnostic script [SINGLE-USE]
+├── inspect_columns_ab.py              - Diagnostic script [SINGLE-USE]
+├── inspect_fonts.py                   - Diagnostic script [SINGLE-USE]
+├── inspect_generated_deck.py          - Diagnostic script [SINGLE-USE]
+├── inspect_monthly_total_rows.py      - Diagnostic script [SINGLE-USE]
+├── InspectColumnSpans.ps1             - Legacy PowerShell [DEPRECATED]
+├── MIGRATION_NOTICE.md                - Documentation [ARCHIVE]
+├── PostProcessCampaignMerges.ps1      - Legacy PowerShell [DEPRECATED - MAIN]
+├── PostProcessCampaignMerges_backup_20251022.ps1     - BACKUP [DELETE]
+├── PostProcessCampaignMerges_backup_20251022_171943.ps1 - BACKUP [DELETE]
+├── PostProcessNormalize.ps1           - Python wrapper [DEPRECATED]
+├── ProbeRowHeights.ps1                - Legacy PowerShell [DEPRECATED]
+├── RebuildCampaignMerges.ps1          - Legacy PowerShell [DEPRECATED]
+├── SanitizePrimaryColumns.ps1         - Legacy PowerShell [DEPRECATED]
+├── VerifyAllowedHorizontalMerges.ps1  - Legacy PowerShell [DEPRECATED]
+├── validate_all_data.py               - Unified validator [ACTIVE - NEW]
+├── validate_structure.py              - Structural validator [ACTIVE]
+├── verify_deck_fonts.py               - Font verification [ACTIVE]
+├── verify_monthly_total_fonts.py      - Font verification [ACTIVE]
+├── verify_unmerge.py                  - Cell verification [ACTIVE]
+└── visual_diff.py                     - Visual comparison [ACTIVE]
+
+STATUS: Mixed active and deprecated; needs organization.
+ISSUES:
+1. Two backup files should be deleted
+2. Debug directory should be archived
+3. Legacy PowerShell scripts should be archived (replaced by Python)
+4. Analysis scripts should go to separate directory
+5. One-off diagnostic scripts should be archived
+
+RECOMMENDED STRUCTURE:
+./tools/
+├── validate/                           - Active validators
+│   ├── validate_all_data.py
+│   ├── validate_structure.py
+│   ├── reconciliation.py (move from amp_automation)
+│   └── ...
+├── verify/                             - Active verification tools
+│   ├── verify_deck_fonts.py
+│   ├── verify_monthly_total_fonts.py
+│   └── verify_unmerge.py
+├── scripts/                            - Active analysis/inspection scripts
+│   ├── visual_diff.py
+│   └── ...
+├── archive/                            - Deprecated/one-off scripts
+│    ├── legacy_powershell/
+│    ├── analysis_scripts/
+│    ├── diagnostic_scripts/
+│    └── debug/
+└── MIGRATION_NOTICE.md
+
+================================================================================
+SCRIPTS STRUCTURE (SPARSE - Needs Population)
+================================================================================
+
+./scripts/
+└── ReconstructFirstColumns.ps1        - PowerShell utility [MISPLACED - should be in tools]
+
+STATUS: Only one script; should be in tools/ or organized if more added.
+RECOMMENDATION: Move PowerShell script to tools/ or create build/deploy subdirs if needed.
+
+================================================================================
+CONFIGURATION STRUCTURE (Good - Organized)
+================================================================================
+
+./config/
+├── master_config.json                 - Primary configuration [ACTIVE]
+├── structural_contract.json           - Validator contract [ACTIVE]
+└── README.md                          - Config documentation
+
+STATUS: Well-organized. No changes needed.
+
+================================================================================
+TEMPLATE & DATA STRUCTURE (Good - Organized)
+================================================================================
+
+./template/
+├── BulkPlanData_2025_10_14.xlsx       - Input Excel data
+└── Template_V4_FINAL_071025.pptx      - Master PowerPoint template
+
+./openspec/
+├── project.md                         - Project specifications
+├── AGENTS.md                          - Agent instructions
+├── changes/
+│   ├── archive/                       - Completed changes
+│   └── implement-campaign-pagination/ - Active change
+└── specs/
+
+STATUS: Well-organized. No changes needed.
+
+================================================================================
+OUTPUT STRUCTURE (Good - Organized)
+================================================================================
+
+./output/
+├── presentations/
+│   └── run_20251027_215710/           - Latest deck
+├── validation/                        - Validation reports (NEW)
+└── visual_diff/
+    ├── diffs/
+    └── exports/
+
+STATUS: Well-organized. Validation output directory is new and appropriate.
+
+================================================================================
+TEMPORARY/EXTERNAL STRUCTURE (Needs Documentation)
+================================================================================
+
+./temp/
+└── zen-mcp-server/                    - External MCP server (9MB)
+    ├── clink/
+    ├── conf/
+    ├── docker/
+    ├── docs/
+    ├── examples/
+    ├── providers/
+    ├── scripts/
+    ├── simulator_tests/
+    ├── systemprompts/
+    ├── tests/
+    ├── tools/
+    ├── utils/
+    ├── zen_mcp_server.egg-info/
+    ├── README.md
+    └── CLAUDE.md
+
+STATUS: External project stored locally. Should be documented or potentially archived if not in active use.
+RECOMMENDATION: Either document as required dependency in README or archive to external-tools/
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+
+Total Directories: ~350+ (including production logs)
+Total Files (approx): ~500+
+Code Size: Core Python modules (~50-100KB)
+Documentation: ~2.5MB (old sessions) + 54MB (24-10-25)
+Logs: ~50-100MB (196 production runs)
+Temporary: ~9MB (zen-mcp-server)
+
+COMPLIANCE ASSESSMENT:
+✓ Root level: COMPLIANT (minimal, focused)
+✓ Python source: COMPLIANT (follows PEP standards)
+✓ Configuration: COMPLIANT (organized)
+⚠ Documentation: PARTIALLY COMPLIANT (needs archiving of old sessions)
+✗ Logs: NON-COMPLIANT (needs date-based organization)
+⚠ Tools/Scripts: PARTIALLY COMPLIANT (mixed active/deprecated)
+⚠ Temporary: UNDOCUMENTED (should clarify purpose or archive)
+
+================================================================================
+CLEANUP CANDIDATES SUMMARY
+================================================================================
+
+ARCHIVE (Move to docs/archive/27-10-25/):
+- docs/14_10_25/ through docs/23_10_25/ (old sessions)
+- logs/production/ reorganized by date (move <24-10-27 to archive)
+- tools/debug/
+- tools/legacy_powershell/ (PowerShell scripts)
+- tools/analysis/ (one-off analysis scripts)
+- tools/diagnostics/ (one-off diagnostic scripts)
+- temp/zen-mcp-server/ (if not actively used)
+
+DELETE:
+- tools/PostProcessCampaignMerges_backup_20251022.ps1
+- tools/PostProcessCampaignMerges_backup_20251022_171943.ps1
+
+REORGANIZE:
+- ./logs/production/ → organize by date (YYYY-MM-DD)
+- ./tools/ → separate by purpose (validate/, verify/, archive/)
+- ./scripts/ → move to tools/ or create build/deploy structure
+

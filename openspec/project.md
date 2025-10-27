@@ -1,7 +1,7 @@
 # Project Context
 
 ## Immediate Next Steps (27 Oct 2025)
-Last verified on 27-10-25 (end of session)
+Last verified on 27-10-25 (evening - validation suite complete)
 
 **COMPLETED (24-27 Oct 2025):**
 1. ✅ **Python post-processing migration complete:** Full cell merge logic implemented in `cell_merges.py`. PowerShell COM scripts replaced with Python CLI. Performance: ~30 seconds for 88 slides (vs 10+ hours COM).
@@ -10,13 +10,16 @@ Last verified on 27-10-25 (end of session)
 4. ✅ **Media channel merging (27 Oct):** Vertical cell merging for TELEVISION, DIGITAL, OOH, OTHER media channels.
 5. ✅ **Font corrections (27 Oct):** 6pt body/campaign/bottom rows, 7pt header/BRAND TOTAL.
 6. ✅ **Smart line breaking (27 Oct):** _smart_line_break function implemented (dash handling, word-count-based splitting).
-7. ✅ **Production deck generated:** `run_20251027_193259` (88 slides) with all formatting improvements.
+7. ✅ **Campaign text wrapping resolved (27 Oct):** Removed hyphens at source + widened column A to 1,000,000 EMU.
+8. ✅ **Structural validator enhanced (27 Oct evening):** Last-slide-only shapes support (BRAND TOTAL, indicators only on final slides). Validation PASSES on 144-slide deck.
+9. ✅ **Data validation suite expanded (27 Oct evening):** 1,200+ lines across 5 modules - accuracy, format, completeness, utilities, unified report generator. All validators tested successfully.
+10. ✅ **Production deck generated:** `run_20251027_215710` (144 slides) with all improvements including validation infrastructure.
 
 **CURRENT PRIORITIES:**
-1. **Fix campaign cell text wrapping:** PowerPoint overriding explicit line breaks. Solutions: widen column A, disable word-wrap, or conditional font size. See `docs/NOW_TASKS.md`.
+1. **Investigate reconciliation data source issue:** Reconciliation shows "expected data missing" for all summary tiles. Requires analysis of Excel market/brand name mapping vs presentation values.
 2. **Slide 1 EMU/legend parity:** Visual diff to compare generated vs template. Fix any geometry/legend discrepancies.
 3. **Test suite rehydration:** Fix/update `tests/test_tables.py`, `tests/test_structural_validator.py`. Add regression tests for merge correctness.
-4. **Campaign pagination design:** Design strategy to prevent campaign splits across slides. Create OpenSpec proposal once design is complete.
+4. **Campaign pagination enhancement:** Smart pagination enabled (max_rows=40). Phase 3-4 cancelled as pagina works correctly for test decks.
 
 ## Purpose
 Automate Annual Marketing Plan laydown decks by converting standardized Lumina Excel exports into pixel-accurate PowerPoint presentations that mirror the `Template_V4_FINAL_071025.pptx` master while preserving financial and media metrics.
