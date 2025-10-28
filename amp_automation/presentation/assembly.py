@@ -504,14 +504,16 @@ def _populate_footer(slide, template_slide, excel_path):
 
     text = config.get("default_text", "")
     if config.get("append_date"):
-        stamp_raw = _extract_export_date(excel_path, config.get("append_date_format", "%d_%m_%y"))
+        stamp_raw = _extract_export_date(excel_path, config.get("append_date_format", "%d-%m-%y"))
         if stamp_raw:
+            # Use the formatted date as-is (preserves hyphens: DD-MM-YY)
+            # Also create normalized version without separators for legacy compatibility
             normalized = re.sub(r"[^0-9]", "", stamp_raw)
-            if not normalized:
-                normalized = stamp_raw.replace("_", "").strip()
             if normalized:
-                text = text.replace("DD_MM_YY", normalized).replace("DDMMYY", normalized)
-                text = text.replace(f"{normalized}_Lumina", f"{normalized} Lumina")
+                # Replace both formatted (with hyphens) and plain formats
+                text = text.replace("DD-MM-YY", stamp_raw).replace("DD_MM_YY", stamp_raw)
+                text = text.replace("DDMMYY", normalized)
+                text = text.replace(f"{normalized}_Lumina", f"{stamp_raw} Lumina")
 
     _set_shape_text(shape, template_shape, text)
 

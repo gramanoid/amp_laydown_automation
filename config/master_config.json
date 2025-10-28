@@ -468,9 +468,9 @@
       },
       "footer_notes": {
         "shape": "FooterNotes",
-        "default_text": "Source: DD_MM_YY_Lumina Export.\nNote: Digital Reach only for TOP channels and Awareness stage only. Cost: ALL digital channels",
+        "default_text": "Source: DD-MM-YY Lumina Export.\nNote: Digital Reach only for TOP channels and Awareness stage only. Cost: ALL digital channels",
         "append_date": true,
-        "append_date_format": "%d_%m_%y",
+        "append_date_format": "%d-%m-%y",
         "position": {
           "left_inches": 0.088,
           "top_inches": 5.304,
