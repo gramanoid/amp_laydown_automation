@@ -741,6 +741,19 @@ def _apply_cell_styling(cell, text: str = None, font_size: int = None,
                             run.font.size = Pt(font_size)
                         if bold:
                             run.font.bold = True
+        else:
+            # If no text provided, apply formatting to existing text in cell
+            # This is used for merged cells that already have content
+            for paragraph in text_frame.paragraphs:
+                if center_align:
+                    paragraph.alignment = PP_ALIGN.CENTER
+
+                for run in paragraph.runs:
+                    run.font.name = FONT_NAME
+                    if font_size is not None:
+                        run.font.size = Pt(font_size)
+                    if bold:
+                        run.font.bold = True
 
         # Apply vertical alignment
         if vertical_center:
