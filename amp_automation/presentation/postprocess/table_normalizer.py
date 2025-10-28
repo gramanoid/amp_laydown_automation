@@ -406,13 +406,14 @@ def remove_pound_signs_from_totals(table):
             is_monthly_total = "MONTHLY" in cell_text and "TOTAL" in cell_text
 
             if is_grand_total or is_monthly_total:
-                # Remove £ and apply formatting to all cells in this row
+                # IMPORTANT FIX (Point 6): Keep pound symbol in label cell (col 0), only remove from numeric cells
                 for col_idx in range(len(table.columns)):
                     cell = table.cell(row_idx, col_idx)
                     text_frame = cell.text_frame
 
-                    # Remove pound sign
-                    if text_frame.text and "£" in text_frame.text:
+                    # Remove pound sign ONLY from numeric cells (col >= 3), NOT from label (col 0)
+                    # This preserves "MONTHLY TOTAL (£ 000)" while cleaning numeric cells
+                    if col_idx > 0 and text_frame.text and "£" in text_frame.text:
                         text_frame.text = text_frame.text.replace("£", "")
                         cells_cleaned += 1
 

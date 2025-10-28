@@ -538,6 +538,14 @@ def style_table_cell(
         if use_compact_font and processed_cell_text:
             processed_cell_text = processed_cell_text.replace(" ", "\u00A0").replace("-", "\u2011")
 
+        # CRITICAL FIX: Ensure pound symbol is preserved in MONTHLY TOTAL label (Point 6)
+        # The pound symbol (£) can be lost during text processing, so we explicitly check and restore it
+        if "MONTHLY TOTAL" in processed_cell_text and "(" in processed_cell_text and "000)" in processed_cell_text:
+            if "£" not in processed_cell_text:
+                # Pound symbol was lost; restore it: "MONTHLY TOTAL ( 000)" -> "MONTHLY TOTAL (£ 000)"
+                processed_cell_text = processed_cell_text.replace("( ", "(£ ", 1)
+                logger.debug("CELL STYLING [%s,%s]: Restored pound symbol in MONTHLY TOTAL label", row_idx, col_idx)
+
         text_frame.word_wrap = wrap_from_config
         text_frame.auto_size = MSO_AUTO_SIZE.NONE
 
