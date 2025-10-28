@@ -18,7 +18,7 @@ from typing import Iterable, List, Optional
 
 from pptx import Presentation
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT_PATH = PROJECT_ROOT / "config" / "structural_contract.json"
 
 
