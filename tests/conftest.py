@@ -81,6 +81,7 @@ def cell_style_context() -> CellStyleContext:
         default_font_name="Calibri",
         font_size_header=Pt(7),       # Updated for 27-10-25: 7pt headers
         font_size_body=Pt(6),         # Updated for 27-10-25: 6pt body
+        font_size_body_compact=Pt(6), # Compact rows use same as body (6pt)
         color_black=RGBColor(0, 0, 0),
         color_light_gray_text=RGBColor(200, 200, 200),
         color_table_gray=RGBColor(191, 191, 191),
@@ -172,28 +173,6 @@ def test_logger() -> logging.Logger:
     logger = logging.getLogger("test")
     logger.setLevel(logging.DEBUG)
     return logger
-
-
-# ============================================================================
-# CONFIGURATION FIXTURE
-# ============================================================================
-
-
-@pytest.fixture(scope="session")
-def pytest_configure(config):
-    """Configure pytest markers and settings."""
-    config.addinivalue_line(
-        "markers", "unit: Mark test as unit test"
-    )
-    config.addinivalue_line(
-        "markers", "integration: Mark test as integration test"
-    )
-    config.addinivalue_line(
-        "markers", "regression: Mark test as regression test"
-    )
-    config.addinivalue_line(
-        "markers", "slow: Mark test as slow running"
-    )
 
 
 # ============================================================================
