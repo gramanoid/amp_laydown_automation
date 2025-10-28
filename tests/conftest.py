@@ -46,7 +46,7 @@ def latest_deck_path(project_root: Path) -> Path:
 @pytest.fixture(scope="session")
 def contract_path(project_root: Path) -> Path:
     """Path to structural validation contract."""
-    return project_root / "config" / "presentation_contract.json"
+    return project_root / "config" / "structural_contract.json"
 
 
 # ============================================================================
