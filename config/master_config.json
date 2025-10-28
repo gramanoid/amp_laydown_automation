@@ -643,8 +643,8 @@
   },
   "output": {
     "filename": {
-      "pattern": "AMP_Presentation_{market}_{brand}_{timestamp}.pptx",
-      "timestamp_format": "%Y%m%d_%H%M%S",
+      "pattern": "AMP_Laydowns_{timestamp}.pptx",
+      "timestamp_format": "%d%m%y",
       "sanitize_names": true,
       "max_length": 255
     },

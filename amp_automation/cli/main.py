@@ -232,6 +232,10 @@ def _resolve_output_locations(
     paths_section = config.section("paths")
     output_section = paths_section.get("output", {})
 
+    # Get output filename config from top-level config
+    output_config = config.get("output", {})
+    filename_config = output_config.get("filename", {})
+
     base = Path(args.output_dir) if args.output_dir else Path(output_section.get("presentations") or output_section.get("base") or "output")
     if not base.is_absolute():
         base = PROJECT_ROOT / base
@@ -245,13 +249,25 @@ def _resolve_output_locations(
     timestamp = datetime.now().astimezone().strftime(timestamp_format)
     run_dir = base / folder_pattern.format(timestamp=timestamp) if create_timestamped else base
 
+    # Use filename pattern from config (default: AMP_Laydowns_{timestamp}.pptx)
+    filename_pattern = filename_config.get("pattern", "AMP_Laydowns_{timestamp}.pptx")
+    filename_timestamp_format = filename_config.get("timestamp_format", "%d%m%y")
+    filename_timestamp = datetime.now().astimezone().strftime(filename_timestamp_format)
+
     if args.output:
-        candidate_name = Path(args.output).name
-        if "{timestamp}" in candidate_name:
-            candidate_name = candidate_name.format(timestamp=timestamp)
-        output_name = candidate_name or f"AMP_Presentation_{timestamp}.pptx"
+        # Check if args.output looks like a file (has .pptx extension) or directory
+        candidate_path = Path(args.output)
+        if candidate_path.suffix.lower() == ".pptx":
+            # It's a filename - use it
+            candidate_name = candidate_path.name
+            if "{timestamp}" in candidate_name:
+                candidate_name = candidate_name.format(timestamp=filename_timestamp)
+            output_name = candidate_name
+        else:
+            # It's a directory or base path - use the filename pattern
+            output_name = filename_pattern.format(timestamp=filename_timestamp)
     else:
-        output_name = f"AMP_Presentation_{timestamp}.pptx"
+        output_name = filename_pattern.format(timestamp=filename_timestamp)
 
     output_path = run_dir / output_name
     if output_path.suffix.lower() != ".pptx":
