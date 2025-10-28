@@ -543,11 +543,47 @@ def _extract_export_date(excel_path, output_format):
 def _format_tile_value(config, value):
     scale = float(config.get("scale", 1.0))
     fmt = config.get("number_format", "{value}")
+
+    # Smart formatting for quarterly budgets: convert large K to M format
+    if config.get("use_smart_format"):
+        return _format_quarterly_budget(value * scale)
+
     try:
         return fmt.format(value=value * scale)
     except Exception as exc:
         logger.warning("Failed to format tile value %s with format %s: %s", value, fmt, exc)
         return str(value * scale)
+
+
+def _format_quarterly_budget(value_in_thousands):
+    """
+    Format quarterly budget value intelligently.
+
+    Converts values >= 1000K to M format (e.g., 1211K -> 1.2M).
+    Keeps values < 1000K in K format (e.g., 300K -> 300K).
+
+    Args:
+        value_in_thousands: Value already scaled to thousands (e.g., 1211 for £1,211K)
+
+    Returns:
+        Formatted string (e.g., "£1.2M" or "£300K")
+    """
+    try:
+        numeric_value = float(value_in_thousands)
+
+        # If value >= 1000K, display as M
+        if numeric_value >= 1000:
+            value_in_millions = numeric_value / 1000.0
+            rounded = round(value_in_millions, 1)
+            # Remove trailing .0 for whole numbers
+            if rounded == int(rounded):
+                return f"£{int(rounded)}M"
+            return f"£{rounded}M"
+        else:
+            # Otherwise display as K
+            return f"£{int(round(numeric_value))}K"
+    except (ValueError, TypeError):
+        return f"£{value_in_thousands}K"
 
 
 def _format_percentage_tile(config, value, total):

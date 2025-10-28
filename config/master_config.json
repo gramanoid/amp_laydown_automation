@@ -333,11 +333,12 @@
           "prefix": "Q1: ",
           "number_format": "\u00a3{value:,.0f}K",
           "scale": 0.001,
+          "use_smart_format": true,
           "position": {
             "left_inches": 2.758,
             "top_inches": 4.881,
-            "width_inches": 1.276,
-            "height_inches": 0.105
+            "width_inches": 1.239,
+            "height_inches": 0.128
           }
         },
         "q2": {
@@ -346,11 +347,12 @@
           "prefix": "Q2: ",
           "number_format": "\u00a3{value:,.0f}K",
           "scale": 0.001,
+          "use_smart_format": true,
           "position": {
             "left_inches": 4.051,
             "top_inches": 4.881,
-            "width_inches": 1.324,
-            "height_inches": 0.105
+            "width_inches": 1.239,
+            "height_inches": 0.128
           }
         },
         "q3": {
@@ -359,11 +361,12 @@
           "prefix": "Q3: ",
           "number_format": "\u00a3{value:,.0f}K",
           "scale": 0.001,
+          "use_smart_format": true,
           "position": {
             "left_inches": 5.392,
             "top_inches": 4.881,
-            "width_inches": 1.446,
-            "height_inches": 0.105
+            "width_inches": 1.239,
+            "height_inches": 0.128
           }
         },
         "q4": {
@@ -372,11 +375,12 @@
           "prefix": "Q4: ",
           "number_format": "\u00a3{value:,.0f}K",
           "scale": 0.001,
+          "use_smart_format": true,
           "position": {
             "left_inches": 6.855,
             "top_inches": 4.881,
-            "width_inches": 1.31,
-            "height_inches": 0.105
+            "width_inches": 1.239,
+            "height_inches": 0.128
           }
         }
       },
