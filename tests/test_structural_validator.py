@@ -17,7 +17,7 @@ except ImportError:
 
 @pytest.mark.integration
 @pytest.mark.skipif(
-    not Path("output/presentations/run_20251028_151137/AMP_Presentation_20251028_151137.pptx").exists(),
+    not Path("output/presentations/run_20251028_164203/AMP_Laydowns_281025.pptx").exists(),
     reason="Latest production deck (28-10-25) not found"
 )
 def test_structural_validator_passes_production_deck(latest_deck_path: Path, contract_path: Path, test_logger: logging.Logger) -> None:

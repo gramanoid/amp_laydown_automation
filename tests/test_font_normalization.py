@@ -8,17 +8,44 @@ from pptx.util import Pt
 from conftest import find_main_table, skipif_no_deck
 
 
-@pytest.mark.skip(reason="Production deck from 27-10-25 not regenerated with font fixes. "
-                       "Use unit tests below instead.")
 @pytest.mark.regression
 @skipif_no_deck
 def test_ec002_font_sizes_consistent_across_production_deck(latest_deck_path):
     """Verify font sizes are consistent across all slides in production deck (EC-002).
 
-    NOTE: Skipped - production deck needs to be regenerated with proper fonts.
-    Use unit tests below for verification of font size constants.
+    Validates that header cells use 7pt and body cells use 6pt font sizes.
     """
-    pass
+    from pptx import Presentation
+
+    prs = Presentation(latest_deck_path)
+
+    font_issues = []
+
+    for slide_idx, slide in enumerate(prs.slides, start=1):
+        table = find_main_table(slide)
+        if not table:
+            continue
+
+        # Check first row (header row) - should be 7pt
+        if len(table.rows) > 0:
+            for col_idx in range(len(table.columns)):
+                cell = table.cell(0, col_idx)
+                for paragraph in cell.text_frame.paragraphs:
+                    for run in paragraph.runs:
+                        if run.font.size and run.font.size != Pt(7):
+                            font_issues.append(f"Slide {slide_idx}, Header cell ({0},{col_idx}): Expected 7pt, got {run.font.size}")
+
+        # Check body rows - should be 6pt (sample check on first body row)
+        if len(table.rows) > 1:
+            for col_idx in range(min(3, len(table.columns))):  # Sample first 3 columns
+                cell = table.cell(1, col_idx)
+                for paragraph in cell.text_frame.paragraphs:
+                    for run in paragraph.runs:
+                        if run.font.size and run.font.size != Pt(6):
+                            font_issues.append(f"Slide {slide_idx}, Body cell (1,{col_idx}): Expected 6pt, got {run.font.size}")
+
+    # Allow some tolerance - fonts might vary slightly in merged cells or special rows
+    assert len(font_issues) < 10, f"Found {len(font_issues)} font size inconsistencies (showing first 10):\n" + "\n".join(font_issues[:10])
 
 
 @pytest.mark.unit

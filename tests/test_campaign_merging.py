@@ -8,17 +8,43 @@ from pptx.util import Pt
 from conftest import find_main_table, skipif_no_deck
 
 
-@pytest.mark.skip(reason="Production deck from 27-10-25 not regenerated with EC-001 fix. "
-                       "Use unit test below instead.")
 @pytest.mark.regression
 @skipif_no_deck
 def test_ec001_campaign_names_no_mid_word_wrap(latest_deck_path):
     """Verify campaign names don't wrap mid-word in production deck (EC-001).
 
-    NOTE: Skipped - production deck needs to be regenerated with word_wrap disabled.
-    Use test_ec001_word_wrap_disabled_in_new_cells for unit test of the fix.
+    Validates that campaign names with explicit line breaks respect those breaks
+    and don't create unnatural mid-word wrapping (e.g., breaking on hyphens).
     """
-    pass
+    from pptx import Presentation
+
+    prs = Presentation(latest_deck_path)
+
+    failures = []
+
+    for slide_idx, slide in enumerate(prs.slides, start=1):
+        table = find_main_table(slide)
+        if not table:
+            continue
+
+        # Check campaign column (column 0) cells
+        for row_idx in range(len(table.rows)):
+            cell = table.cell(row_idx, 0)
+            text = cell.text.strip()
+
+            # Skip empty cells and special rows
+            if not text or text.upper() in {"CAMPAIGN", "MONTHLY TOTAL", "GRAND TOTAL", "BRAND TOTAL", "CARRIED FORWARD"}:
+                continue
+
+            # Check for mid-word breaks (lines ending with hyphens that aren't part of the name)
+            if "\n" in text:
+                lines = text.split("\n")
+                for i, line in enumerate(lines[:-1]):  # Check all but last line
+                    # If line ends with hyphen and next line starts lowercase, it's a mid-word break
+                    if line.endswith("-") and i + 1 < len(lines) and lines[i + 1] and lines[i + 1][0].islower():
+                        failures.append(f"Slide {slide_idx}, Row {row_idx}: mid-word break in '{text}'")
+
+    assert not failures, f"Found {len(failures)} campaign cells with mid-word breaks:\n" + "\n".join(failures[:5])
 
 
 @pytest.mark.unit
