@@ -1443,9 +1443,9 @@ def _initialize_from_config(config: Config) -> None:
     CLR_COMMENTS_GRAY = _rgb_color(ui_colors_config.get("comments_gray", {}).get("rgb"), (242, 242, 242))
     CLR_SUBTOTAL_GRAY = _rgb_color(ui_colors_config.get("subtotal_gray", {}).get("rgb"), (217, 217, 217))
 
-    CLR_TELEVISION = _rgb_color(media_colors_config.get("television", {}).get("rgb"), (113, 212, 141))
+    CLR_TELEVISION = _rgb_color(media_colors_config.get("television", {}).get("rgb"), (211, 254, 201))
     CLR_DIGITAL = _rgb_color(media_colors_config.get("digital", {}).get("rgb"), (253, 242, 183))
-    CLR_OOH = _rgb_color(media_colors_config.get("ooh", {}).get("rgb"), (255, 191, 0))
+    CLR_OOH = _rgb_color(media_colors_config.get("ooh", {}).get("rgb"), (255, 217, 97))
     CLR_OTHER = _rgb_color(media_colors_config.get("other", {}).get("rgb"), (176, 211, 255))
 
     DEFAULT_FONT_NAME = fonts_config.get("default_family", "Calibri")
@@ -1689,9 +1689,9 @@ CLR_HEADER_GREEN = _rgb_color(ui_colors_config.get("header_green", {}).get("rgb"
 CLR_COMMENTS_GRAY = _rgb_color(ui_colors_config.get("comments_gray", {}).get("rgb"), (242, 242, 242))
 CLR_SUBTOTAL_GRAY = _rgb_color(ui_colors_config.get("subtotal_gray", {}).get("rgb"), (217, 217, 217))
 
-CLR_TELEVISION = _rgb_color(media_colors_config.get("television", {}).get("rgb"), (113, 212, 141))
+CLR_TELEVISION = _rgb_color(media_colors_config.get("television", {}).get("rgb"), (211, 254, 201))
 CLR_DIGITAL = _rgb_color(media_colors_config.get("digital", {}).get("rgb"), (253, 242, 183))
-CLR_OOH = _rgb_color(media_colors_config.get("ooh", {}).get("rgb"), (255, 191, 0))
+CLR_OOH = _rgb_color(media_colors_config.get("ooh", {}).get("rgb"), (255, 217, 97))
 CLR_OTHER = _rgb_color(media_colors_config.get("other", {}).get("rgb"), (176, 211, 255))
 
 # --- PIXEL-PERFECT FONT CONSTANTS ---

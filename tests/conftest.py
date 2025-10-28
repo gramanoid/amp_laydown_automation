@@ -87,9 +87,9 @@ def cell_style_context() -> CellStyleContext:
         color_table_gray=RGBColor(191, 191, 191),
         color_header_green=RGBColor(0, 255, 0),
         color_subtotal_gray=RGBColor(217, 217, 217),
-        color_tv=RGBColor(113, 212, 141),
+        color_tv=RGBColor(211, 254, 201),
         color_digital=RGBColor(253, 242, 183),
-        color_ooh=RGBColor(255, 191, 0),
+        color_ooh=RGBColor(255, 217, 97),
         color_other=RGBColor(176, 211, 255),
     )
 
