@@ -1,0 +1,269 @@
+AMP LAYDOWNS AUTOMATION - PROJECT STRUCTURE MAP
+Last verified on 28-10-25
+
+================================================================================
+ROOT DIRECTORY - FILES & ORGANIZATION STATUS
+================================================================================
+
+CONFIGURATION FILES (Keep in root - standard locations):
+  ✓ .gitignore (586 bytes) - Git ignore patterns
+  ✓ pytest.ini (382 bytes) - Test configuration
+  ✓ AGENTS.md (2040 bytes) - AI assistant instructions [UPDATED 28-10-25]
+  ✓ README.md (3288 bytes) - Project documentation [UPDATED 28-10-25]
+
+LOOSE SCRIPTS - NEED RELOCATION:
+  ⚠ check_bold.py (1741 bytes) - Utility script for font verification
+    → Recommend: scripts/analysis/check_bold.py or tools/analysis/check_bold.py
+    → Last modified: 28-10-25 16:06
+    → Purpose: Debug script for bold formatting
+    → Status: Likely one-time debug utility
+
+  ⚠ find_percent_column.py (2828 bytes) - Utility script for column discovery
+    → Recommend: scripts/analysis/find_percent_column.py or tools/analysis/find_percent_column.py
+    → Last modified: 28-10-25 16:06
+    → Purpose: Debug script for percentage column analysis
+    → Status: Likely one-time debug utility
+
+LOG FILES - NEED RELOCATION:
+  ⚠ deck_generation.log (49 bytes) - Test/debug log
+    → Current: Root directory [VIOLATION - logs should go in logs/]
+    → Recommend: logs/adhoc/deck_generation.log
+    → Last modified: 28-10-25 14:06
+
+  ⚠ test_full_run.log (192837 bytes) - Full test run log
+    → Current: Root directory [VIOLATION - logs should go in logs/]
+    → Recommend: logs/adhoc/test_full_run.log
+    → Last modified: 28-10-25 13:41
+
+ARTIFACT FILES - NEED CLEANUP:
+  ✗ nul (0 bytes) - Empty Windows artifact file
+    → Type: Windows NULL device reference (likely accident)
+    → Recommend: DELETE or .gitignore
+    → Created: Unknown (likely from Windows command output)
+
+================================================================================
+DIRECTORY STRUCTURE ANALYSIS
+================================================================================
+
+{PROJECT_ROOT}/
+├── .factory/              [3 files] Factory configuration for slash commands
+│   ├── commands/          Documentation for openspec commands
+│   └── docs/              Factory documentation
+│
+├── .git/                  [Git repository] - STANDARD LOCATION
+│
+├── .memos/                [Memo configuration]
+│   └── logs/memos.log     Memo system logs
+│
+├── .pytest_cache/         [Pytest cache] - STANDARD LOCATION
+│
+├── amp_automation/        [MAIN SOURCE CODE - Well organized]
+│   ├── __init__.py
+│   ├── cli/               CLI entry points (main.py)
+│   ├── config/            Configuration loading (loader.py)
+│   ├── data/              Data ingestion (ingestion.py)
+│   ├── presentation/      PowerPoint generation
+│   │   ├── assembly.py    Deck assembly
+│   │   ├── charts.py      Chart generation
+│   │   ├── tables.py      Table styling
+│   │   ├── template_clone.py
+│   │   ├── template_geometry.py
+│   │   └── postprocess/   POST-PROCESSING PIPELINE [Well organized]
+│   │       ├── cell_merges.py
+│   │       ├── table_normalizer.py
+│   │       ├── font_normalization.py
+│   │       └── cli.py
+│   ├── tooling/           External tool adapters
+│   │   ├── aspose_converter.py
+│   │   ├── autopptx_adapter.py
+│   │   └── docstrange_validator.py
+│   ├── utils/             Utility functions
+│   │   ├── logging.py
+│   │   └── media.py
+│   └── validation/        Data validation [5 modules - well organized]
+│       ├── data_accuracy.py
+│       ├── data_completeness.py
+│       ├── data_format.py
+│       ├── reconciliation.py
+│       └── utils.py
+│
+├── config/                [CONFIGURATION - 2 files]
+│   ├── master_config.json [CRITICAL - main configuration]
+│   ├── structural_contract.json [Contract for validation]
+│   └── README.md          Config documentation
+│
+├── docs/                  [DOCUMENTATION - Session-organized]
+│   ├── 24-10-25/          [Session notes and logs from 24-10-25]
+│   │   ├── logs/          [24 log files - development traces]
+│   │   ├── ARCHITECTURE_DECISION_COM_PROHIBITION.md
+│   │   ├── BRAIN_RESET_241025.md
+│   │   └── [Multiple session notes]
+│   │
+│   ├── 27-10-25/          [Session notes from 27-10-25]
+│   │   ├── BRAIN_RESET_271025.md
+│   │   ├── DYNAMIC_ELEMENTS_RULES.md
+│   │   ├── END_OF_SESSION_SUMMARY.md
+│   │   └── [Multiple implementation plans]
+│   │
+│   ├── 28-10-25/          [CURRENT SESSION - 28-10-25]
+│   │   ├── BRAIN_RESET_281025.md [Updated with session completion]
+│   │   ├── clean/         [NEW - Cleanup planning directory]
+│   │   └── [Session documentation]
+│   │
+│   ├── archive/           [ARCHIVED SESSIONS]
+│   │   ├── 27-10-25/      [Historical sessions and logs]
+│   │   └── [Multiple archived session folders]
+│   │
+│   └── 24-10-25.md        [Stale root-level doc]
+│
+├── logs/                  [LOGGING - Well organized by type and date]
+│   ├── 23-10-25_run_generation.log [Stale single log]
+│   ├── phase5_test.log [Stale single log]
+│   ├── production/        [ORGANIZED BY DATE AND RUN ID]
+│   │   ├── 2025-10-14/
+│   │   ├── 2025-10-15/
+│   │   ├── 2025-10-17/
+│   │   ├── 2025-10-19/
+│   │   ├── 2025-10-20/  [Large number of logs - hundreds of test runs]
+│   │   ├── 2025-10-21/  [Large number of logs - hundreds of test runs]
+│   │   ├── 2025-10-22/  [Large number of logs]
+│   │   ├── 2025-10-23/
+│   │   ├── 2025-10-24/
+│   │   └── 2025-10-27/  [Most recent - 67 log files + subdirectories]
+│   └── [Directory structure: logs/production/{YYYY-MM-DD}/run_{timestamp}/]
+│
+├── openspec/              [CHANGE PROPOSALS - Well organized]
+│   ├── project.md
+│   ├── AGENTS.md
+│   └── [OpenSpec change proposal files]
+│
+├── output/                [OUTPUT ARTIFACTS - Generated decks]
+│   └── presentations/     [Generated PowerPoint files organized by run]
+│       └── run_*/         [Timestamped run directories]
+│
+├── scripts/               [SCRIPTS - Minimally populated]
+│   ├── ReconstructFirstColumns.ps1 [PowerShell script - 1.2KB]
+│   └── [Only 1 script in root of scripts/]
+│
+├── temp/                  [TEMPORARY FILES - Status unknown]
+│   └── [Contents not fully scanned]
+│
+├── template/              [TEMPLATE & DATA]
+│   ├── Template_V4_FINAL_071025.pptx [Master template]
+│   ├── BulkPlanData_2025_10_14.xlsx [Test Excel data]
+│   └── [Reference files for generation]
+│
+├── tests/                 [TEST SUITE - Well organized]
+│   ├── conftest.py        [Pytest fixtures]
+│   ├── test_autopptx_fallback.py
+│   ├── test_assembly_split.py
+│   ├── test_campaign_merging.py
+│   ├── test_font_normalization.py
+│   ├── test_pagination.py
+│   ├── test_reconciliation_validator.py
+│   ├── test_structural_validator.py [UPDATED 28-10-25 - 16 regression tests]
+│   ├── test_tables.py [UPDATED 28-10-25 - 16 regression tests]
+│   └── [8 test modules total]
+│
+└── tools/                 [VALIDATION & UTILITY TOOLS]
+    ├── validate/          [Data validation tools]
+    │   ├── validate_all_data.py [Comprehensive validator]
+    │   ├── validate_structure.py [Structure validator - FIXED 28-10-25]
+    │   └── __init__.py
+    │
+    ├── verify/            [Verification tools]
+    │   ├── verify_deck_fonts.py
+    │   ├── verify_monthly_total_fonts.py
+    │   ├── verify_unmerge.py
+    │   └── __init__.py
+    │
+    ├── visual_diff.py     [Visual diff utility]
+    │
+    ├── archive/           [ARCHIVED TOOLS]
+    │   └── analysis_scripts/inspect_fonts.py
+    │
+    └── [No PowerShell post-processing script in root - lives in scripts/]
+
+================================================================================
+ORGANIZATION COMPLIANCE ANALYSIS
+================================================================================
+
+✓ SOURCE CODE ORGANIZATION:
+  - amp_automation/ follows Python package conventions
+  - Proper separation: cli, config, data, presentation, tooling, utils, validation
+  - Submodules well-organized (e.g., presentation/postprocess/)
+  - COMPLIANCE: GOOD - No violations detected
+
+✓ CONFIGURATION ORGANIZATION:
+  - config/ directory properly segregates configuration files
+  - master_config.json and structural_contract.json co-located
+  - COMPLIANCE: GOOD
+
+⚠ DOCUMENTATION ORGANIZATION:
+  - Docs organized by session date (24-10-25, 27-10-25, 28-10-25)
+  - Acceptable for development workflow
+  - ISSUE: Stale root-level file (docs/24-10-25.md) should archive
+  - Logs stored in docs/{DATE}/logs/ - acceptable but could consolidate to logs/
+  - COMPLIANCE: ACCEPTABLE - Could be improved
+
+✗ ROOT DIRECTORY VIOLATIONS:
+  - check_bold.py: Source file in root [VIOLATION]
+  - find_percent_column.py: Source file in root [VIOLATION]
+  - deck_generation.log: Log file in root [VIOLATION]
+  - test_full_run.log: Log file in root [VIOLATION]
+  - nul: Empty artifact file [VIOLATION]
+  - COMPLIANCE: POOR - 5 misplaced files require remediation
+
+⚠ LOGS ORGANIZATION:
+  - logs/production/ well-structured by date and run ID (hundreds of logs)
+  - ISSUE: Stale logs at logs/ root level (23-10-25_run_generation.log, phase5_test.log)
+  - ISSUE: Logs scattered in docs/{DATE}/logs/ subdirectories
+  - IMPROVEMENT: Consolidate all historical logs to logs/archive/ or docs/archive/
+  - COMPLIANCE: ACCEPTABLE - Functional but scattered
+
+✓ SCRIPTS ORGANIZATION:
+  - scripts/ directory exists but only contains 1 PowerShell script
+  - tools/ properly contains validation and verification utilities
+  - ISSUE: Loose analysis scripts (check_bold.py, find_percent_column.py) belong in scripts/
+  - COMPLIANCE: ACCEPTABLE - Could be improved with loose script relocation
+
+✓ TESTS ORGANIZATION:
+  - tests/ properly co-located with source (conftest.py, 8 test modules)
+  - Test structure mirrors source modules (test_tables.py, test_structural_validator.py, etc.)
+  - COMPLIANCE: GOOD
+
+✓ TOOLS ORGANIZATION:
+  - tools/validate/ contains data validation (2 validators)
+  - tools/verify/ contains verification tools (3 verifiers)
+  - tools/archive/ contains deprecated tools
+  - tools/visual_diff.py root-level (acceptable for visibility)
+  - COMPLIANCE: GOOD
+
+================================================================================
+SUMMARY OF FINDINGS
+================================================================================
+
+TOTAL ISSUES IDENTIFIED: 8
+
+CRITICAL (Must fix):
+  1. check_bold.py (root) → Relocate to scripts/analysis/
+  2. find_percent_column.py (root) → Relocate to scripts/analysis/
+  3. deck_generation.log (root) → Relocate to logs/adhoc/
+  4. test_full_run.log (root) → Relocate to logs/adhoc/
+  5. nul (root) → Delete (Windows artifact)
+
+IMPORTANT (Should fix):
+  6. Stale docs/24-10-25.md → Archive to docs/archive/
+  7. Stale logs/23-10-25_run_generation.log → Archive
+  8. Stale logs/phase5_test.log → Archive
+
+RECOMMENDATIONS FOR FUTURE IMPROVEMENT:
+  - Create scripts/analysis/ directory for analysis utilities
+  - Create logs/adhoc/ directory for temporary/debug logs
+  - Consolidate docs/{DATE}/logs/ to logs/archive/{DATE}/
+  - Consider splitting tools/ into tools/validation/, tools/verification/ at same level
+  - Keep current Python package structure (excellent organization)
+
+COMPLIANCE SCORE: 7/10 (Good overall, minor root directory violations)
+
+Last verified on 28-10-25
