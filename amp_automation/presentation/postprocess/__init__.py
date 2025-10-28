@@ -38,6 +38,7 @@ from .table_normalizer import (
 from .cell_merges import (
     merge_campaign_cells,
     merge_media_cells,
+    merge_percentage_cells,
     merge_monthly_total_cells,
     merge_summary_cells,
 )
@@ -63,6 +64,7 @@ __all__ = [
     # Cell merges
     "merge_campaign_cells",
     "merge_media_cells",
+    "merge_percentage_cells",
     "merge_monthly_total_cells",
     "merge_summary_cells",
     # Span operations

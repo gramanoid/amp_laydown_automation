@@ -445,6 +445,81 @@ def merge_summary_cells(table):
     return merges_performed
 
 
+def merge_percentage_cells(table):
+    """
+    Merge percentage cells vertically in column 17 (% column).
+
+    Similar to campaign merging, this function identifies campaign rows and merges
+    the percentage cells vertically from the start of a campaign until the cell
+    before the gray MONTHLY TOTAL row.
+
+    Args:
+        table: python-pptx table object
+
+    Returns:
+        int: Number of percentage merges performed
+    """
+    logger.debug("Merging percentage cells")
+
+    row_count = len(table.rows)
+    merge_start = None
+    merges_performed = 0
+
+    # Iterate through rows (skip header row index 0)
+    for row_idx in range(1, row_count):
+        cell = table.cell(row_idx, 0)  # Check CAMPAIGN column to detect row type
+        cell_text = _get_cell_text(cell)
+        is_gray = _has_gray_background(cell)
+
+        # Extract campaign name from cell (handling "MONTHLY TOTAL\nCAMPAIGN" format)
+        if not is_gray:
+            actual_campaign_name = _extract_campaign_name(cell_text)
+        else:
+            actual_campaign_name = normalize_label(cell_text)
+
+        is_monthly = is_monthly_total(actual_campaign_name) if actual_campaign_name else False
+        is_grand = is_grand_total(actual_campaign_name) if actual_campaign_name else False
+
+        # Track merge start (non-empty, non-special rows, non-gray)
+        if actual_campaign_name and not is_monthly and not is_grand and not is_gray:
+            if merge_start is None:
+                merge_start = row_idx
+                logger.debug(f"Found percentage merge start at row {row_idx}")
+
+        # Perform merge when we hit a GRAY MONTHLY TOTAL row
+        if is_monthly and is_gray and merge_start is not None:
+            merge_end = row_idx - 1  # Merge until row before MONTHLY TOTAL
+
+            if merge_end > merge_start:
+                try:
+                    # Merge cells in column 17 (% column)
+                    top_cell = table.cell(merge_start, 17)
+                    bottom_cell = table.cell(merge_end, 17)
+
+                    # Check if already merged
+                    if not _cells_are_same(top_cell, bottom_cell):
+                        top_cell.merge(bottom_cell)
+                        merges_performed += 1
+                        logger.debug(f"Merged percentage cells rows {merge_start}-{merge_end}")
+
+                    # Apply styling to merged cell (centered, vertically centered)
+                    merged_cell = table.cell(merge_start, 17)
+                    _apply_cell_styling(
+                        merged_cell,
+                        font_size=6,
+                        center_align=True,
+                        vertical_center=True
+                    )
+
+                except Exception as e:
+                    logger.error(f"Failed to merge percentage cells rows {merge_start}-{merge_end}: {e}")
+
+            merge_start = None
+
+    logger.info(f"Percentage merges completed: {merges_performed} merge(s)")
+    return merges_performed
+
+
 # Helper function for future implementation
 def normalize_label(text: str) -> str:
     """

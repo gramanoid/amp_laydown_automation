@@ -587,7 +587,7 @@ def style_table_cell(
                 run.font.name = DEFAULT_FONT_NAME
                 run.font.size = body_font_size
                 run.font.color.rgb = CLR_BLACK
-                run.font.bold = col_idx < 3
+                run.font.bold = col_idx < 3 or col_idx in (15, 16)
 
 
         if processed_cell_text != "-" and run.font.name != DEFAULT_FONT_NAME:
@@ -805,7 +805,7 @@ def style_table_cell(
                     expected_font_size = FONT_SIZE_MONTHLY_TOTAL if is_monthly_total_row else FONT_SIZE_HEADER
                     expected_bold = True
                 else:
-                    if col_idx < 3:
+                    if col_idx < 3 or col_idx in (15, 16):
                         expected_bold = True
 
                 if cell_run.text.strip() in ("", "-"):
