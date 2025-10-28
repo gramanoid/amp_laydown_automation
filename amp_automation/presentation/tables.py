@@ -680,7 +680,7 @@ def style_table_cell(
                 if metrics_value:
                     metrics_normalized = str(metrics_value).strip().upper()
                     metric_to_media = {
-                        "REACH1+": "TELEVISION",
+                        "REACH@1+": "TELEVISION",
                         "OTS@3+": "TELEVISION",
                         "META REACH": "DIGITAL",
                         "TT REACH": "DIGITAL",
