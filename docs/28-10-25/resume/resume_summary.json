@@ -1,0 +1,35 @@
+{
+  "resumed_at": "2025-10-28T21:16:24+04:00",
+  "session_date": "28-10-25",
+  "last_activity": "2025-10-28T17:15:14+04:00",
+  "idle_minutes": 241,
+  "git_commits_since_last_activity": [],
+  "deferred_unblocked": [],
+  "uncommitted_changes": [
+    "7 deleted files in docs/",
+    "7 untracked files in docs/28-10-25/"
+  ],
+  "anomalies": [
+    "no_session_marker",
+    "uncommitted_file_deletions",
+    "stale_idle_time_4h"
+  ],
+  "suggested_next_action": "review and commit file reorganization",
+  "session_status": "COMPLETE - Session finished with uncommitted file moves",
+  "openspec_tasks": {
+    "complete": "Campaign pagination (Phase 2)",
+    "incomplete": "Campaign pagination (Phase 3-4 cancelled)",
+    "active": []
+  },
+  "work_summary": {
+    "completed_today": [
+      "6 formatting improvements (bold columns, smart quarterly, output naming, footer dates)",
+      "16 regression tests added",
+      "PROJECT_ROOT bug fixed",
+      "Repository cleanup (7/10 → 9/10 compliance)"
+    ],
+    "current_state": "All planned work complete, uncommitted file moves pending",
+    "test_status": "25 passing, 6 skipped",
+    "production_deck": "run_20251028_163719/AMP_Laydowns_281025.pptx (127 slides)"
+  }
+}
