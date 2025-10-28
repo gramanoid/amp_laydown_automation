@@ -179,11 +179,11 @@
       "media_types": {
         "television": {
           "rgb": [
-            113,
-            212,
-            141
+            211,
+            254,
+            201
           ],
-          "hex": "#71D48D"
+          "hex": "#D3FEC9"
         },
         "digital": {
           "rgb": [
