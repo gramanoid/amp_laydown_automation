@@ -492,6 +492,11 @@ def merge_percentage_cells(table):
 
             if merge_end > merge_start:
                 try:
+                    # Clear intermediate cell contents before merging
+                    for clear_row in range(merge_start + 1, merge_end + 1):
+                        cell_to_clear = table.cell(clear_row, 17)
+                        cell_to_clear.text = ""
+
                     # Merge cells in column 17 (% column)
                     top_cell = table.cell(merge_start, 17)
                     bottom_cell = table.cell(merge_end, 17)

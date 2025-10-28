@@ -40,7 +40,7 @@ def excel_path(project_root: Path) -> Path:
 @pytest.fixture(scope="session")
 def latest_deck_path(project_root: Path) -> Path:
     """Path to latest production deck (28-10-25)."""
-    return project_root / "output" / "presentations" / "run_20251028_150418" / "AMP_Presentation_20251028_150418.pptx"
+    return project_root / "output" / "presentations" / "run_20251028_150942" / "AMP_Presentation_20251028_150942.pptx"
 
 
 @pytest.fixture(scope="session")
@@ -220,7 +220,7 @@ def extract_font_size(run) -> Pt | None:
 
 
 skipif_no_deck = pytest.mark.skipif(
-    not Path("output/presentations/run_20251028_150418/AMP_Presentation_20251028_150418.pptx").exists(),
+    not Path("output/presentations/run_20251028_150942/AMP_Presentation_20251028_150942.pptx").exists(),
     reason="Latest production deck not found"
 )
 
