@@ -674,6 +674,21 @@ def style_table_cell(
             def resolve_media_type() -> str | None:
                 if cell_key in cell_metadata:
                     return cell_metadata[cell_key].get("media_type")
+
+                # Check column 2 (METRICS) for special metric names with assigned colors
+                metrics_value = table_data[row_idx][2] if row_idx < len(table_data) and len(table_data[row_idx]) > 2 else None
+                if metrics_value:
+                    metrics_normalized = str(metrics_value).strip().upper()
+                    metric_to_media = {
+                        "REACH1+": "TELEVISION",
+                        "OTS@3+": "TELEVISION",
+                        "META REACH": "DIGITAL",
+                        "TT REACH": "DIGITAL",
+                    }
+                    if metrics_normalized in metric_to_media:
+                        return metric_to_media[metrics_normalized]
+
+                # Fall back to column 1 (media type)
                 media_value = table_data[row_idx][1] if row_idx < len(table_data) and len(table_data[row_idx]) > 1 else None
                 media_value = str(media_value).strip() if media_value else ""
                 if media_value and media_value != "-":
