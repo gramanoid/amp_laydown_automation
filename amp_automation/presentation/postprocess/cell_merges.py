@@ -507,11 +507,12 @@ def merge_percentage_cells(table):
                         merges_performed += 1
                         logger.debug(f"Merged percentage cells rows {merge_start}-{merge_end}")
 
-                    # Apply styling to merged cell (centered, vertically centered)
+                    # Apply styling to merged cell (bold, centered, vertically centered)
                     merged_cell = table.cell(merge_start, 17)
                     _apply_cell_styling(
                         merged_cell,
                         font_size=6,
+                        bold=True,
                         center_align=True,
                         vertical_center=True
                     )
