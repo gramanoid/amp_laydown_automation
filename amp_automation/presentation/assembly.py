@@ -646,7 +646,7 @@ def _derive_campaign_blocks_for_table(table_data: list[list[str]]) -> list[tuple
 
     blocks: list[tuple[int, int]] = []
     idx = 1  # skip header
-    total_label = "MONTHLY TOTAL (£ 000)"
+    total_label = "MONTHLY TOTAL (£000)"
     skip_labels = {"", "-", total_label, "GRAND TOTAL"}
 
     while idx < len(table_data) - 1:
@@ -994,7 +994,7 @@ def _build_campaign_monthly_total_row(
     campaign_grp_total: float,
     cell_metadata: dict[tuple[int, int], dict[str, object]],
 ) -> list[str]:
-    row: list[str] = ["MONTHLY TOTAL (£ 000)", "", ""]
+    row: list[str] = ["MONTHLY TOTAL (£000)", "", ""]
     for month_idx, value in enumerate(month_totals):
         formatted = _format_budget_cell(value)
         col_idx = 3 + month_idx
@@ -2350,7 +2350,7 @@ def _split_table_data_by_campaigns(table_data, cell_metadata):
         media = _media_label(idx)
         if label in {"", "-"}:
             return bool(media and media != "-")
-        if label in {"MONTHLY TOTAL (� 000)", "GRAND TOTAL"}:
+        if label in {"MONTHLY TOTAL (£000)", "GRAND TOTAL"}:
             return False
         return True
 
@@ -2361,14 +2361,14 @@ def _split_table_data_by_campaigns(table_data, cell_metadata):
             return 0
 
         label = _row_label(start_idx)
-        if label == "MONTHLY TOTAL (� 000)":
+        if label == "MONTHLY TOTAL (£000)":
             return 1
 
         length = 1
         idx = start_idx + 1
         while idx <= campaign_end_idx:
             next_label = _row_label(idx)
-            if next_label == "MONTHLY TOTAL (� 000)":
+            if next_label == "MONTHLY TOTAL (£000)":
                 length += 1
                 idx += 1
                 break
@@ -2924,7 +2924,7 @@ def _populate_cloned_table(table_shape, table_data, cell_metadata):
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.debug("Unable to set atLeast row %s height rule: %s", row_index, exc)
 
-    subtotal_labels = {"SUBTOTAL", "MONTHLY TOTAL (£ 000)", "GRAND TOTAL"}
+    subtotal_labels = {"SUBTOTAL", "MONTHLY TOTAL (£000)", "GRAND TOTAL"}
 
     for row_idx in range(rows_needed):
         row = table.rows[row_idx]
