@@ -42,6 +42,7 @@ from . import (
     reset_column_group,
     merge_campaign_cells,
     merge_media_cells,
+    merge_percentage_cells,
     merge_monthly_total_cells,
     merge_summary_cells,
     unmerge_all_cells,
@@ -65,6 +66,8 @@ class PostProcessorCLI:
         "unmerge-primary": "Unmerge only primary columns (1-3) - less aggressive than unmerge-all",
         "reset-spans": "Reset column spans in primary columns (edge case repair)",
         "merge-campaign": "Merge campaign cells vertically in column 1 (apply after unmerge)",
+        "merge-media": "Merge media channel cells vertically (apply after unmerge)",
+        "merge-percentage": "Merge percentage cells vertically in column 17 (apply after unmerge)",
         "merge-monthly": "Merge monthly total cells horizontally cols 1-3 (apply after unmerge)",
         "merge-summary": "Merge summary cells GRAND TOTAL cols 1-3 (apply after unmerge)",
     }
@@ -76,6 +79,7 @@ class PostProcessorCLI:
         "merge-campaign",
         "merge-media",
         "merge-monthly",
+        "merge-percentage",  # Must run AFTER merge-monthly to find gray MONTHLY TOTAL rows
         "merge-summary",
         "fix-grand-total-wrap",
         "remove-pound-totals",
@@ -144,6 +148,8 @@ class PostProcessorCLI:
                 merge_campaign_cells(table)
             elif operation == "merge-media":
                 merge_media_cells(table)
+            elif operation == "merge-percentage":
+                merge_percentage_cells(table)
             elif operation == "merge-monthly":
                 merge_monthly_total_cells(table)
             elif operation == "merge-summary":

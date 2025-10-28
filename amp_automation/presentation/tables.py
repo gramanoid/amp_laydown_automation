@@ -587,7 +587,7 @@ def style_table_cell(
                 run.font.name = DEFAULT_FONT_NAME
                 run.font.size = body_font_size
                 run.font.color.rgb = CLR_BLACK
-                run.font.bold = col_idx < 3
+                run.font.bold = col_idx < 3 or col_idx in (15, 16)  # CAMPAIGN/MEDIA/METRICS + TOTAL/GRPs columns
 
 
         if processed_cell_text != "-" and run.font.name != DEFAULT_FONT_NAME:
