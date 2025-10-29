@@ -23,41 +23,7 @@ This file tracks work items that are blocked or deferred to a future date. Items
 
 ## Deferred Items
 
-### [PHASE4+] Slide 1 Geometry Parity Verification
-
-- **Blocked by:** All Phase 1-3 formatting improvements complete; lower priority
-- **Unblock date:** TBD (future session)
-- **Priority:** P2
-- **Estimated effort:** 2-3h
-- **Context:** Visual diff workflow to compare generated Slide 1 vs template for EMU/legend discrepancies
-- **Reference:** See docs/28-10-25/28-10-25.md "Archived/Deferred (Phase 4+)"
-
-### [PHASE4+] Visual Diff Workflow Enhancement
-
-- **Blocked by:** Current validation suite sufficient for production; enhancement deferred
-- **Unblock date:** TBD (future session)
-- **Priority:** P3
-- **Estimated effort:** 2-4h
-- **Context:** Automated visual comparison using Zen MCP + PowerPoint Compare
-- **Reference:** See docs/28-10-25/28-10-25.md "Archived/Deferred (Phase 4+)"
-
-### [PHASE4+] Python Normalization Expansion
-
-- **Blocked by:** Current 8-step workflow handles all known formatting requirements
-- **Unblock date:** TBD (as new requirements emerge)
-- **Priority:** P3
-- **Estimated effort:** Varies
-- **Context:** Additional normalization features for future template changes
-- **Reference:** See docs/28-10-25/28-10-25.md "Archived/Deferred (Phase 4+)"
-
-### [PHASE4+] Automated Regression Scripts
-
-- **Blocked by:** Manual test suite sufficient; automation deferred
-- **Unblock date:** TBD (future session)
-- **Priority:** P3
-- **Estimated effort:** 4-6h
-- **Context:** CI/CD integration for automated regression testing on deck generation
-- **Reference:** See docs/28-10-25/28-10-25.md "Archived/Deferred (Phase 4+)"
+*No active deferred items*
 
 ---
 
@@ -66,6 +32,40 @@ This file tracks work items that are blocked or deferred to a future date. Items
 Items that were deferred but are now ready to work on should be moved here before being added to openspec/changes/{feature}/tasks.md
 
 *No recently unblocked items*
+
+---
+
+## Permanently Archived (Not Needed)
+
+Items deemed unnecessary and permanently archived.
+
+### [PHASE4+] Slide 1 Geometry Parity Verification (ARCHIVED 29-10-25)
+
+- **Priority:** P2
+- **Estimated effort:** 2-3h
+- **Context:** Visual diff workflow to compare generated Slide 1 vs template for EMU/legend discrepancies
+- **Reason archived:** No client issues reported. Current validation sufficient.
+
+### [PHASE4+] Visual Diff Workflow Enhancement (ARCHIVED 29-10-25)
+
+- **Priority:** P3
+- **Estimated effort:** 2-4h
+- **Context:** Automated visual comparison using Zen MCP + PowerPoint Compare
+- **Reason archived:** Structural validator + data validation suite sufficient. Low ROI.
+
+### [PHASE4+] Python Normalization Expansion (ARCHIVED 29-10-25)
+
+- **Priority:** P3
+- **Estimated effort:** Varies
+- **Context:** Additional normalization features for future template changes
+- **Reason archived:** Current 8-step workflow handles all known requirements. No new features needed. Will add on-demand if template changes.
+
+### [PHASE4+] Automated Regression Scripts (ARCHIVED 29-10-25)
+
+- **Priority:** P3
+- **Estimated effort:** 4-6h
+- **Context:** CI/CD integration for automated regression testing on deck generation
+- **Reason archived:** Manual test execution sufficient (25 tests, ~10 seconds). Low frequency, single contributor. Premature optimization.
 
 ---
 
