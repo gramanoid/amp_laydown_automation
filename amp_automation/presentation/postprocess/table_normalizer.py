@@ -403,7 +403,11 @@ def remove_pound_signs_from_totals(table):
 
             # Check if this is GRAND TOTAL or MONTHLY TOTAL row
             is_grand_total = "GRAND" in cell_text and "TOTAL" in cell_text
-            is_monthly_total = "MONTHLY" in cell_text and "TOTAL" in cell_text
+            is_monthly_total = (
+                ("MONTHLY" in cell_text and "TOTAL" in cell_text) or
+                cell_text.startswith("TOTAL -") or
+                cell_text.startswith("TOTAL-")
+            )
 
             if is_grand_total or is_monthly_total:
                 # IMPORTANT FIX (Point 6): Keep pound symbol in label cell (col 0), only remove from numeric cells

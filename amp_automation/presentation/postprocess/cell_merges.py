@@ -603,14 +603,20 @@ def _extract_campaign_name(cell_text: str) -> str:
     if not lines:
         return ""
 
-    # If first line is "MONTHLY TOTAL", use second line as campaign name
+    # If first line is "MONTHLY TOTAL" or "TOTAL - ...", use second line as campaign name
     first_line_normalized = lines[0].upper()
-    if "MONTHLY" in first_line_normalized and "TOTAL" in first_line_normalized:
+    is_monthly_total_line = (
+        ("MONTHLY" in first_line_normalized and "TOTAL" in first_line_normalized) or
+        first_line_normalized.startswith("TOTAL -") or
+        first_line_normalized.startswith("TOTAL-")
+    )
+
+    if is_monthly_total_line:
         if len(lines) > 1:
             # Return second line (the actual campaign name)
             return lines[1].upper()
         else:
-            # Just "MONTHLY TOTAL" with no campaign name - not a campaign row
+            # Just "MONTHLY TOTAL" or "TOTAL - ..." with no campaign name - not a campaign row
             return ""
 
     # Otherwise, first line is the campaign name
