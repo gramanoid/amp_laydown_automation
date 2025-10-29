@@ -558,7 +558,12 @@ def is_monthly_total(cell_text: str) -> bool:
         True if this is a MONTHLY TOTAL row
     """
     normalized = normalize_label(cell_text)
-    return "MONTHLY" in normalized and "TOTAL" in normalized
+    # Match both old format "MONTHLY TOTAL (£ 000)" and new format "TOTAL - TV 38%..."
+    return (
+        ("MONTHLY" in normalized and "TOTAL" in normalized) or
+        normalized.startswith("TOTAL -") or
+        normalized.startswith("TOTAL-")
+    )
 
 
 def is_grand_total(cell_text: str) -> bool:

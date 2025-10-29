@@ -210,8 +210,13 @@ def style_table_cell(
     normalized_row_label = ""
     if 0 <= row_idx < len(table_data) and table_data[row_idx]:
         normalized_row_label = " ".join(str(table_data[row_idx][0]).replace("\xa0", " ").split()).upper()
-    is_monthly_total_row = normalized_row_label == "MONTHLY TOTAL (£ 000)"
-    is_total_row = row_idx == len(table_data) - 1 or (row_idx > 0 and normalized_row_label in SUBTOTAL_LABELS)
+    # Recognize both old "MONTHLY TOTAL (£ 000)" and new "TOTAL - TV 38%..." formats
+    is_monthly_total_row = (
+        normalized_row_label == "MONTHLY TOTAL (£ 000)" or
+        normalized_row_label.startswith("TOTAL -") or
+        normalized_row_label.startswith("TOTAL-")
+    )
+    is_total_row = row_idx == len(table_data) - 1 or (row_idx > 0 and (normalized_row_label in SUBTOTAL_LABELS or is_monthly_total_row))
 
     from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE, MSO_VERTICAL_ANCHOR
     alignment = PP_ALIGN.CENTER
@@ -538,10 +543,11 @@ def style_table_cell(
         if use_compact_font and processed_cell_text:
             processed_cell_text = processed_cell_text.replace(" ", "\u00A0").replace("-", "\u2011")
 
-        # CRITICAL FIX: Ensure pound symbol is preserved in MONTHLY TOTAL label (Point 6)
+        # CRITICAL FIX: Ensure pound symbol is preserved in old MONTHLY TOTAL label format (Point 6)
         # The pound symbol (£) can be lost during text processing, so we explicitly check and restore it
+        # Only apply to old format "MONTHLY TOTAL (£ 000)", not new format "TOTAL - TV 38%..."
         if "MONTHLY TOTAL" in processed_cell_text and "(" in processed_cell_text and "000)" in processed_cell_text:
-            if "£" not in processed_cell_text:
+            if "£" not in processed_cell_text and "TOTAL -" not in processed_cell_text:
                 # Pound symbol was lost; restore it: "MONTHLY TOTAL ( 000)" -> "MONTHLY TOTAL (£ 000)"
                 processed_cell_text = processed_cell_text.replace("( ", "(£ ", 1)
                 logger.debug("CELL STYLING [%s,%s]: Restored pound symbol in MONTHLY TOTAL label", row_idx, col_idx)
@@ -638,6 +644,12 @@ def style_table_cell(
 
         subtotal_labels = {"SUBTOTAL", "CARRIED FORWARD", "MONTHLY TOTAL (\u00a3 000)", "GRAND TOTAL"}
         row_label = str(table_data[row_idx][0]).strip().upper() if row_idx < len(table_data) else ""
+        # Check if row is a monthly total (old or new format)
+        is_monthly_total = (
+            row_label in subtotal_labels or
+            row_label.startswith("TOTAL -") or
+            row_label.startswith("TOTAL-")
+        )
 
         def _apply_rgb_fill(target_cell, rgb_color):
             target_cell.fill.solid()
@@ -672,7 +684,7 @@ def style_table_cell(
             else:
                 _apply_theme_fill(cell, MSO_THEME_COLOR_INDEX.TEXT_1, brightness=0.35)
 
-        elif row_idx == len(table_data) - 1 or row_label in subtotal_labels:
+        elif row_idx == len(table_data) - 1 or is_monthly_total:
             _apply_rgb_fill(cell, CLR_SUBTOTAL_GRAY)
 
         else:

@@ -1031,8 +1031,29 @@ def _build_campaign_monthly_total_row(
     month_totals: list[float],
     campaign_grp_total: float,
     cell_metadata: dict[tuple[int, int], dict[str, object]],
+    media_splits: dict[str, float] | None = None,
 ) -> list[str]:
-    row: list[str] = ["MONTHLY TOTAL (£ 000)", "", ""]
+    # Format label with media split percentages
+    if media_splits:
+        # Abbreviate media type names for space efficiency
+        abbrev_map = {
+            "Television": "TV",
+            "Digital": "DIG",
+            "OOH": "OOH",
+            "Other": "OTH"
+        }
+        parts = []
+        for media in MEDIA_DISPLAY_ORDER:
+            if media in media_splits:
+                pct = media_splits[media]
+                if pct >= 0.5:  # Only show media >= 0.5%
+                    abbr = abbrev_map.get(media, media[:3].upper())
+                    parts.append(f"{abbr} {pct:.0f}%")
+        label = "TOTAL - " + " • ".join(parts) if parts else "TOTAL"
+    else:
+        label = "MONTHLY TOTAL (£ 000)"
+
+    row: list[str] = [label, "", ""]
     for month_idx, value in enumerate(month_totals):
         formatted = _format_budget_cell(value)
         col_idx = 3 + month_idx
@@ -1268,6 +1289,7 @@ def _build_campaign_block(
     block_rows: list[list[str]] = []
     block_month_totals = [0.0] * len(TABLE_MONTH_ORDER)
     block_grp_total = 0.0
+    media_totals: dict[str, float] = {}  # Track media spend for split calculation
 
     campaign_total_budget = float(campaign_df["Total Cost"].sum() or 0.0)
     share_percentage = (
@@ -1292,6 +1314,7 @@ def _build_campaign_block(
             existing + value for existing, value in zip(block_month_totals, monthly_values)
         ]
         total_cost = float(media_df["Total Cost"].sum() or 0.0)
+        media_totals[media_key] = total_cost  # Track for media split calculation
 
         row_idx = base_row_idx + len(block_rows)
         # Remove hyphens from campaign names to prevent mid-word breaks (e.g., "FACES-CONDITION" → "FACES CONDITION")
@@ -1332,11 +1355,20 @@ def _build_campaign_block(
 
         first_media = False
 
+    # Calculate media split percentages
+    media_splits: dict[str, float] = {}
+    if campaign_total_budget > 0:
+        for media_key, media_total in media_totals.items():
+            pct = (media_total / campaign_total_budget) * 100.0
+            if pct >= 0.5:  # Only include media >= 0.5%
+                media_splits[media_key] = pct
+
     total_row = _build_campaign_monthly_total_row(
         base_row_idx + len(block_rows),
         block_month_totals,
         block_grp_total,
         cell_metadata,
+        media_splits if media_splits else None,
     )
     block_rows.append(total_row)
 
