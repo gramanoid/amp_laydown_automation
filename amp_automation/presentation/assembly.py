@@ -689,6 +689,10 @@ def _apply_title(slide, template_slide, combination_row, slide_title_suffix):
         if hasattr(title_shape, 'width'):
             title_shape.width = 7315200  # 8 inches in EMUs
 
+        # Align title left margin with table left margin
+        if hasattr(title_shape, 'left'):
+            title_shape.left = TEMPLATE_V4_TABLE_LEFT_EMU
+
     return title_text
 
 
