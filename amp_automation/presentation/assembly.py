@@ -678,11 +678,16 @@ def _apply_title(slide, template_slide, combination_row, slide_title_suffix):
 
         if paragraph.runs:
             run = paragraph.runs[0]
-            # Format with Verdana, 13pt, Bold, Green (#30ea03)
+            # Format with Verdana, 13pt, Bold, Black
             run.font.name = "Verdana"
             run.font.size = Pt(13)
             run.font.bold = True
-            run.font.color.rgb = RGBColor(0x30, 0xea, 0x03)
+            run.font.color.rgb = RGBColor(0, 0, 0)  # Black
+
+        # Increase width to fit longer titles on one line (make it wider)
+        # Width: ~8 inches (7315200 EMUs) to accommodate long market/brand names
+        if hasattr(title_shape, 'width'):
+            title_shape.width = 7315200  # 8 inches in EMUs
 
     return title_text
 
