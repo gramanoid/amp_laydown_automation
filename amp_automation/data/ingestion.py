@@ -410,6 +410,55 @@ def get_month_specific_tv_metrics(
             if "**Flight Start Date" in df.columns:
                 df["**Flight Start Date"] = pd.to_datetime(df["**Flight Start Date"])
                 df["Month"] = df["**Flight Start Date"].dt.strftime("%b")
+
+        # Apply same transformations as load_and_prepare_data for consistency
+        # 1. Geography normalization
+        if "Plan - Geography" in df.columns:
+            def normalize_geography(geo_value: str) -> str:
+                if pd.isna(geo_value):
+                    return geo_value
+                geo_str = str(geo_value)
+                # Remove duplicate segments
+                if geo_str.endswith("Pakistan | Pakistan"):
+                    geo_str = geo_str.replace("Pakistan | Pakistan", "Pakistan")
+                elif geo_str.endswith("South Africa | South Africa"):
+                    geo_str = geo_str.replace("South Africa | South Africa", "South Africa")
+                elif geo_str.endswith("Turkey | Turkey"):
+                    geo_str = geo_str.replace("Turkey | Turkey", "Turkey")
+                # Remove "East Africa" layer
+                if "East Africa | Kenya" in geo_str:
+                    geo_str = geo_str.replace("East Africa | Kenya", "Kenya")
+                elif "East Africa | Mauritius" in geo_str:
+                    geo_str = geo_str.replace("East Africa | Mauritius", "SSA")
+                elif "East Africa | Nigeria" in geo_str:
+                    geo_str = geo_str.replace("East Africa | Nigeria", "Nigeria")
+                elif "East Africa | Uganda" in geo_str:
+                    geo_str = geo_str.replace("East Africa | Uganda", "SSA")
+                # Rename region codes
+                if geo_str.endswith("| FWA"):
+                    geo_str = geo_str.replace("| FWA", "| FSA")
+                elif geo_str.endswith("| GINE"):
+                    geo_str = geo_str.replace("| GINE", "| GNE")
+                elif geo_str.endswith("| KSA"):
+                    geo_str = geo_str.replace("| KSA", "| Saudi Arabia")
+                elif geo_str.endswith("| MOR"):
+                    geo_str = geo_str.replace("| MOR", "| Maghreb")
+                return geo_str
+            df["Plan - Geography"] = df["Plan - Geography"].apply(normalize_geography)
+
+        # 2. Panadol brand splitting
+        if "Plan - Brand" in df.columns and "**Product Business" in df.columns:
+            panadol_mask = df["Plan - Brand"].astype(str).str.contains("Panadol", case=False, na=False)
+            if panadol_mask.sum() > 0:
+                pain_mask = panadol_mask & df["**Product Business"].astype(str).str.contains("Pain", case=False, na=False)
+                cold_mask = panadol_mask & df["**Product Business"].astype(str).str.contains("Cold", case=False, na=False)
+                df.loc[pain_mask, "Plan - Brand"] = df.loc[pain_mask, "Plan - Brand"].str.replace(
+                    "Panadol", "Panadol Pain", case=False, regex=False
+                )
+                df.loc[cold_mask, "Plan - Brand"] = df.loc[cold_mask, "Plan - Brand"].str.replace(
+                    "Panadol", "Panadol C&F", case=False, regex=False
+                )
+
         setattr(get_month_specific_tv_metrics, cache_attr, df)
         setattr(get_month_specific_tv_metrics, "_cached_path", raw_excel_path)
     else:
