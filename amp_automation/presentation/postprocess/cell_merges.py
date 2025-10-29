@@ -534,17 +534,23 @@ def normalize_label(text: str) -> str:
     IMPORTANT: Cells may contain multiple lines (e.g., "MONTHLY TOTAL\nTELEVISION").
     We only want the first line for labels.
 
+    Also normalizes non-breaking characters that may have been added during styling:
+    - \u2011 (non-breaking hyphen) → - (regular hyphen)
+    - \u00A0 (non-breaking space) → regular space
+
     Args:
         text: Cell text content
 
     Returns:
-        Normalized text (uppercase, stripped whitespace, first line only)
+        Normalized text (uppercase, stripped whitespace, first line only, regular characters)
     """
     if not text:
         return ""
     # Take only the first line (before any newline character)
     first_line = text.split('\n')[0].split('\r')[0]
-    return first_line.strip().upper()
+    # Normalize non-breaking characters back to regular characters
+    normalized = first_line.strip().replace('\u2011', '-').replace('\u00A0', ' ')
+    return normalized.upper()
 
 
 def is_monthly_total(cell_text: str) -> bool:
