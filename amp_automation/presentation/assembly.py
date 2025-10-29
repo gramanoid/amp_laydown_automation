@@ -673,8 +673,8 @@ def _apply_title(slide, template_slide, combination_row, slide_title_suffix):
         # Convert to uppercase
         paragraph.text = title_text.upper()
 
-        # Center align horizontally
-        paragraph.alignment = PP_ALIGN.CENTER
+        # Left align horizontally
+        paragraph.alignment = PP_ALIGN.LEFT
 
         if paragraph.runs:
             run = paragraph.runs[0]
