@@ -376,13 +376,14 @@ def _set_legend_text(shape, template_shape, text):
     run.font.bold = True
 
 
-def _ensure_title_shape(slide, slide_layout):
+def _ensure_title_shape(slide, slide_layout, template_slide=None):
     """
-    Ensure the title shape exists on the slide by copying from layout if needed.
+    Ensure the title shape exists on the slide by copying from template if needed.
 
     Args:
         slide: Target slide
         slide_layout: Slide layout to copy from
+        template_slide: Template slide to copy from (fallback)
     """
     shape_name = presentation_config.get("title", {}).get("shape") or SHAPE_NAME_TITLE
 
@@ -392,16 +393,26 @@ def _ensure_title_shape(slide, slide_layout):
     if title_shape:
         return  # Title shape already exists
 
-    # Copy title shape from layout
+    # Try to copy title shape from layout first
+    source_title = None
     if slide_layout:
-        layout_title = next((s for s in slide_layout.shapes if getattr(s, "name", "") == shape_name and hasattr(s, "has_text_frame") and s.has_text_frame), None)
-        if layout_title:
-            try:
-                # Manually copy the text box from layout
-                _copy_text_box(layout_title, slide, new_name=shape_name)
-                logger.debug(f"Copied title shape '{shape_name}' from layout to slide")
-            except Exception as e:
-                logger.warning(f"Failed to copy title shape from layout: {e}")
+        source_title = next((s for s in slide_layout.shapes if getattr(s, "name", "") == shape_name and hasattr(s, "has_text_frame") and s.has_text_frame), None)
+
+    # If not in layout, try copying from template slide
+    if not source_title and template_slide:
+        source_title = next((s for s in template_slide.shapes if getattr(s, "name", "") == shape_name and hasattr(s, "has_text_frame") and s.has_text_frame), None)
+        if source_title:
+            logger.debug(f"Found title shape '{shape_name}' on template slide, will copy")
+
+    if source_title:
+        try:
+            # Manually copy the text box from source
+            _copy_text_box(source_title, slide, new_name=shape_name)
+            logger.debug(f"Copied title shape '{shape_name}' to slide")
+        except Exception as e:
+            logger.warning(f"Failed to copy title shape: {e}")
+    else:
+        logger.warning(f"Title shape '{shape_name}' not found in layout or template slide")
 
 
 def _ensure_legend_shapes(slide, template_slide):
@@ -636,8 +647,19 @@ def _apply_title(slide, template_slide, combination_row, slide_title_suffix):
     title_text = _compose_title_text(combination_row, slide_title_suffix)
 
     if not title_shapes:
-        logger.debug("Title shape '%s' not available on slide", shape_name)
-        return title_text
+        logger.warning(f"Title shape '{shape_name}' not found on slide. Available shapes: {[s.name for s in slide.shapes if hasattr(s, 'name')]}")
+        # Try to find any text box in the top-left area that might be the title
+        for shape in slide.shapes:
+            if hasattr(shape, 'has_text_frame') and shape.has_text_frame and hasattr(shape, 'top') and hasattr(shape, 'left'):
+                # Check if shape is in top-left area (top < 1 inch, left < 3 inches)
+                if shape.top < 914400 and shape.left < 2743200:  # EMUs (1 inch = 914400 EMUs)
+                    logger.info(f"Found potential title shape at top-left: '{shape.name}' at ({shape.left}, {shape.top})")
+                    title_shapes = [shape]
+                    break
+
+        if not title_shapes:
+            logger.error(f"No title shape found on slide. Title text '{title_text}' will not be displayed.")
+            return title_text
 
     # Update ALL title shapes to ensure no static text remains
     for title_shape in title_shapes:
@@ -3235,8 +3257,8 @@ def _populate_slide_content(new_slide, prs, combination_row, slide_title_suffix,
     template_slide = prs.slides[0]
     slide_layout = prs.slide_layouts[0]
 
-    # Ensure title shape exists on the slide (copy from layout if needed)
-    _ensure_title_shape(new_slide, slide_layout)
+    # Ensure title shape exists on the slide (copy from template if needed)
+    _ensure_title_shape(new_slide, slide_layout, template_slide)
 
     title_text = _apply_title(new_slide, template_slide, combination_row, slide_title_suffix)
     _clear_comments(new_slide)
