@@ -2169,14 +2169,14 @@ def format_number(value, is_budget=False, is_percentage=False, is_grp=False, is_
     if is_budget:
         abs_value = abs(numeric_value)
 
-        # Values >= 1M expressed in millions
+        # Values >= 1M expressed in millions with 2 decimal places for accuracy
         if abs_value >= 1_000_000:
             formatted_val = numeric_value / 1_000_000.0
-            # Keep a single decimal only when materially helpful; otherwise use whole numbers
-            rounded = round(formatted_val, 1 if abs_value >= 5_000_000 else 0)
+            rounded = round(formatted_val, 2)
+            # Only drop decimals if it's exactly .00
             if rounded == int(rounded):
                 return f"£{int(rounded)}M"
-            return f"£{rounded:.1f}M"
+            return f"£{rounded:.2f}M"
 
         # Values >= 1K expressed in thousands (always whole numbers to minimize width)
         if abs_value >= 1_000:
