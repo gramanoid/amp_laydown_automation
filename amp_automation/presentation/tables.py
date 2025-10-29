@@ -205,13 +205,14 @@ def style_table_cell(
     use_compact_font = False
     MONTH_HEADER_COLUMNS = set(range(3, 15))
     CLR_WHITE = RGBColor(255, 255, 255)
-    SUBTOTAL_LABELS = {"SUBTOTAL", "CARRIED FORWARD", "MONTHLY TOTAL (£ 000)", "GRAND TOTAL"}
+    SUBTOTAL_LABELS = {"SUBTOTAL", "CARRIED FORWARD", "GRAND TOTAL"}
 
     normalized_row_label = ""
     if 0 <= row_idx < len(table_data) and table_data[row_idx]:
         normalized_row_label = " ".join(str(table_data[row_idx][0]).replace("\xa0", " ").split()).upper()
-    is_monthly_total_row = normalized_row_label == "MONTHLY TOTAL (£ 000)"
-    is_total_row = row_idx == len(table_data) - 1 or (row_idx > 0 and normalized_row_label in SUBTOTAL_LABELS)
+    # Match both old "MONTHLY TOTAL (£ 000)" and new "TOTAL - ..." formats
+    is_monthly_total_row = (normalized_row_label == "MONTHLY TOTAL (£ 000)") or normalized_row_label.startswith("TOTAL")
+    is_total_row = row_idx == len(table_data) - 1 or (row_idx > 0 and (normalized_row_label in SUBTOTAL_LABELS or normalized_row_label.startswith("TOTAL")))
 
     from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE, MSO_VERTICAL_ANCHOR
     alignment = PP_ALIGN.CENTER
@@ -538,8 +539,9 @@ def style_table_cell(
         if use_compact_font and processed_cell_text:
             processed_cell_text = processed_cell_text.replace(" ", "\u00A0").replace("-", "\u2011")
 
-        # CRITICAL FIX: Ensure pound symbol is preserved in MONTHLY TOTAL label (Point 6)
+        # CRITICAL FIX: Ensure pound symbol is preserved in old MONTHLY TOTAL label (Point 6)
         # The pound symbol (£) can be lost during text processing, so we explicitly check and restore it
+        # Note: New format "TOTAL - TV X% • DIG Y%" doesn't need this fix
         if "MONTHLY TOTAL" in processed_cell_text and "(" in processed_cell_text and "000)" in processed_cell_text:
             if "£" not in processed_cell_text:
                 # Pound symbol was lost; restore it: "MONTHLY TOTAL ( 000)" -> "MONTHLY TOTAL (£ 000)"
@@ -636,8 +638,9 @@ def style_table_cell(
                 run_oxml_error,
             )
 
-        subtotal_labels = {"SUBTOTAL", "CARRIED FORWARD", "MONTHLY TOTAL (\u00a3 000)", "GRAND TOTAL"}
+        subtotal_labels = {"SUBTOTAL", "CARRIED FORWARD", "GRAND TOTAL"}
         row_label = str(table_data[row_idx][0]).strip().upper() if row_idx < len(table_data) else ""
+        is_subtotal = (row_label in subtotal_labels) or row_label.startswith("TOTAL")
 
         def _apply_rgb_fill(target_cell, rgb_color):
             target_cell.fill.solid()
