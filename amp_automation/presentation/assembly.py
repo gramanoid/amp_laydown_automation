@@ -684,8 +684,8 @@ def _derive_campaign_blocks_for_table(table_data: list[list[str]]) -> list[tuple
 
     blocks: list[tuple[int, int]] = []
     idx = 1  # skip header
-    # Skip labels for campaign boundary detection (matches both old and new TOTAL formats)
-    skip_labels = {"", "-", "GRAND TOTAL"}
+    total_label = "MONTHLY TOTAL (£ 000)"
+    skip_labels = {"", "-", total_label, "GRAND TOTAL"}
 
     while idx < len(table_data) - 1:
         label = _normalize_row_label(table_data[idx][0] if idx < len(table_data) and table_data[idx] else "")
@@ -1031,31 +1031,8 @@ def _build_campaign_monthly_total_row(
     month_totals: list[float],
     campaign_grp_total: float,
     cell_metadata: dict[tuple[int, int], dict[str, object]],
-    media_splits: dict[str, float] | None = None,
 ) -> list[str]:
-    # Format label with media split percentages
-    if media_splits:
-        # Abbreviation mapping for compact display
-        abbrev_map = {
-            "Television": "TV",
-            "Digital": "DIG",
-            "OOH": "OOH",
-            "Other": "OTH"
-        }
-
-        parts = []
-        for media in MEDIA_DISPLAY_ORDER:
-            if media in media_splits:
-                pct = media_splits[media]
-                if pct >= 0.5:  # Only show if >= 0.5%
-                    abbr = abbrev_map.get(media, media[:3].upper())
-                    parts.append(f"{abbr} {pct:.0f}%")
-
-        label = "TOTAL - " + " • ".join(parts) if parts else "TOTAL"
-    else:
-        label = "MONTHLY TOTAL (£ 000)"
-
-    row: list[str] = [label, "", ""]
+    row: list[str] = ["MONTHLY TOTAL (£ 000)", "", ""]
     for month_idx, value in enumerate(month_totals):
         formatted = _format_budget_cell(value)
         col_idx = 3 + month_idx
@@ -1355,25 +1332,11 @@ def _build_campaign_block(
 
         first_media = False
 
-    # Calculate media split percentages for this campaign
-    media_splits = {}
-    if campaign_total_budget > 0:
-        for media_key in MEDIA_DISPLAY_ORDER:
-            media_mask = (
-                campaign_df["_NormalizedMedia"].astype(str).str.lower()
-                == media_key.lower()
-            )
-            media_df = campaign_df[media_mask]
-            if not media_df.empty:
-                media_cost = float(media_df["Total Cost"].sum() or 0.0)
-                media_splits[media_key] = (media_cost / campaign_total_budget) * 100.0
-
     total_row = _build_campaign_monthly_total_row(
         base_row_idx + len(block_rows),
         block_month_totals,
         block_grp_total,
         cell_metadata,
-        media_splits,
     )
     block_rows.append(total_row)
 
@@ -2436,16 +2399,14 @@ def _split_table_data_by_campaigns(table_data, cell_metadata):
             return 0
 
         label = _row_label(start_idx)
-        # Match both old and new TOTAL row formats
-        if label.startswith("TOTAL") or label == "MONTHLY TOTAL (� 000)":
+        if label == "MONTHLY TOTAL (� 000)":
             return 1
 
         length = 1
         idx = start_idx + 1
         while idx <= campaign_end_idx:
             next_label = _row_label(idx)
-            # Match both old and new TOTAL row formats
-            if next_label.startswith("TOTAL") or next_label == "MONTHLY TOTAL (� 000)":
+            if next_label == "MONTHLY TOTAL (� 000)":
                 length += 1
                 idx += 1
                 break
@@ -3001,18 +2962,13 @@ def _populate_cloned_table(table_shape, table_data, cell_metadata):
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.debug("Unable to set atLeast row %s height rule: %s", row_index, exc)
 
-    # Subtotal labels - will check for "TOTAL" prefix to match both old and new formats
-    subtotal_labels = {"SUBTOTAL", "GRAND TOTAL"}
+    subtotal_labels = {"SUBTOTAL", "MONTHLY TOTAL (£ 000)", "GRAND TOTAL"}
 
     for row_idx in range(rows_needed):
         row = table.rows[row_idx]
-        row_label = str(table_data[row_idx][0]).strip().upper() if row_idx < len(table_data) else ""
         row_data = table_data[row_idx]
         raw_label = str(row_data[0]) if row_data else ""
         label = " ".join(raw_label.split()).upper()
-        # Check if this is a subtotal row (including new TOTAL format)
-        is_subtotal_row = (label in subtotal_labels) or label.startswith("TOTAL")
-
         is_blank_row = all(
             (value is None or str(value).strip() in ("", "-"))
             for value in row_data
@@ -3022,7 +2978,7 @@ def _populate_cloned_table(table_shape, table_data, cell_metadata):
             _apply_row_height(row, header_height, row_idx, lock_exact=True)
         elif row_idx == rows_needed - 1 and is_blank_row:
             _apply_row_height(row, trailer_height, row_idx)
-        elif is_subtotal_row:
+        elif label in subtotal_labels:
             _apply_row_height(row, subtotal_height, row_idx, lock_exact=True)
         else:
             # Body rows: use exact height for maximum compression
