@@ -13,11 +13,11 @@ from pptx.dml.color import RGBColor
 
 logger = logging.getLogger(__name__)
 
-# Media type colors (matching legend colors for visual consistency)
-CLR_TELEVISION = RGBColor(211, 254, 201)  # Light green
-CLR_DIGITAL = RGBColor(253, 242, 183)     # Light yellow
-CLR_OOH = RGBColor(255, 217, 97)          # Orange/gold
-CLR_OTHER = RGBColor(176, 211, 255)       # Light blue
+# Media type colors (darker variants for readability on gray background)
+CLR_TELEVISION = RGBColor(0, 130, 0)      # Dark green
+CLR_DIGITAL = RGBColor(180, 140, 0)       # Dark gold
+CLR_OOH = RGBColor(200, 100, 0)           # Dark orange
+CLR_OTHER = RGBColor(0, 80, 180)          # Dark blue
 
 # Font configuration (matching template requirements)
 FONT_NAME = "Verdana"
