@@ -241,10 +241,11 @@ def merge_media_cells(table):
         # Check if this row ends the current media channel (MONTHLY TOTAL or campaign name)
         campaign_cell = table.cell(row_idx, 0)  # Column 0 (CAMPAIGN)
         campaign_text = _get_cell_text(campaign_cell).strip().upper()
+        # Normalize to handle non-breaking characters from styling
+        normalized_campaign = normalize_label(campaign_text)
         is_special_row = (
-            "MONTHLY" in campaign_text and "TOTAL" in campaign_text
-        ) or (
-            "GRAND" in campaign_text or "BRAND" in campaign_text
+            is_monthly_total(normalized_campaign) or
+            is_grand_total(normalized_campaign)
         )
 
         # If we hit a special row and were tracking a media channel, merge it
