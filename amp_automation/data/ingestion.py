@@ -101,6 +101,78 @@ def load_and_prepare_data(excel_path: str | Path, config: Config, logger: loggin
 
     logger.debug("Media type distribution: %s", raw_df["Media Type"].value_counts().to_dict())
 
+    # Apply data cleaning transformations
+    logger.info("Applying data cleaning transformations")
+
+    # 1. Exclude Expert campaigns (Plan Name contains "expert")
+    if "Plan Name" in raw_df.columns:
+        initial_count = len(raw_df)
+        raw_df = raw_df[~raw_df["Plan Name"].astype(str).str.contains("expert", case=False, na=False)]
+        expert_excluded = initial_count - len(raw_df)
+        logger.info("Excluded %s Expert campaign rows via Plan Name filter", expert_excluded)
+
+    # 2. Normalize geography values
+    if "Plan - Geography" in raw_df.columns:
+        def normalize_geography(geo_value: str) -> str:
+            """Apply geography normalization rules."""
+            if pd.isna(geo_value):
+                return geo_value
+
+            geo_str = str(geo_value)
+
+            # Rule: Remove duplicate final segments
+            if geo_str.endswith("Pakistan | Pakistan"):
+                geo_str = geo_str.replace("Pakistan | Pakistan", "Pakistan")
+            elif geo_str.endswith("South Africa | South Africa"):
+                geo_str = geo_str.replace("South Africa | South Africa", "South Africa")
+            elif geo_str.endswith("Turkey | Turkey"):
+                geo_str = geo_str.replace("Turkey | Turkey", "Turkey")
+
+            # Rule: Remove "East Africa" layer and map specific countries
+            if "East Africa | Kenya" in geo_str:
+                geo_str = geo_str.replace("East Africa | Kenya", "Kenya")
+            elif "East Africa | Mauritius" in geo_str:
+                geo_str = geo_str.replace("East Africa | Mauritius", "SSA")
+            elif "East Africa | Nigeria" in geo_str:
+                geo_str = geo_str.replace("East Africa | Nigeria", "Nigeria")
+            elif "East Africa | Uganda" in geo_str:
+                geo_str = geo_str.replace("East Africa | Uganda", "SSA")
+
+            # Rule: Rename region codes
+            if geo_str.endswith("| FWA"):
+                geo_str = geo_str.replace("| FWA", "| FSA")
+            elif geo_str.endswith("| GINE"):
+                geo_str = geo_str.replace("| GINE", "| GNE")
+            elif geo_str.endswith("| KSA"):
+                geo_str = geo_str.replace("| KSA", "| Saudi Arabia")
+            elif geo_str.endswith("| MOR"):
+                geo_str = geo_str.replace("| MOR", "| Maghreb")
+
+            return geo_str
+
+        raw_df["Plan - Geography"] = raw_df["Plan - Geography"].apply(normalize_geography)
+        logger.info("Applied geography normalization rules")
+
+    # 3. Split Panadol brand based on Product Business
+    if "Plan - Brand" in raw_df.columns and "**Product Business" in raw_df.columns:
+        panadol_mask = raw_df["Plan - Brand"].astype(str).str.contains("Panadol", case=False, na=False)
+        panadol_rows = panadol_mask.sum()
+
+        if panadol_rows > 0:
+            pain_mask = panadol_mask & raw_df["**Product Business"].astype(str).str.contains("Pain", case=False, na=False)
+            cold_mask = panadol_mask & raw_df["**Product Business"].astype(str).str.contains("Cold", case=False, na=False)
+
+            raw_df.loc[pain_mask, "Plan - Brand"] = raw_df.loc[pain_mask, "Plan - Brand"].str.replace(
+                "Panadol", "Panadol Pain", case=False, regex=False
+            )
+            raw_df.loc[cold_mask, "Plan - Brand"] = raw_df.loc[cold_mask, "Plan - Brand"].str.replace(
+                "Panadol", "Panadol C&F", case=False, regex=False
+            )
+
+            pain_split = pain_mask.sum()
+            cold_split = cold_mask.sum()
+            logger.info("Split Panadol brand: %s Pain rows, %s C&F rows", pain_split, cold_split)
+
     separator = geography_section.get("separator", " | ")
     mapping = media_section.get("mapping", {})
     recognized_media_types = set(media_section.get("recognized", []))
