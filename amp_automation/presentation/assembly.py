@@ -2866,16 +2866,10 @@ def set_title_text_detailed(title_shape, title_text, template_prs):
                 if ref_run.font.underline is not None:
                     target_run.font.underline = ref_run.font.underline
                     font_attrs_log.append(f"Underline={ref_run.font.underline}")
-                # Color
-                if ref_run.font.color.type:
-                    if ref_run.font.color.type == MSO_COLOR_TYPE.RGB:
-                        target_run.font.color.rgb = ref_run.font.color.rgb
-                        font_attrs_log.append(f"ColorRGB='{ref_run.font.color.rgb}'")
-                    elif ref_run.font.color.type == MSO_COLOR_TYPE.SCHEME:
-                        target_run.font.color.theme_color = ref_run.font.color.theme_color
-                        target_run.font.color.brightness = ref_run.font.color.brightness
-                        font_attrs_log.append(f"ColorTheme='{ref_run.font.color.theme_color}', Brightness='{ref_run.font.color.brightness}'")
-                    # Add other color types if necessary
+                # Color - ALWAYS use black for slide title text
+                # Override template color since background rectangle was removed
+                target_run.font.color.rgb = RGBColor(0, 0, 0)  # Black
+                font_attrs_log.append(f"ColorRGB='RGBColor(0, 0, 0)' (forced black)")
                 
                 logger.debug(f"Template Title - Source Font Details: {', '.join(font_attrs_log)}")
                 applied_font_attrs_log = [
