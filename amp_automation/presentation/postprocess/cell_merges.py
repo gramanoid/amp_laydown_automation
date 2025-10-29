@@ -6,11 +6,18 @@ replacing slow COM-based PowerShell operations.
 """
 
 import logging
+import re
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR, MSO_AUTO_SIZE
 from pptx.util import Pt
 from pptx.dml.color import RGBColor
 
 logger = logging.getLogger(__name__)
+
+# Media type colors (matching legend colors for visual consistency)
+CLR_TELEVISION = RGBColor(211, 254, 201)  # Light green
+CLR_DIGITAL = RGBColor(253, 242, 183)     # Light yellow
+CLR_OOH = RGBColor(255, 217, 97)          # Orange/gold
+CLR_OTHER = RGBColor(176, 211, 255)       # Light blue
 
 # Font configuration (matching template requirements)
 FONT_NAME = "Verdana"
@@ -309,6 +316,71 @@ def merge_media_cells(table):
     return merges_performed
 
 
+def _apply_colored_media_splits(cell, text: str):
+    """
+    Apply colored formatting to media split text in MONTHLY TOTAL rows.
+
+    Colors media abbreviations to match their legend colors:
+    - TV → Green
+    - DIG → Yellow
+    - OOH → Orange
+    - OTH → Blue
+
+    Example: "TOTAL - TV 38% • DIG 34% • OOH 25% • OTH 2%"
+
+    Args:
+        cell: python-pptx cell object
+        text: Text containing media splits (e.g., "TOTAL - TV 38% • DIG 34%...")
+    """
+    try:
+        text_frame = cell.text_frame
+        text_frame.clear()
+        text_frame.word_wrap = True
+        text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+        text_frame.margin_left = Pt(1)
+        text_frame.margin_right = Pt(1)
+        text_frame.margin_top = Pt(1)
+        text_frame.margin_bottom = Pt(1)
+
+        # Create single paragraph
+        p = text_frame.paragraphs[0]
+        p.alignment = PP_ALIGN.CENTER
+
+        # Define media colors
+        media_colors = {
+            "TV": CLR_TELEVISION,
+            "DIG": CLR_DIGITAL,
+            "OOH": CLR_OOH,
+            "OTH": CLR_OTHER,
+        }
+
+        # Parse text and create colored runs
+        # Pattern: "TOTAL - TV 38% • DIG 34% • OOH 25% • OTH 2%"
+        parts = re.split(r'(TV|DIG|OOH|OTH)', text)
+
+        for part in parts:
+            if not part:
+                continue
+
+            run = p.add_run()
+            run.text = part
+            run.font.name = FONT_NAME
+            run.font.size = Pt(MONTHLY_TOTAL_FONT_SIZE)
+            run.font.bold = True
+
+            # Apply color if this is a media abbreviation
+            if part in media_colors:
+                run.font.color.rgb = media_colors[part]
+
+        # Apply vertical centering
+        text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+
+    except Exception as e:
+        logger.error(f"Failed to apply colored media splits: {e}")
+        # Fallback to regular styling
+        cell.text_frame.text = text
+
+
 def merge_monthly_total_cells(table):
     """
     Merge monthly total cells horizontally (columns 1-3).
@@ -356,14 +428,21 @@ def merge_monthly_total_cells(table):
 
                 # Apply styling to merged cell
                 merged_cell = table.cell(row_idx, 0)
-                _apply_cell_styling(
-                    merged_cell,
-                    text=normalized,
-                    font_size=MONTHLY_TOTAL_FONT_SIZE,
-                    bold=True,
-                    center_align=True,
-                    vertical_center=True
-                )
+
+                # Check if text contains media splits (new format)
+                if "TV" in normalized or "DIG" in normalized or "OOH" in normalized:
+                    # Apply colored media split styling
+                    _apply_colored_media_splits(merged_cell, normalized)
+                else:
+                    # Apply regular styling (old format)
+                    _apply_cell_styling(
+                        merged_cell,
+                        text=normalized,
+                        font_size=MONTHLY_TOTAL_FONT_SIZE,
+                        bold=True,
+                        center_align=True,
+                        vertical_center=True
+                    )
 
             except Exception as e:
                 logger.error(f"Failed to merge MONTHLY TOTAL row {row_idx}: {e}")
