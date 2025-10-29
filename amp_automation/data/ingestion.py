@@ -427,9 +427,14 @@ def get_month_specific_tv_metrics(
         & (df["Media Type"] == "Television")
     ]
 
+    # Exclude GNE Pan Asian TV campaigns
     gne_mask = filtered_data["Plan - Geography"].astype(str).str.contains("GNE", na=False)
     pan_asian_mask = filtered_data["Flight Comments"].astype(str).str.contains("Pan Asian TV", na=False)
     filtered_data = filtered_data[~(gne_mask & pan_asian_mask)]
+
+    # Exclude Expert campaigns (same filter as in load_and_prepare_data)
+    if "Plan Name" in filtered_data.columns:
+        filtered_data = filtered_data[~filtered_data["Plan Name"].astype(str).str.contains("expert", case=False, na=False)]
 
     if filtered_data.empty:
         return {
