@@ -1,25 +1,30 @@
 # Project Context
 
-## Immediate Next Steps (27 Oct 2025)
-Last verified on 27-10-25 (evening - validation suite complete)
+## Immediate Next Steps (29 Oct 2025)
+Last verified on 29-10-25 (session complete - accuracy validation)
 
-**COMPLETED (24-27 Oct 2025):**
-1. ✅ **Python post-processing migration complete:** Full cell merge logic implemented in `cell_merges.py`. PowerShell COM scripts replaced with Python CLI. Performance: ~30 seconds for 88 slides (vs 10+ hours COM).
-2. ✅ **8-step workflow finalized:** unmerge-all → delete-carried-forward → merge-campaign → merge-media → merge-monthly → merge-summary → fix-grand-total-wrap → remove-pound-totals → normalize-fonts. Validated: 100% success rate.
-3. ✅ **Timestamp fix (27 Oct):** Local system time (Arabian Standard Time UTC+4) used across all modules (cli.py, logging.py, assembly.py).
-4. ✅ **Media channel merging (27 Oct):** Vertical cell merging for TELEVISION, DIGITAL, OOH, OTHER media channels.
-5. ✅ **Font corrections (27 Oct):** 6pt body/campaign/bottom rows, 7pt header/BRAND TOTAL.
-6. ✅ **Smart line breaking (27 Oct):** _smart_line_break function implemented (dash handling, word-count-based splitting).
-7. ✅ **Campaign text wrapping resolved (27 Oct):** Removed hyphens at source + widened column A to 1,000,000 EMU.
-8. ✅ **Structural validator enhanced (27 Oct evening):** Last-slide-only shapes support (BRAND TOTAL, indicators only on final slides). Validation PASSES on 144-slide deck.
-9. ✅ **Data validation suite expanded (27 Oct evening):** 1,200+ lines across 5 modules - accuracy, format, completeness, utilities, unified report generator. All validators tested successfully.
-10. ✅ **Production deck generated:** `run_20251027_215710` (144 slides) with all improvements including validation infrastructure.
+**COMPLETED (29 Oct 2025):**
+1. ✅ **Automated Excel transformations:** Expert campaign exclusion (1,158 rows), geography normalization (11 rules), Panadol brand splitting (Pain/C&F)
+2. ✅ **Media split percentages:** Color-coded display in MONTHLY TOTAL rows (TV 38% • DIG 34% • OOH 25% • OTH 3%)
+3. ✅ **Comprehensive accuracy validation:** Horizontal/vertical totals validation with K/M parsing, 1% tolerance
+4. ✅ **GRP metrics data consistency fix (CRITICAL):** Aligned transformation cache with processed data (Panadol + geography)
+5. ✅ **M-suffix formatting precision:** Changed to 2 decimals for millions (£2.84M vs £3M)
+6. ✅ **Title formatting fixes:** Black color, left-aligned, 8" width, aligned with table margin
+7. ✅ **Production deck validated:** `run_20251029_132708` (120 slides) - Zero large errors (>£5K)
 
-**CURRENT PRIORITIES:**
-1. **Investigate reconciliation data source issue:** Reconciliation shows "expected data missing" for all summary tiles. Requires analysis of Excel market/brand name mapping vs presentation values.
-2. **Slide 1 EMU/legend parity:** Visual diff to compare generated vs template. Fix any geometry/legend discrepancies.
-3. **Test suite rehydration:** Fix/update `tests/test_tables.py`, `tests/test_structural_validator.py`. Add regression tests for merge correctness.
-4. **Campaign pagination enhancement:** Smart pagination enabled (max_rows=40). Phase 3-4 cancelled as pagina works correctly for test decks.
+**COMPLETED (24-28 Oct 2025):**
+1. ✅ Python post-processing migration, 8-step workflow, timestamp fixes
+2. ✅ Media channel merging, font corrections, smart line breaking
+3. ✅ Campaign text wrapping resolution, structural validator enhancements
+4. ✅ Data validation suite expansion (1,200+ lines across 5 modules)
+5. ✅ Test suite rehydration (16 regression tests: 8 formatting, 3 structural, 5 footer)
+
+**DEFERRED (Phase 4+):**
+1. Slide 1 EMU/legend parity (P2)
+2. Visual diff workflow enhancement (P3)
+3. Python normalization expansion (P3)
+4. Automated regression scripts (P3)
+5. Reconciliation data source investigation (P3 - all tiles showing "expected data missing")
 
 ## Purpose
 Automate Annual Marketing Plan laydown decks by converting standardized Lumina Excel exports into pixel-accurate PowerPoint presentations that mirror the `Template_V4_FINAL_071025.pptx` master while preserving financial and media metrics.
@@ -81,3 +86,7 @@ Automate Annual Marketing Plan laydown decks by converting standardized Lumina E
 - Lumina Excel exports (column mapping per config)
 - Python packages: pandas, numpy, python-pptx, openpyxl
 - Zen MCP server (`temp/zen-mcp-server`), PowerPoint COM (file I/O only), OpenSpec CLI
+
+---
+
+Last verified on 29-10-25

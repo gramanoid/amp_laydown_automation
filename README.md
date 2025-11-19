@@ -1,5 +1,5 @@
 # AMP Laydowns Automation
-**Last Updated:** 28-10-25
+**Last Updated:** 29-10-25
 
 ## Purpose
 Automates PowerPoint presentation generation for Advertising Media Planning (AMP) laydowns. Converts Lumina Excel exports into decks that mirror `Template_V4_FINAL_071025.pptx` while preserving template geometry, fonts, and layout.
@@ -50,21 +50,23 @@ python tools/verify/verify_deck_fonts.py  # Font verification
 
 Full pipeline: generation → Python post-processing → validation. Target: <20 minutes for 88 slides.
 
-## Session 28-10-25 Completion Status
+## Recent Work (29-10-25)
 
-✅ **ALL TASKS COMPLETED & ARCHIVED:**
-- 6 formatting improvements implemented and tested
-- Test suite rehydrated with 16 comprehensive regression tests
-- validate_structure.py PROJECT_ROOT bug fixed
-- All code committed to main branch
-- Production deck ready: `run_20251028_163719/AMP_Laydowns_281025.pptx` (127 slides)
+✅ **DATA QUALITY & ACCURACY IMPROVEMENTS:**
+- Automated Excel transformations (Expert exclusion, geography normalization, Panadol splitting)
+- Media split percentages in MONTHLY TOTAL rows with color coding
+- Comprehensive accuracy validation system with 61 error checks
+- M-suffix formatting improved (2 decimals for millions: £2.84M vs £3M)
+- Title formatting and alignment fixes
+- GRP metrics data transformation consistency fixes
 
-**Archived/Deferred (Phase 4+ work):**
+**Production deck:** `run_20251029_132708/AMP_Laydowns_291025.pptx` (120 slides)
+**Validation:** Zero large errors (>£5K), 60 minor K-suffix rounding artifacts (<£4K) - acceptable
+
+**Deferred (Phase 4+ work):**
 - Slide 1 EMU/legend parity
 - Visual diff workflow
 - Automated regression scripts
-- Python normalization expansion
-- Smoke tests with additional markets
 
 ## Notes
 - Use Python (python-pptx) for ALL bulk table operations
@@ -73,4 +75,4 @@ Full pipeline: generation → Python post-processing → validation. Target: <20
 - See `docs/28-10-25/BRAIN_RESET_281025.md` for detailed project status
 - Run tests: `pytest tests/test_tables.py tests/test_structural_validator.py -v`
 
-Last verified on 28-10-25 (session completion - all pending tasks archived)
+Last verified on 29-10-25

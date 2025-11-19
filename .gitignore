@@ -55,6 +55,7 @@ temp/
 
 # Backup folder
 .backup/
+.archive/
 
 # OS
 Thumbs.db
