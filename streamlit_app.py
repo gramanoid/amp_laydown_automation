@@ -692,8 +692,11 @@ def get_project_root() -> Path:
 def run_generation(template_path: str, input_path: str, output_path: str, queue: Queue):
     """Run presentation generation in a thread, sending progress to queue."""
     try:
-        # Add our progress handler to the logger
+        # Add our progress handler to the root logger AND set level
         logger = logging.getLogger()
+        original_level = logger.level
+        logger.setLevel(logging.INFO)  # Ensure INFO messages are captured
+
         handler = ProgressHandler(queue)
         handler.setLevel(logging.INFO)
         logger.addHandler(handler)
@@ -713,6 +716,7 @@ def run_generation(template_path: str, input_path: str, output_path: str, queue:
 
     finally:
         logger.removeHandler(handler)
+        logger.setLevel(original_level)  # Restore original level
 
 
 def main():
@@ -791,10 +795,21 @@ def main():
                     # Enhanced Progress UI Container
                     progress_container = st.empty()
 
-                    # Auto-scroll to progress section using components.html (actually executes JS)
-                    components.html('''<script>
-                    window.parent.document.querySelector('[data-testid="stVerticalBlock"]').scrollTo({top: 9999, behavior: 'smooth'});
-                    </script>''', height=0)
+                    # Auto-scroll: use components.html to scroll main window
+                    components.html('''
+                    <script>
+                    (function() {
+                        // Find the main scrollable container and scroll to bottom
+                        var mainBlock = window.parent.document.querySelector('section.main');
+                        if (mainBlock) {
+                            mainBlock.scrollTo({top: mainBlock.scrollHeight, behavior: 'smooth'});
+                        } else {
+                            // Fallback: scroll entire window
+                            window.parent.scrollTo({top: window.parent.document.body.scrollHeight, behavior: 'smooth'});
+                        }
+                    })();
+                    </script>
+                    ''', height=0)
 
                     def render_progress(stage: int, progress_pct: float, elapsed: float, eta: float, current: int, total: int, current_item: str = ""):
                         """Render the enhanced progress UI with stages, stats, and animations."""
