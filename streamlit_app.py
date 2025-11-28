@@ -1,5 +1,6 @@
 """Streamlit app for AMP Laydowns deck generation."""
 
+import html
 import logging
 import re
 import tempfile
@@ -7,7 +8,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from queue import Queue
+from queue import Empty, Queue
 
 import streamlit as st
 
@@ -350,6 +351,295 @@ st.markdown("""
             filter: drop-shadow(0 0 25px rgba(56, 189, 248, 0.5));
         }
     }
+
+    /* ═══════════════════════════════════════════════════════════════
+       PROGRESS UI - Enhanced Generation Experience
+       ═══════════════════════════════════════════════════════════════ */
+
+    /* Main progress container */
+    .progress-container {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        animation: fadeSlideIn 0.4s ease-out;
+    }
+
+    /* Stage indicators */
+    .stage-indicators {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        position: relative;
+    }
+
+    .stage-indicators::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 15%;
+        right: 15%;
+        height: 2px;
+        background: var(--border);
+        transform: translateY(-50%);
+        z-index: 0;
+    }
+
+    .stage {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        z-index: 1;
+    }
+
+    .stage-dot {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--surface);
+        border: 2px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        color: #525252;
+        transition: all 0.4s ease;
+    }
+
+    .stage-dot.active {
+        border-color: var(--emerald);
+        background: rgba(16, 185, 129, 0.15);
+        color: var(--emerald);
+        animation: stagePulse 1.5s ease-in-out infinite;
+        box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+    }
+
+    .stage-dot.complete {
+        border-color: var(--emerald);
+        background: var(--emerald);
+        color: #0a0a0c;
+    }
+
+    .stage-label {
+        font-size: 0.7rem;
+        font-family: 'JetBrains Mono', monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #525252;
+        transition: color 0.3s ease;
+    }
+
+    .stage.active .stage-label,
+    .stage.complete .stage-label {
+        color: var(--emerald);
+    }
+
+    @keyframes stagePulse {
+        0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+        }
+        50% {
+            transform: scale(1.1);
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.6);
+        }
+    }
+
+    /* Custom progress bar */
+    .progress-track {
+        height: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+        margin-bottom: 1rem;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(
+            90deg,
+            var(--emerald) 0%,
+            var(--sky) 50%,
+            var(--emerald) 100%
+        );
+        background-size: 200% 100%;
+        border-radius: 4px;
+        transition: width 0.3s ease-out;
+        animation: progressShimmer 2s linear infinite;
+        position: relative;
+    }
+
+    .progress-fill::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 100px;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+        animation: progressGlow 1.5s ease-in-out infinite;
+    }
+
+    @keyframes progressShimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+
+    @keyframes progressGlow {
+        0%, 100% { opacity: 0; transform: translateX(-100%); }
+        50% { opacity: 1; transform: translateX(100%); }
+    }
+
+    /* Stats grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    .stat-card {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0.875rem;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+
+    .stat-card:hover {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .stat-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #e5e5e5;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-value.highlight {
+        color: var(--emerald);
+    }
+
+    .stat-label {
+        font-size: 0.65rem;
+        font-family: 'JetBrains Mono', monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        color: #525252;
+    }
+
+    /* Current item display */
+    .current-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.875rem 1rem;
+        background: rgba(16, 185, 129, 0.08);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        border-radius: 10px;
+        margin-top: 1rem;
+    }
+
+    .pulse-dot {
+        width: 10px;
+        height: 10px;
+        background: var(--emerald);
+        border-radius: 50%;
+        animation: pulseDot 1s ease-in-out infinite;
+        flex-shrink: 0;
+    }
+
+    @keyframes pulseDot {
+        0%, 100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+        50% {
+            transform: scale(1.3);
+            opacity: 0.7;
+        }
+    }
+
+    .current-item-text {
+        font-family: 'Inter', sans-serif;
+        font-size: 0.85rem;
+        color: var(--emerald);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Completion state */
+    .progress-complete {
+        text-align: center;
+        padding: 1rem 0;
+    }
+
+    .completion-icon {
+        width: 64px;
+        height: 64px;
+        background: linear-gradient(135deg, var(--emerald), var(--sky));
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1rem auto;
+        animation: completionPop 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        box-shadow: 0 0 30px rgba(16, 185, 129, 0.5);
+    }
+
+    .completion-icon svg {
+        width: 32px;
+        height: 32px;
+        color: #0a0a0c;
+    }
+
+    @keyframes completionPop {
+        0% {
+            transform: scale(0);
+            opacity: 0;
+        }
+        50% {
+            transform: scale(1.2);
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    .completion-text {
+        font-family: 'Inter', sans-serif;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--emerald);
+        margin-bottom: 0.25rem;
+    }
+
+    .completion-subtext {
+        font-size: 0.8rem;
+        color: #737373;
+    }
+
+    /* Download button enhancement */
+    .download-section {
+        margin-top: 1.25rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--border);
+    }
+
+    /* Hide default streamlit progress bar */
+    .stProgress {
+        display: none !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -497,12 +787,39 @@ def main():
 
                     output_path = temp_path / out_filename
 
-                    # Progress UI
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    time_text = st.empty()
+                    # Enhanced Progress UI Container
+                    progress_container = st.empty()
 
-                    status_text.markdown("**Status:** Initializing...")
+                    def render_progress(stage: int, progress_pct: float, elapsed: float, eta: float, current: int, total: int, current_item: str = ""):
+                        """Render the enhanced progress UI with stages, stats, and animations."""
+                        stage_classes = ["", "", ""]
+                        if stage >= 1:
+                            stage_classes[0] = "complete" if stage > 1 else "active"
+                        if stage >= 2:
+                            stage_classes[1] = "complete" if stage > 2 else "active"
+                        if stage >= 3:
+                            stage_classes[2] = "active"
+
+                        progress_width = f"{progress_pct * 100:.1f}%"
+                        elapsed_str = format_time(elapsed)
+                        eta_str = format_time(eta) if eta > 0 else "--"
+                        pct_str = f"{progress_pct * 100:.0f}%"
+
+                        # Escape user-controlled data
+                        safe_item = html.escape(current_item) if current_item else ""
+                        current_item_html = f'<div class="current-item"><div class="pulse-dot"></div><span class="current-item-text">Processing {current}/{total}: {safe_item}</span></div>' if current_item else ''
+
+                        markup = f'''<div class="progress-container"><div class="stage-indicators"><div class="stage {stage_classes[0]}"><div class="stage-dot {stage_classes[0]}">1</div><span class="stage-label">Loading</span></div><div class="stage {stage_classes[1]}"><div class="stage-dot {stage_classes[1]}">2</div><span class="stage-label">Processing</span></div><div class="stage {stage_classes[2]}"><div class="stage-dot {stage_classes[2]}">3</div><span class="stage-label">Finalizing</span></div></div><div class="progress-track"><div class="progress-fill" style="width: {progress_width}"></div></div><div class="stats-grid"><div class="stat-card"><div class="stat-value">{elapsed_str}</div><div class="stat-label">Elapsed</div></div><div class="stat-card"><div class="stat-value highlight">{pct_str}</div><div class="stat-label">Progress</div></div><div class="stat-card"><div class="stat-value">{eta_str}</div><div class="stat-label">Remaining</div></div></div>{current_item_html}</div>'''
+                        progress_container.markdown(markup, unsafe_allow_html=True)
+
+                    def render_completion(elapsed: float, total_items: int, file_size_kb: float):
+                        """Render the completion celebration UI."""
+                        elapsed_str = format_time(elapsed)
+                        markup = f'''<div class="progress-container"><div class="progress-complete"><div class="completion-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div><div class="completion-text">Generation Complete!</div><div class="completion-subtext">{total_items} slides • {file_size_kb:.1f} KB • {elapsed_str}</div></div><div class="stats-grid"><div class="stat-card"><div class="stat-value highlight">{total_items}</div><div class="stat-label">Combinations</div></div><div class="stat-card"><div class="stat-value">{elapsed_str}</div><div class="stat-label">Total Time</div></div><div class="stat-card"><div class="stat-value">{file_size_kb:.1f} KB</div><div class="stat-label">File Size</div></div></div></div>'''
+                        progress_container.markdown(markup, unsafe_allow_html=True)
+
+                    # Initial loading state
+                    render_progress(1, 0.05, 0, 0, 0, 0, "Initializing...")
 
                     # Create queue for thread communication
                     queue: Queue = Queue()
@@ -519,7 +836,7 @@ def main():
                     total_combinations = 0
                     current_combination = 0
                     last_message = ""
-                    done = False
+                    current_brand = ""
                     error = None
 
                     while thread.is_alive() or not queue.empty():
@@ -528,41 +845,43 @@ def main():
 
                             if msg[0] == "total":
                                 total_combinations = msg[1]
+                                # Move to processing stage
+                                render_progress(2, 0.1, time.time() - start_time, 0, 0, total_combinations, f"Found {total_combinations} combinations")
 
                             elif msg[0] == "progress":
                                 current_combination = msg[1]
                                 total_combinations = msg[2]
                                 last_message = msg[3]
 
-                                # Update progress bar (reserve 10% for finalization)
-                                progress = min(0.9, current_combination / total_combinations) if total_combinations > 0 else 0
-                                progress_bar.progress(progress)
+                                # Calculate progress (reserve 10% for finalization)
+                                progress = min(0.9, 0.1 + (current_combination / total_combinations) * 0.8) if total_combinations > 0 else 0.1
 
                                 # Calculate ETA
                                 elapsed = time.time() - start_time
+                                eta = 0
                                 if current_combination > 0:
                                     rate = elapsed / current_combination
-                                    remaining = (total_combinations - current_combination) * rate
-                                    eta_str = format_time(remaining)
-                                    time_text.markdown(f"⏱️ **Elapsed:** {format_time(elapsed)} | **ETA:** {eta_str}")
+                                    eta = (total_combinations - current_combination) * rate
 
                                 # Extract brand info from message
                                 brand_match = re.search(r": (.+) - (\d+)$", last_message)
                                 if brand_match:
-                                    status_text.markdown(f"**Processing:** {current_combination}/{total_combinations} — {brand_match.group(1)}")
+                                    current_brand = brand_match.group(1)
                                 else:
-                                    status_text.markdown(f"**Processing:** {current_combination}/{total_combinations}")
+                                    current_brand = f"Item {current_combination}"
+
+                                render_progress(2, progress, elapsed, eta, current_combination, total_combinations, current_brand)
 
                             elif msg[0] == "status":
-                                status_text.markdown(f"**Status:** {msg[1]}")
+                                render_progress(1, 0.05, time.time() - start_time, 0, 0, 0, msg[1])
 
                             elif msg[0] == "done":
-                                done = True
+                                pass  # Thread completion message
 
                             elif msg[0] == "error":
                                 error = msg[1]
 
-                        except:
+                        except Empty:
                             pass  # Queue timeout, continue loop
 
                     thread.join()
@@ -570,20 +889,19 @@ def main():
                     if error:
                         raise Exception(error)
 
-                    # Finalization
-                    progress_bar.progress(1.0)
-                    elapsed = time.time() - start_time
-                    status_text.markdown("**Status:** ✅ Complete!")
-                    time_text.markdown(f"⏱️ **Total time:** {format_time(elapsed)}")
-
                     # Read generated file
                     with open(output_path, "rb") as f:
                         pptx_bytes = f.read()
 
-                    # Success and download
+                    # Finalization stage
+                    elapsed = time.time() - start_time
                     file_size_kb = len(pptx_bytes) / 1024
-                    st.success(f"Generated: {out_filename} ({file_size_kb:.1f} KB)")
 
+                    # Show completion celebration
+                    render_completion(elapsed, total_combinations, file_size_kb)
+
+                    # Download button with styled wrapper
+                    st.markdown('<div class="download-section">', unsafe_allow_html=True)
                     st.download_button(
                         label="Download Presentation",
                         data=pptx_bytes,
@@ -592,6 +910,7 @@ def main():
                         type="primary",
                         use_container_width=True,
                     )
+                    st.markdown('</div>', unsafe_allow_html=True)
 
             except Exception as e:
                 st.error(f"Error: {str(e)}")
