@@ -11,6 +11,7 @@ from pathlib import Path
 from queue import Empty, Queue
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(
     page_title="AMP Laydowns Generator",
@@ -790,6 +791,11 @@ def main():
                     # Enhanced Progress UI Container
                     progress_container = st.empty()
 
+                    # Auto-scroll to progress section using components.html (actually executes JS)
+                    components.html('''<script>
+                    window.parent.document.querySelector('[data-testid="stVerticalBlock"]').scrollTo({top: 9999, behavior: 'smooth'});
+                    </script>''', height=0)
+
                     def render_progress(stage: int, progress_pct: float, elapsed: float, eta: float, current: int, total: int, current_item: str = ""):
                         """Render the enhanced progress UI with stages, stats, and animations."""
                         stage_classes = ["", "", ""]
@@ -831,37 +837,34 @@ def main():
                     )
                     thread.start()
 
-                    # Track progress
+                    # Track progress state
                     start_time = time.time()
                     total_combinations = 0
                     current_combination = 0
                     last_message = ""
-                    current_brand = ""
+                    current_brand = "Initializing..."
+                    current_stage = 1
+                    current_progress = 0.05
                     error = None
 
                     while thread.is_alive() or not queue.empty():
                         try:
-                            msg = queue.get(timeout=0.1)
+                            msg = queue.get(timeout=0.2)
 
                             if msg[0] == "total":
                                 total_combinations = msg[1]
-                                # Move to processing stage
-                                render_progress(2, 0.1, time.time() - start_time, 0, 0, total_combinations, f"Found {total_combinations} combinations")
+                                current_stage = 2
+                                current_progress = 0.1
+                                current_brand = f"Found {total_combinations} combinations"
 
                             elif msg[0] == "progress":
                                 current_combination = msg[1]
                                 total_combinations = msg[2]
                                 last_message = msg[3]
+                                current_stage = 2
 
                                 # Calculate progress (reserve 10% for finalization)
-                                progress = min(0.9, 0.1 + (current_combination / total_combinations) * 0.8) if total_combinations > 0 else 0.1
-
-                                # Calculate ETA
-                                elapsed = time.time() - start_time
-                                eta = 0
-                                if current_combination > 0:
-                                    rate = elapsed / current_combination
-                                    eta = (total_combinations - current_combination) * rate
+                                current_progress = min(0.9, 0.1 + (current_combination / total_combinations) * 0.8) if total_combinations > 0 else 0.1
 
                                 # Extract brand info from message
                                 brand_match = re.search(r": (.+) - (\d+)$", last_message)
@@ -870,19 +873,28 @@ def main():
                                 else:
                                     current_brand = f"Item {current_combination}"
 
-                                render_progress(2, progress, elapsed, eta, current_combination, total_combinations, current_brand)
-
                             elif msg[0] == "status":
-                                render_progress(1, 0.05, time.time() - start_time, 0, 0, 0, msg[1])
+                                current_brand = msg[1]
 
                             elif msg[0] == "done":
-                                pass  # Thread completion message
+                                current_stage = 3
+                                current_progress = 1.0
+                                current_brand = "Finalizing..."
 
                             elif msg[0] == "error":
                                 error = msg[1]
 
                         except Empty:
-                            pass  # Queue timeout, continue loop
+                            pass  # Queue timeout, will still update UI below
+
+                        # Always update UI with current elapsed time
+                        elapsed = time.time() - start_time
+                        eta = 0
+                        if current_combination > 0 and total_combinations > 0:
+                            rate = elapsed / current_combination
+                            eta = (total_combinations - current_combination) * rate
+
+                        render_progress(current_stage, current_progress, elapsed, eta, current_combination, total_combinations, current_brand)
 
                     thread.join()
 
