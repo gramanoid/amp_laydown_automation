@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Codex Session Metadata",
+  "type": "object",
+  "required": [
+    "session_id",
+    "session_started",
+    "date",
+    "project_root",
+    "status",
+    "last_activity",
+    "last_command"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "type": "string"
+    },
+    "session_started": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string"
+    },
+    "project_root": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "last_activity": {
+      "type": "string"
+    },
+    "last_command": {
+      "type": "string"
+    }
+  }
+}

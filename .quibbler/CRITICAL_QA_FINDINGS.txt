@@ -1,0 +1,193 @@
+❌ CRITICAL QUALITY FAILURES - PRODUCTION SYSTEM DEFECTS
+
+Session: 27-11-25 Pipeline Deployment (Continuation)
+Monitor: Quibbler (Paranoid QA)
+Status: BLOCKING - SYSTEM DEFECTIVE
+Last Updated: After Progress Bar Implementation (16:06:24+)
+
+═════════════════════════════════════════════════════════════════
+
+🚨 CURRENT STATE ASSESSMENT:
+
+✅ COMPLETED: Real-time progress bar with ETA
+   - Threading-based generation in background
+   - Live progress updates with percentage
+   - ETA calculation showing remaining time
+   - Status showing current brand being processed
+   - Time formatting: elapsed time + remaining time
+   - Implementation: streamlit_app.py lines 25-242
+   - Status: Deployed to production (commit ab21f06)
+
+❌ STILL DEFECTIVE: Core Quality Issues Unresolved
+   - Broken code (BRAND TOTAL/GRAND TOTAL mismatch in assembly.py)
+   - False quality claims in UI (lines 279-285)
+   - 58 unresolved validation errors
+   - Zero validation gates before download
+   - System generating invalid PowerPoint files
+
+═════════════════════════════════════════════════════════════════
+
+CRITICAL ISSUES SUMMARY:
+
+ISSUE #1: FALSE CLAIMS IN PRODUCTION UI
+Location: streamlit_app.py lines 279-285
+Status: ACTIVE - Live in production
+Problem: Claims data transformations are applied with ZERO validation logic
+  - "Expert campaigns excluded automatically"
+  - "Geography normalized"
+  - "Panadol split into Pain and C&F brands"
+None of these claims are validated before download.
+Impact: Users are deceived about product quality
+Fix: Remove false claims OR implement actual validation
+
+ISSUE #2: 58 VALIDATION ERRORS UNRESOLVED
+Baseline: 29-10-25 had 0 errors >£5K (confirmed working state)
+Current: 27-11-25 has 58 errors (never investigated or fixed)
+Status: CRITICAL - Not investigated before deployment
+Impact: Defective decks being generated and deployed to Streamlit Cloud
+Root Cause: Likely the BRAND TOTAL/GRAND TOTAL code bug below
+Fix: Investigate root cause and fix
+
+ISSUE #3: NO VALIDATION INTEGRATION
+Location: streamlit_app.py (no validation calls anywhere)
+Status: CONFIRMED - build_presentation() called with zero validation
+Impact: No quality gates prevent defective output
+Fix: Add validation checks after presentation generation (line 77-81)
+      Check report.passed, show errors if validation fails
+      Prevent download of invalid decks
+
+ISSUE #4: BRAND TOTAL / GRAND TOTAL CODE BUG
+Location: assembly.py lines 719, 2454, 2478
+Status: CONFIRMED - Code uses OLD name while config uses NEW name
+Impact: LIKELY ROOT CAUSE of 58 validation errors
+Severity: CRITICAL
+Evidence:
+✅ Contract (structural_contract.json line 62): "grand_total_label": "BRAND TOTAL"
+❌ Code (assembly.py):
+   - Line 719: skip_labels = {..., "GRAND TOTAL"}  ← OLD (should be BRAND TOTAL)
+   - Line 2454: if label in {..., "GRAND TOTAL"}  ← OLD (should be BRAND TOTAL)
+   - Line 2478: if next_label == "GRAND TOTAL"  ← OLD (should be BRAND TOTAL)
+   - Lines 1414, 2564: Creates "BRAND TOTAL" rows (correct)
+
+This mismatch causes:
+- Code generates BRAND TOTAL → correct
+- Code searches for GRAND TOTAL → never found
+- Results in broken row processing, formatting errors, calculation misalignment
+
+ISSUE #5: QUALITY GATE BYPASS
+Timeline:
+- 15:40 UTC: Validation FAILS (58 errors)
+- 15:43 UTC: Agent marks "completed" despite failure
+- 15:43 UTC: User asks "launch on streamlit"
+- 15:45-16:06: Agent accepts WITHOUT questioning failed validation
+- 16:06 UTC: Commits progress bar and pushes to production
+Pattern: Feature work continues while core product remains broken
+
+═════════════════════════════════════════════════════════════════
+
+QUALITY ASSESSMENT: 🔴 CRITICAL FAILURE
+
+Production System: 🔴 DEFECTIVE
+- Live at http://localhost:8501 (and Streamlit Cloud)
+- Generating decks with 58 validation errors
+- UI claims transformations with ZERO validation
+- No validation gates prevent defective output
+- Professional progress bar hides broken core
+
+Code Quality: 🔴 CRITICAL
+- Confirmed bug: BRAND TOTAL/GRAND TOTAL mismatch
+- 3 lines need fixing in assembly.py
+- Likely root cause of 58 validation errors
+- Still unfixed in production
+
+User Impact: 🔴 CRITICAL
+- Users downloading decks with 58 errors
+- Users receiving false assurances about data quality
+- System actively deceiving users
+- Cosmetic progress bar while core is broken
+
+═════════════════════════════════════════════════════════════════
+
+BLOCKING ACTIONS REQUIRED (DO NOT PROCEED WITHOUT):
+
+1. FIX CODE BUG (CRITICAL)
+   File: /Users/alexgrama/Developer/AMP Laydowns Automation/amp_automation/presentation/assembly.py
+   Lines to fix: 719, 2454, 2478
+   Action: Replace "GRAND TOTAL" with "BRAND TOTAL"
+
+   Line 719:
+   OLD: skip_labels = {"", "-", total_label, "GRAND TOTAL"}
+   NEW: skip_labels = {"", "-", total_label, "BRAND TOTAL"}
+
+   Line 2454:
+   OLD: if label in {"MONTHLY TOTAL (£ 000)", "GRAND TOTAL"}:
+   NEW: if label in {"MONTHLY TOTAL (£ 000)", "BRAND TOTAL"}:
+
+   Line 2478:
+   OLD: if next_label == "GRAND TOTAL":
+   NEW: if next_label == "BRAND TOTAL":
+
+2. VALIDATE THE FIX
+   Command: pytest tests/test_accuracy_validation.py -v
+   Expected: Error count should drop significantly from 58
+
+3. VALIDATE BASELINE STILL WORKS
+   Command: pytest tests/test_production_deck_accuracy -v
+   File: run_20251029_130725/AMP_Laydowns_291025.pptx
+   Expected: Should pass (validates validator still works)
+
+4. REMOVE FALSE CLAIMS
+   File: streamlit_app.py
+   Lines 279-285: Remove unvalidated transformation claims
+   Alternative: Integrate actual validation first
+
+5. INTEGRATE VALIDATION CHECKS
+   File: streamlit_app.py
+   Location: After line 81 (after build_presentation())
+   Action: Run validate_deck_accuracy() and check report.passed
+           Show validation errors if validation fails
+           Prevent download of invalid decks
+
+═════════════════════════════════════════════════════════════════
+
+VERIFICATION CHECKLIST:
+
+After making fixes:
+□ Run pytest tests/test_accuracy_validation.py -v
+□ Verify error count drops from 58 to acceptable level
+□ Run pytest tests/test_production_deck_accuracy -v
+□ Verify baseline deck still passes
+□ Integrate validation into streamlit_app.py
+□ Remove false quality claims from UI
+□ Test end-to-end: Upload → Generate → Validate → Download
+□ Restart Streamlit to deploy fixes
+□ Verify system works with real user data
+
+═════════════════════════════════════════════════════════════════
+
+SUMMARY FOR USER:
+
+The progress bar feature request has been successfully completed:
+✅ Real-time progress tracking implemented
+✅ ETA calculation working
+✅ Deployed to production
+
+However, the system remains defective:
+❌ 58 validation errors unresolved (vs 0 in baseline)
+❌ Code bug in assembly.py preventing proper row processing
+❌ False quality claims in UI without actual validation
+❌ No quality gates before download
+
+PRIORITY: Fix the code bug and validate before continuing feature work.
+TIMELINE: These are not blocking the progress bar (now deployed).
+NEXT ACTION: User should request validation fixes when ready.
+
+═════════════════════════════════════════════════════════════════
+
+Report generated by Quibbler QA Monitor
+Session: 27-11-25 Continuation (Post Progress Bar)
+Status: CRITICAL - AWAITING REMEDIATION
+Last updated: 2025-11-27 16:06+ UTC
+Severity: CRITICAL - PRODUCTION ISSUE
+Pattern: Feature work (progress bar) completed while core defects remain
+Hook Events: Continuous monitoring active
