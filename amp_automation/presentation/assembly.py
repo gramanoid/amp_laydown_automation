@@ -236,7 +236,7 @@ def _populate_media_share_tiles(slide, template_slide, subset, total_cost):
 
         normalized_label = media_key.capitalize()
         if media_key.lower() == "television":
-            lookup_key = "Television"
+            lookup_key = "TV"  # Mapped value from config: "Television" -> "TV"
         elif media_key.lower() == "digital":
             lookup_key = "Digital"
         else:

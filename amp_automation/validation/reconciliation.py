@@ -570,7 +570,7 @@ def _evaluate_match(actual_display: str, expected_display: str, difference: Opti
 def _media_lookup_key(key: str) -> str:
     lowered = key.lower()
     if lowered in {"tv", "television"}:
-        return "Television"
+        return "TV"  # Mapped value from config: "Television" -> "TV"
     if lowered in {"digital", "dig."}:
         return "Digital"
     return "Other"
