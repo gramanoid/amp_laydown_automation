@@ -364,7 +364,11 @@ def _compute_expected_summary(df: pd.DataFrame, market: str, brand: str, year: i
         if key.startswith("_") or not isinstance(config, dict):
             continue
         lookup = _media_lookup_key(key)
-        value = float(media_group.get(lookup, 0.0))
+        if lookup == "Other":
+            # Aggregate OOH + Other (OOH maps to "OOH", not "Other" in config)
+            value = float(media_group.get("Other", 0.0)) + float(media_group.get("OOH", 0.0))
+        else:
+            value = float(media_group.get(lookup, 0.0))
         proportion = 0.0 if total_cost <= 0 else value / total_cost
         media_expectations[key] = {
             "value": proportion,

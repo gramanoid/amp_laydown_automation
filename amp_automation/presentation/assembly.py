@@ -218,6 +218,51 @@ def _populate_quarter_tiles(slide, template_slide, subset):
 def _populate_media_share_tiles(slide, template_slide, subset, total_cost):
     media_group = subset.groupby("Mapped Media Type")["Total Cost"].sum()
 
+    # Calculate raw values for all three categories
+    tv_value = float(media_group.get("TV", 0.0))
+    digital_value = float(media_group.get("Digital", 0.0))
+    # Other includes OOH (config maps OOH -> "OOH", not "Other")
+    other_value = float(media_group.get("Other", 0.0)) + float(media_group.get("OOH", 0.0))
+
+    # Calculate percentages that sum to exactly 100%
+    if total_cost > 0:
+        tv_pct_raw = (tv_value / total_cost) * 100
+        digital_pct_raw = (digital_value / total_cost) * 100
+        other_pct_raw = (other_value / total_cost) * 100
+
+        # Use largest remainder method to ensure sum = 100%
+        tv_pct = int(tv_pct_raw)
+        digital_pct = int(digital_pct_raw)
+        other_pct = int(other_pct_raw)
+
+        # Calculate remainders
+        remainders = [
+            ("tv", tv_pct_raw - tv_pct),
+            ("digital", digital_pct_raw - digital_pct),
+            ("other", other_pct_raw - other_pct),
+        ]
+        # Sort by remainder descending
+        remainders.sort(key=lambda x: x[1], reverse=True)
+
+        # Distribute the missing percentage points to those with largest remainders
+        current_sum = tv_pct + digital_pct + other_pct
+        for i in range(100 - current_sum):
+            if remainders[i % 3][0] == "tv":
+                tv_pct += 1
+            elif remainders[i % 3][0] == "digital":
+                digital_pct += 1
+            else:
+                other_pct += 1
+    else:
+        tv_pct = digital_pct = other_pct = 0
+
+    # Map percentage values by key
+    pct_map = {
+        "television": tv_pct,
+        "digital": digital_pct,
+        "other": other_pct,
+    }
+
     for media_key, config in SUMMARY_TILE_CONFIG.get("media_share", {}).items():
         # Skip configuration metadata fields (keys starting with underscore)
         if media_key.startswith("_") or not isinstance(config, dict):
@@ -234,17 +279,9 @@ def _populate_media_share_tiles(slide, template_slide, subset, total_cost):
         template_shape = _get_shape_by_name(template_slide, shape_name)
         _apply_configured_position(shape, config.get("position"))
 
-        normalized_label = media_key.capitalize()
-        if media_key.lower() == "television":
-            lookup_key = "TV"  # Mapped value from config: "Television" -> "TV"
-        elif media_key.lower() == "digital":
-            lookup_key = "Digital"
-        else:
-            lookup_key = "Other"
-
-        value = float(media_group.get(lookup_key, 0.0))
-        formatted = _format_percentage_tile(config, value, total_cost)
-        label = config.get("label", normalized_label)
+        label = config.get("label", media_key.capitalize())
+        pct = pct_map.get(media_key.lower(), 0)
+        formatted = f"{pct}%"
 
         _set_shape_text(shape, template_shape, f"{label}: {formatted}")
 
