@@ -599,6 +599,20 @@
           "font_size_pt": 36,
           "text_color": [255, 255, 255]
         }
+      },
+      "product_summary_slides": {
+        "_comment": "Generate aggregated slides showing products as rows (aggregating all campaigns per product)",
+        "enabled": true,
+        "brands": ["Panadol Pain", "Panadol C&F"],
+        "position": "before_campaigns",
+        "delimiter_style": {
+          "background_color": [40, 40, 40],
+          "text_color": [48, 234, 3],
+          "font_size_pt": 40,
+          "title": "PRODUCT SUMMARY"
+        },
+        "reach_aggregation": "average",
+        "grp_aggregation": "sum"
       }
     }
   },

@@ -1483,6 +1483,337 @@ def _build_campaign_block(
     return block_rows, block_month_totals, block_grp_total
 
 
+def _build_product_block(
+    product_name: str,
+    product_df: pd.DataFrame,
+    base_row_idx: int,
+    total_budget_for_percentage: float,
+    cell_metadata: dict[tuple[int, int], dict[str, object]],
+    region: str,
+    masterbrand: str,
+    year: int | None,
+    excel_path: str | Path | None,
+    reach_aggregation: str = "average",
+    grp_aggregation: str = "sum",
+) -> tuple[list[list[str]], list[float], float]:
+    """Build table rows for a single product, aggregating all campaigns.
+
+    Similar to _build_campaign_block but aggregates across all campaigns for the product.
+    First column shows PRODUCT name instead of CAMPAIGN name.
+    """
+    product_df = product_df.copy()
+    product_df["_NormalizedMedia"] = product_df["Mapped Media Type"].apply(_normalized_media_value)
+
+    block_rows: list[list[str]] = []
+    block_month_totals = [0.0] * len(TABLE_MONTH_ORDER)
+    block_grp_total = 0.0
+    media_totals: dict[str, float] = {}
+
+    product_total_budget = float(product_df["Total Cost"].sum() or 0.0)
+    share_percentage = (
+        (product_total_budget / total_budget_for_percentage) * 100.0
+        if total_budget_for_percentage > 0
+        else 0.0
+    )
+
+    first_media = True
+
+    for media_key in MEDIA_DISPLAY_ORDER:
+        media_mask = (
+            product_df["_NormalizedMedia"].astype(str).str.lower()
+            == media_key.lower()
+        )
+        media_df = product_df[media_mask]
+        if media_df.empty:
+            continue
+
+        monthly_values = _collect_monthly_values(media_df)
+        block_month_totals = [
+            existing + value for existing, value in zip(block_month_totals, monthly_values)
+        ]
+        total_cost = float(media_df["Total Cost"].sum() or 0.0)
+        media_totals[media_key] = total_cost
+
+        row_idx = base_row_idx + len(block_rows)
+        # Use product name (cleaned) for first row, "-" for subsequent media rows
+        product_label = str(product_name).upper().replace("-", " ") if first_media else "-"
+
+        row = _build_budget_row(
+            product_label,
+            _media_display_label(media_key),
+            media_key,
+            monthly_values,
+            total_cost,
+            share_percentage if first_media else None,
+            row_idx,
+            cell_metadata,
+        )
+        block_rows.append(row)
+
+        # Add TV metric rows (GRPs, Reach) - aggregated across all campaigns
+        if media_key == "Television":
+            tv_rows, tv_grp_total = _build_tv_metric_rows_aggregated(
+                product_df,
+                region,
+                masterbrand,
+                year,
+                excel_path,
+                base_row_idx + len(block_rows),
+                cell_metadata,
+                grp_aggregation,
+                reach_aggregation,
+            )
+            if tv_rows:
+                block_rows.extend(tv_rows)
+                block_grp_total += tv_grp_total
+        elif media_key == "Digital":
+            digital_rows = _build_digital_metric_rows(
+                base_row_idx + len(block_rows),
+                cell_metadata,
+            )
+            if digital_rows:
+                block_rows.extend(digital_rows)
+
+        first_media = False
+
+    # Calculate media split percentages
+    media_splits: dict[str, float] = {}
+    if product_total_budget > 0:
+        for media_key, media_total in media_totals.items():
+            pct = (media_total / product_total_budget) * 100.0
+            if pct >= 0.5:
+                media_splits[media_key] = pct
+
+    total_row = _build_campaign_monthly_total_row(
+        base_row_idx + len(block_rows),
+        block_month_totals,
+        block_grp_total,
+        cell_metadata,
+        media_splits if media_splits else None,
+    )
+    block_rows.append(total_row)
+
+    return block_rows, block_month_totals, block_grp_total
+
+
+def _build_tv_metric_rows_aggregated(
+    product_df: pd.DataFrame,
+    region: str,
+    masterbrand: str,
+    year: int | None,
+    excel_path: str | Path | None,
+    start_row_idx: int,
+    cell_metadata: dict[tuple[int, int], dict[str, object]],
+    grp_aggregation: str = "sum",
+    reach_aggregation: str = "average",
+) -> tuple[list[list[str]], float]:
+    """Build TV metric rows (GRPs, Reach) aggregated across all campaigns for a product."""
+    rows: list[list[str]] = []
+    total_grp = 0.0
+
+    # Get unique campaigns in this product data
+    campaigns = product_df["Campaign Name"].dropna().unique()
+
+    # Aggregate GRPs and Reach across all campaigns
+    monthly_grps = [0.0] * len(TABLE_MONTH_ORDER)
+    monthly_reach_values: list[list[float]] = [[] for _ in TABLE_MONTH_ORDER]
+
+    for campaign_name in campaigns:
+        campaign_df = product_df[product_df["Campaign Name"] == campaign_name]
+        # Get TV-specific data
+        tv_mask = campaign_df["_NormalizedMedia"].astype(str).str.lower() == "television"
+        tv_df = campaign_df[tv_mask]
+
+        if tv_df.empty:
+            continue
+
+        # Collect GRP values from raw data if available
+        if excel_path and hasattr(excel_path, '__fspath__') or isinstance(excel_path, (str, Path)):
+            for month_idx, month in enumerate(TABLE_MONTH_ORDER):
+                if month.startswith("Q"):
+                    continue  # Skip quarters
+                try:
+                    metrics = get_month_specific_tv_metrics(
+                        excel_path, region, masterbrand, str(campaign_name), year, month
+                    )
+                    if grp_aggregation == "sum":
+                        monthly_grps[month_idx] += metrics.get("grp_sum", 0)
+                    reach_val = metrics.get("reach_1plus", 0)
+                    if reach_val > 0:
+                        monthly_reach_values[month_idx].append(reach_val)
+                except Exception:
+                    pass
+
+    # Calculate total GRP
+    total_grp = sum(monthly_grps)
+
+    # Build GRPs row
+    grp_row_idx = start_row_idx
+    grp_row: list[str] = ["-", "-", "GRPs"]
+    for month_idx, grp_val in enumerate(monthly_grps):
+        col_idx = 3 + month_idx
+        formatted = format_number(grp_val, is_grp=True) if grp_val > 0 else "-"
+        grp_row.append(formatted)
+        _set_cell_metadata(cell_metadata, grp_row_idx, col_idx, grp_val, "GRPs", grp_val > 0)
+
+    # Total and % columns
+    grp_row.append(format_number(total_grp, is_grp=True) if total_grp > 0 else "")
+    grp_row.append("")
+    rows.append(grp_row)
+
+    # Build Reach row (averaged across campaigns if reach_aggregation == "average")
+    reach_row_idx = start_row_idx + 1
+    reach_row: list[str] = ["-", "-", "Reach@1+"]
+    for month_idx in range(len(TABLE_MONTH_ORDER)):
+        col_idx = 3 + month_idx
+        reach_vals = monthly_reach_values[month_idx]
+        if reach_vals:
+            if reach_aggregation == "average":
+                reach_val = sum(reach_vals) / len(reach_vals)
+            else:
+                reach_val = sum(reach_vals)
+            formatted = f"{reach_val:.1f}%" if reach_val > 0 else "-"
+        else:
+            reach_val = 0
+            formatted = "-"
+        reach_row.append(formatted)
+        _set_cell_metadata(cell_metadata, reach_row_idx, col_idx, reach_val, "Reach", reach_val > 0)
+
+    reach_row.append("")  # Total
+    reach_row.append("")  # %
+    rows.append(reach_row)
+
+    return rows, total_grp
+
+
+def _prepare_product_summary_table_data(
+    df: pd.DataFrame,
+    region: str,
+    masterbrand: str,
+    year: int | None = None,
+    excel_path: str | Path | None = None,
+    reach_aggregation: str = "average",
+    grp_aggregation: str = "sum",
+) -> tuple[list[list[str]] | None, dict[tuple[int, int], dict[str, object]] | None]:
+    """Prepare table data with PRODUCTS as rows (aggregating all campaigns per product).
+
+    This is the product summary view where:
+    - First column = Product name (not Campaign)
+    - Each product aggregates all its campaigns
+    - Media breakdown per product
+    - Brand total at the bottom
+    """
+    global _CAMPAIGN_BOUNDARIES
+
+    try:
+        year_text = f" - {year}" if year is not None else ""
+        logger.info("Preparing PRODUCT SUMMARY table data for %s - %s%s", region, masterbrand, year_text)
+
+        filter_mask = (
+            (df["Country"].astype(str).str.strip() == str(region).strip())
+            & (df["Brand"].astype(str).str.strip() == str(masterbrand).strip())
+        )
+
+        if year is not None:
+            filter_mask &= df["Year"].astype(str).str.strip() == str(year).strip()
+
+        subset = df.loc[filter_mask].copy()
+        logger.debug("Rows after filtering: %s", len(subset))
+
+        if subset.empty:
+            logger.warning("No data found for %s - %s%s", region, masterbrand, year_text)
+            _CAMPAIGN_BOUNDARIES = []
+            return None, None
+
+        # Check if Product column exists
+        if "Product" not in subset.columns:
+            logger.warning("Product column not found, cannot generate product summary")
+            return None, None
+
+        table_rows: list[list[str]] = []
+        # Use PRODUCT header instead of CAMPAIGN for product summary view
+        product_header = TABLE_HEADER_COLUMNS.copy()
+        product_header[0] = "PRODUCT"
+        table_rows.append(product_header)
+        cell_metadata: dict[tuple[int, int], dict[str, object]] = {}
+        monthly_totals = [0.0] * len(TABLE_MONTH_ORDER)
+        total_budget = float(subset["Total Cost"].sum() or 0.0)
+        grand_total_grp = 0.0
+        product_boundaries: list[tuple[int, int]] = []
+
+        # Group by Product and sort by total investment
+        product_investments = subset.groupby("Product")["Total Cost"].sum()
+        products_sorted = product_investments.sort_values(ascending=False).index.tolist()
+
+        coerced_year = _coerce_year(year)
+
+        for product_name in products_sorted:
+            if pd.isna(product_name) or str(product_name).strip() == "":
+                continue
+
+            product_df = subset[subset["Product"] == product_name]
+            if product_df.empty:
+                continue
+
+            base_row_idx = len(table_rows)
+            block_rows, block_month_totals, block_grp_total = _build_product_block(
+                product_name,
+                product_df,
+                base_row_idx,
+                total_budget,
+                cell_metadata,
+                region,
+                masterbrand,
+                coerced_year,
+                excel_path,
+                reach_aggregation,
+                grp_aggregation,
+            )
+
+            if not block_rows:
+                continue
+
+            table_rows.extend(block_rows)
+            monthly_totals = [
+                total + addition
+                for total, addition in zip(monthly_totals, block_month_totals)
+            ]
+            grand_total_grp += block_grp_total
+            product_boundaries.append((base_row_idx, len(table_rows) - 1))
+
+        # Add brand total row
+        grand_total_row = _build_grand_total_row(
+            monthly_totals,
+            total_budget,
+            grand_total_grp,
+        )
+        table_rows.append(grand_total_row)
+
+        # Use product_boundaries for pagination (reuse campaign boundary logic)
+        _CAMPAIGN_BOUNDARIES = product_boundaries
+
+        logger.info(
+            "Product summary table data created for %s - %s%s with %s rows (%d products)",
+            region,
+            masterbrand,
+            year_text,
+            len(table_rows),
+            len(products_sorted),
+        )
+        return table_rows, cell_metadata
+
+    except Exception as exc:
+        logger.error(
+            "Error preparing product summary table data for %s - %s: %s",
+            region,
+            masterbrand,
+            exc,
+        )
+        logger.error(traceback.format_exc())
+        _CAMPAIGN_BOUNDARIES = []
+        return None, None
+
+
 def _build_grand_total_row(
     monthly_totals: list[float],
     total_budget: float,
@@ -3596,6 +3927,107 @@ def create_presentation(template_path, excel_path, output_path):
                         run.font.color.rgb = RGBColor(255, 255, 255)  # White
 
                 logger.info(f"Added brand delimiter slide for: {brand_title}")
+
+                # ═══════════════════════════════════════════════════════════════
+                # PRODUCT SUMMARY SLIDES: Aggregated view with products as rows
+                # ═══════════════════════════════════════════════════════════════
+                product_summary_config = PRODUCT_SPLIT_CONFIG.get("product_summary_slides", {})
+                product_summary_enabled = product_summary_config.get("enabled", False)
+                product_summary_brands = product_summary_config.get("brands", [])
+
+                if product_summary_enabled and display_brand_name in product_summary_brands:
+                    logger.info(f"Generating product summary slides for {display_market_name} - {display_brand_name}")
+
+                    # Add product summary delimiter slide
+                    ps_delimiter_style = product_summary_config.get("delimiter_style", {})
+                    ps_bg_color = ps_delimiter_style.get("background_color", [40, 40, 40])
+                    ps_text_color = ps_delimiter_style.get("text_color", [48, 234, 3])
+                    ps_font_size = ps_delimiter_style.get("font_size_pt", 40)
+                    ps_title = ps_delimiter_style.get("title", "PRODUCT SUMMARY")
+
+                    try:
+                        blank_layout = prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0]
+                        ps_delimiter_slide = prs.slides.add_slide(blank_layout)
+                    except:
+                        ps_delimiter_slide = prs.slides.add_slide(prs.slide_layouts[0])
+
+                    # Background
+                    ps_bg = ps_delimiter_slide.shapes.add_shape(
+                        MSO_SHAPE.RECTANGLE,
+                        left=0,
+                        top=0,
+                        width=slide_width,
+                        height=slide_height
+                    )
+                    ps_bg.fill.solid()
+                    ps_bg.fill.fore_color.rgb = RGBColor(ps_bg_color[0], ps_bg_color[1], ps_bg_color[2])
+                    ps_bg.line.fill.background()
+
+                    # Title text
+                    ps_text_box = ps_delimiter_slide.shapes.add_textbox(
+                        left=Inches(1),
+                        top=int(slide_height * 0.45),
+                        width=slide_width - Inches(2),
+                        height=Inches(1.5)
+                    )
+                    ps_text_frame = ps_text_box.text_frame
+                    ps_text_frame.text = ps_title
+                    ps_text_frame.word_wrap = False
+                    ps_text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+
+                    for paragraph in ps_text_frame.paragraphs:
+                        paragraph.alignment = PP_ALIGN.CENTER
+                        for run in paragraph.runs:
+                            run.font.size = Pt(ps_font_size)
+                            run.font.bold = True
+                            run.font.name = FONT_FAMILY_LEGEND
+                            run.font.color.rgb = RGBColor(ps_text_color[0], ps_text_color[1], ps_text_color[2])
+
+                    logger.info(f"Added product summary delimiter slide for: {display_brand_name}")
+
+                    # Generate product summary content slides
+                    market = combination_row[0]
+                    year = combination_row[2]
+
+                    reach_agg = product_summary_config.get("reach_aggregation", "average")
+                    grp_agg = product_summary_config.get("grp_aggregation", "sum")
+
+                    ps_table_result = _prepare_product_summary_table_data(
+                        df, market, display_brand_name, year, excel_path,
+                        reach_aggregation=reach_agg,
+                        grp_aggregation=grp_agg
+                    )
+
+                    if ps_table_result[0] is not None:
+                        ps_table_data, ps_cell_metadata = ps_table_result
+
+                        # Split if needed (reuses campaign split logic)
+                        ps_splits = _split_table_data_by_campaigns(ps_table_data, ps_cell_metadata)
+
+                        for ps_split_idx, (ps_split_data, ps_split_meta, ps_is_continuation) in enumerate(ps_splits):
+                            if len(ps_splits) > 1:
+                                ps_suffix = f" ({ps_split_idx + 1}/{len(ps_splits)})"
+                            else:
+                                ps_suffix = ""
+
+                            ps_is_last = (ps_split_idx == len(ps_splits) - 1)
+                            ps_slide = prs.slides.add_slide(prs.slide_layouts[0])
+
+                            # Use modified combination with "Product Summary" indicator
+                            ps_combination = (market, f"{display_brand_name} - Product Summary", year)
+
+                            ps_payload = _populate_slide_content(
+                                ps_slide, prs, ps_combination, ps_suffix,
+                                ps_split_data, ps_split_meta, ps_split_idx,
+                                df, excel_path, ps_is_last
+                            )
+
+                            if ps_payload:
+                                autopptx_payloads.append(ps_payload)
+
+                        logger.info(f"Generated {len(ps_splits)} product summary slide(s) for {display_brand_name}")
+                    else:
+                        logger.warning(f"No product summary data for {display_brand_name}")
 
             logger.info(f"Processing combination {idx+1}/{len(ordered_combinations)}: {combination_row[0]} - {combination_row[1]} - {combination_row[2]}")
             
