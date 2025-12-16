@@ -1,10 +1,12 @@
 # Project Status - 16-12-25
 
 ## Current Focus (NOW)
-- [ ] Commit pending changes from 15-12-25 (5 modified files)
-- [ ] Run full test suite after commit
+- [x] Commit pending changes from 15-12-25 (5 modified files) → 9fdc2a8
+- [x] Run full test suite after commit → 41/46 pass (5 pre-existing failures)
+- [x] Fix UTF-8 BOM in master_config.json → 6ad50bb
 
 ## Next Priority
+- [ ] Fix pre-existing test failures (quarterly box config, accuracy validation)
 - [ ] Update structural validator contract (GRAND TOTAL -> BRAND TOTAL)
 
 ## Later
@@ -20,4 +22,4 @@
 - Delivered: ~/Downloads/AMP_Laydowns_151225.pptx
 
 ## Last Updated
-2025-12-16T14:31:28Z
+2025-12-16T14:36:00Z
