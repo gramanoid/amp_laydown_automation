@@ -58,6 +58,24 @@ def _clean_brand(raw_value: str | float | None) -> str:
     return brand.strip()
 
 
+def _extract_product(product_business: str | float | None) -> str:
+    """Extract product name from **Product Business hierarchy.
+
+    Example: 'Haleon | Panadol | Panadol (Adult Pain) | Panadol Advance' -> 'Panadol Advance'
+    """
+    if product_business is None or pd.isna(product_business):
+        return ""
+    parts = str(product_business).split(" | ")
+    product = parts[-1].strip() if parts else ""
+
+    # Rename specific products for clarity
+    product_renames = {
+        "Panadol": "Panadol Product",
+        "Panadol Cold and Flu": "Panadol RH",
+    }
+    return product_renames.get(product, product)
+
+
 def _validate_row_capacity(data_frame: pd.DataFrame, min_rows: int, logger: logging.Logger) -> None:
     """Raise if the dataset does not meet the minimum row requirement."""
 
@@ -196,16 +214,18 @@ def load_and_prepare_data(excel_path: str | Path, config: Config, logger: loggin
         "Plan - Year",
         "Month",
         "Media Type",
+        "**Product Business",
     ]
 
     processed_data: list[dict[str, object]] = []
 
     for name, group in raw_df.groupby(group_cols):
-        geography_raw, brand_raw, campaign, year, month_raw, media_type = name
+        geography_raw, brand_raw, campaign, year, month_raw, media_type, product_business = name
 
         country = _extract_country(geography_raw, separator)
         brand = _clean_brand(brand_raw)
         month = MONTH_ALIAS_MAP.get(month_raw, month_raw)
+        product = _extract_product(product_business)
 
         if not country or not brand or not campaign:
             continue
@@ -242,6 +262,7 @@ def load_and_prepare_data(excel_path: str | Path, config: Config, logger: loggin
             {
                 "Country": country,
                 "Brand": brand,
+                "Product": product,
                 "Media Type": media_type,
                 "Campaign Name": campaign,
                 "Campaign Type": campaign_type,
@@ -265,6 +286,7 @@ def load_and_prepare_data(excel_path: str | Path, config: Config, logger: loggin
     final_group_cols = [
         "Country",
         "Brand",
+        "Product",
         "Media Type",
         "Campaign Name",
         "Campaign Type",
@@ -289,11 +311,12 @@ def load_and_prepare_data(excel_path: str | Path, config: Config, logger: loggin
     ]
 
     for name, group in agg_df.groupby(final_group_cols):
-        country, brand, media_type, campaign, campaign_type, funnel_stage, year = name
+        country, brand, product, media_type, campaign, campaign_type, funnel_stage, year = name
 
         row = {
             "Country": country,
             "Brand": brand,
+            "Product": product,
             "Media Type": media_type,
             "Campaign Name": campaign,
             "Campaign Type": campaign_type,
@@ -340,6 +363,7 @@ def load_and_prepare_data(excel_path: str | Path, config: Config, logger: loggin
     expected_columns = [
         "Country",
         "Brand",
+        "Product",
         "Media Type",
         "Campaign Name",
         "Campaign Type",

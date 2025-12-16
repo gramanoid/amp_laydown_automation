@@ -572,6 +572,34 @@
       "slides_by": "total_investment",
       "campaigns_by": "net_cost",
       "order": "descending"
+    },
+    "product_split": {
+      "_comment": "Brands listed here will have additional product-level slides generated after the main brand slides",
+      "_description": "For each brand listed, the main brand slide acts as a section header, followed by individual slides for each product",
+      "enabled": true,
+      "brands": [
+        "Panadol Pain",
+        "Panadol C&F",
+        "Parodontax",
+        "Sensodyne",
+        "Sensodyne Pronamel"
+      ],
+      "product_rename": {
+        "_comment": "Rename products that have same name as brand to avoid confusion",
+        "Parodontax": "Parodontax Product",
+        "Sensodyne": "Sensodyne Product"
+      },
+      "delimiter_style": {
+        "background_color": [85, 85, 85],
+        "text_color": [255, 255, 255],
+        "font_size_pt": 32,
+        "prefix": "Product: ",
+        "brand_title": {
+          "enabled": true,
+          "font_size_pt": 36,
+          "text_color": [255, 255, 255]
+        }
+      }
     }
   },
   "processing": {

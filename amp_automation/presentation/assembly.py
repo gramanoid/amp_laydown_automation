@@ -163,11 +163,50 @@ def _populate_summary_tiles(slide, template_slide, df, combination_row, excel_pa
         clone_template_shape(template_slide, slide, footer_shape)
 
     market, brand, year = combination_row
+
+    # Handle product-level slides where brand contains " - product_name"
+    # e.g., "Panadol Pain - Panadol Extra" -> actual brand is "Panadol Pain", product is "Panadol Extra"
+    # Note: display product names may be:
+    #   1. Renamed (e.g., "Sensodyne Product" from "Sensodyne")
+    #   2. Stripped of brand prefix (e.g., "Mouthwash" from "Parodontax Mouthwash")
+    product_filter = None
+    if " - " in str(brand):
+        parts = str(brand).split(" - ", 1)
+        actual_brand = parts[0].strip()
+        display_product_name = parts[1].strip() if len(parts) > 1 else None
+        if display_product_name:
+            # Reverse-map renamed products back to original names for DataFrame filtering
+            # e.g., "Parodontax Product" -> "Parodontax"
+            product_rename_map = PRODUCT_SPLIT_CONFIG.get("product_rename", {})
+            reverse_rename_map = {v: k for k, v in product_rename_map.items()}
+            original_product_name = reverse_rename_map.get(display_product_name, display_product_name)
+
+            # If not found via rename map, try adding brand prefix back
+            # e.g., "Mouthwash" with brand "Parodontax" -> "Parodontax Mouthwash"
+            product_col_upper = df["Product"].astype(str).str.strip().str.upper()
+            direct_match = (product_col_upper == original_product_name.upper())
+
+            if not direct_match.any():
+                # Try with brand prefix added back
+                prefixed_product_name = f"{actual_brand} {original_product_name}"
+                prefixed_match = (product_col_upper == prefixed_product_name.upper())
+                if prefixed_match.any():
+                    original_product_name = prefixed_product_name
+
+            product_filter = (product_col_upper == original_product_name.upper())
+    else:
+        actual_brand = str(brand).strip()
+
     combo_filter = (
         (df["Country"].astype(str).str.strip() == str(market).strip())
-        & (df["Brand"].astype(str).str.strip() == str(brand).strip())
+        & (df["Brand"].astype(str).str.strip() == actual_brand)
         & (df["Year"].astype(str).str.strip() == str(year).strip())
     )
+
+    # Apply product filter if this is a product-level slide
+    if product_filter is not None:
+        combo_filter = combo_filter & product_filter
+
     subset = df.loc[combo_filter].copy()
     if subset.empty:
         logger.warning("Summary tiles: no data for %s - %s (%s)", market, brand, year)
@@ -1039,6 +1078,7 @@ CLONE_PIPELINE_ENABLED: bool = True
 AUTOPPTX_CONFIG: dict[str, object] = {}
 ASPOSE_CONFIG: dict[str, object] = {}
 DOCSTRANGE_CONFIG: dict[str, object] = {}
+PRODUCT_SPLIT_CONFIG: dict[str, object] = {}
 
 
 def _normalized_media_value(raw_media: str) -> str:
@@ -1533,6 +1573,7 @@ def _initialize_from_config(config: Config) -> None:
     global TABLE_COLUMN_ALIGNMENT_MAP, TABLE_WORD_WRAP_COLUMNS, TABLE_UPPERCASE_COLUMNS, TABLE_DUAL_LINE_LABELS, TABLE_SHRINK_TO_FIT_COLUMNS
     global CLONE_PIPELINE_ENABLED
     global AUTOPPTX_CONFIG, ASPOSE_CONFIG, DOCSTRANGE_CONFIG
+    global PRODUCT_SPLIT_CONFIG
 
     MASTER_CONFIG = config
 
@@ -1570,6 +1611,11 @@ def _initialize_from_config(config: Config) -> None:
     AUTOPPTX_CONFIG = dict(tooling_config.get("autopptx", {}))
     ASPOSE_CONFIG = dict(tooling_config.get("aspose", {}))
     DOCSTRANGE_CONFIG = dict(tooling_config.get("docstrange", {}))
+
+    # Load product split configuration for Panadol Pain/C&F product-level slides
+    data_section = MASTER_CONFIG.get("data", {})
+    data_config = data_section if isinstance(data_section, dict) else {}
+    PRODUCT_SPLIT_CONFIG = dict(data_config.get("product_split", {}))
 
     TABLE_PLACEHOLDER_NAME = table_config.get("placeholder_name", "Table Placeholder 1")
 
@@ -3616,6 +3662,180 @@ def create_presentation(template_path, excel_path, output_path):
                 logger.debug("  new_slide.shapes attribute is missing.")
             logger.debug(f"--- End Shapes on new_slide (Index: {idx+1}) ---")
                 """
+
+            # ═══════════════════════════════════════════════════════════════
+            # PRODUCT-LEVEL SLIDES: Generate sub-slides for Panadol Pain/C&F
+            # ═══════════════════════════════════════════════════════════════
+            current_brand_name = combination_row[1]
+            product_split_brands = PRODUCT_SPLIT_CONFIG.get("brands", [])
+            product_split_enabled = PRODUCT_SPLIT_CONFIG.get("enabled", False)
+
+            if product_split_enabled and current_brand_name in product_split_brands:
+                # Get unique products for this market/brand/year combination
+                market = combination_row[0]
+                year = combination_row[2]
+
+                product_filter = (
+                    (df["Country"].astype(str).str.strip() == str(market).strip()) &
+                    (df["Brand"].astype(str).str.strip() == str(current_brand_name).strip()) &
+                    (df["Year"].astype(str).str.strip() == str(year).strip())
+                )
+                product_subset = df.loc[product_filter]
+
+                if "Product" in product_subset.columns:
+                    # Get unique products, sorted by total investment
+                    product_investments = product_subset.groupby("Product")["Total Cost"].sum()
+                    unique_products = product_investments.sort_values(ascending=False).index.tolist()
+
+                    logger.info(f"Generating {len(unique_products)} product sub-slides for {market} - {current_brand_name}")
+
+                    delimiter_style = PRODUCT_SPLIT_CONFIG.get("delimiter_style", {})
+                    bg_color = delimiter_style.get("background_color", [85, 85, 85])
+                    text_color = delimiter_style.get("text_color", [255, 255, 255])
+                    font_size = delimiter_style.get("font_size_pt", 32)
+                    prefix = delimiter_style.get("prefix", "Product: ")
+
+                    # Brand title config
+                    brand_title_config = delimiter_style.get("brand_title", {})
+                    show_brand_title = brand_title_config.get("enabled", False)
+                    brand_title_font_size = brand_title_config.get("font_size_pt", 36)
+                    brand_title_color = brand_title_config.get("text_color", [255, 255, 255])
+
+                    # Product rename mapping (e.g., "Parodontax" -> "Parodontax Product")
+                    product_rename_map = PRODUCT_SPLIT_CONFIG.get("product_rename", {})
+
+                    for product_name in unique_products:
+                        if not product_name or pd.isna(product_name) or str(product_name).strip() == "":
+                            continue
+
+                        # Get display name (may be renamed to avoid brand/product collision)
+                        product_name_str = str(product_name).strip()
+                        display_product_name = product_rename_map.get(product_name_str, product_name_str)
+
+                        # Strip redundant brand prefix from product name for cleaner display
+                        # e.g., "Parodontax Mouthwash" -> "Mouthwash" when brand is "Parodontax"
+                        # But keep renamed products as-is (e.g., "Sensodyne Product" stays as-is)
+                        if product_name_str not in product_rename_map:
+                            brand_prefix = current_brand_name + " "
+                            if display_product_name.lower().startswith(brand_prefix.lower()):
+                                display_product_name = display_product_name[len(brand_prefix):].strip()
+
+                        # Add product delimiter slide
+                        try:
+                            blank_layout = prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0]
+                            product_delimiter_slide = prs.slides.add_slide(blank_layout)
+                        except:
+                            product_delimiter_slide = prs.slides.add_slide(prs.slide_layouts[0])
+
+                        slide_width = prs.slide_width
+                        slide_height = prs.slide_height
+
+                        from pptx.enum.shapes import MSO_SHAPE
+
+                        # Gray background
+                        product_bg = product_delimiter_slide.shapes.add_shape(
+                            MSO_SHAPE.RECTANGLE,
+                            left=0,
+                            top=0,
+                            width=slide_width,
+                            height=slide_height
+                        )
+                        product_bg.fill.solid()
+                        product_bg.fill.fore_color.rgb = RGBColor(bg_color[0], bg_color[1], bg_color[2])
+                        product_bg.line.fill.background()
+
+                        # Brand title at top
+                        if show_brand_title:
+                            brand_text_box = product_delimiter_slide.shapes.add_textbox(
+                                left=Inches(1),
+                                top=int(slide_height * 0.15),
+                                width=slide_width - Inches(2),
+                                height=Inches(1)
+                            )
+                            brand_tf = brand_text_box.text_frame
+                            brand_tf.text = str(current_brand_name).upper()
+                            brand_tf.word_wrap = False
+                            brand_tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+                            for para in brand_tf.paragraphs:
+                                para.alignment = PP_ALIGN.CENTER
+                                for run in para.runs:
+                                    run.font.size = Pt(brand_title_font_size)
+                                    run.font.bold = True
+                                    run.font.name = FONT_FAMILY_LEGEND
+                                    run.font.color.rgb = RGBColor(brand_title_color[0], brand_title_color[1], brand_title_color[2])
+
+                        # Product name text (use display name for slides)
+                        product_title = f"{prefix}{display_product_name}".upper()
+                        text_box = product_delimiter_slide.shapes.add_textbox(
+                            left=Inches(1),
+                            top=int(slide_height * 0.50),
+                            width=slide_width - Inches(2),
+                            height=Inches(1.5)
+                        )
+
+                        text_frame = text_box.text_frame
+                        text_frame.text = product_title
+                        text_frame.word_wrap = False
+                        text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+
+                        for paragraph in text_frame.paragraphs:
+                            paragraph.alignment = PP_ALIGN.CENTER
+                            for run in paragraph.runs:
+                                run.font.size = Pt(font_size)
+                                run.font.bold = True
+                                run.font.name = FONT_FAMILY_LEGEND
+                                run.font.color.rgb = RGBColor(text_color[0], text_color[1], text_color[2])
+
+                        logger.info(f"Added product delimiter slide for: {product_name}")
+
+                        # Generate content slide(s) for this product
+                        product_data_filter = (
+                            (df["Country"].astype(str).str.strip() == str(market).strip()) &
+                            (df["Brand"].astype(str).str.strip() == str(current_brand_name).strip()) &
+                            (df["Year"].astype(str).str.strip() == str(year).strip()) &
+                            (df["Product"].astype(str).str.strip() == str(product_name).strip())
+                        )
+                        product_df = df.loc[product_data_filter].copy()
+
+                        if product_df.empty:
+                            logger.warning(f"No data for product: {product_name}")
+                            continue
+
+                        # Prepare table data for this product
+                        product_table_result = _prepare_main_table_data_detailed(
+                            product_df, market, current_brand_name, year, excel_path
+                        )
+
+                        if product_table_result[0] is None:
+                            logger.warning(f"No table data for product: {product_name}")
+                            continue
+
+                        product_table_data, product_cell_metadata = product_table_result
+                        product_splits = _split_table_data_by_campaigns(product_table_data, product_cell_metadata)
+
+                        for prod_split_idx, (prod_split_data, prod_split_meta, _) in enumerate(product_splits):
+                            if len(product_splits) > 1:
+                                prod_suffix = f" ({prod_split_idx + 1}/{len(product_splits)})"
+                            else:
+                                prod_suffix = ""
+
+                            is_last_product_slide = (prod_split_idx == len(product_splits) - 1)
+
+                            product_slide = prs.slides.add_slide(prs.slide_layouts[0])
+
+                            # Create modified combination_row with product name in title (use display name)
+                            product_combination = (market, f"{current_brand_name} - {display_product_name}", year)
+
+                            product_payload = _populate_slide_content(
+                                product_slide, prs, product_combination, prod_suffix,
+                                prod_split_data, prod_split_meta, prod_split_idx,
+                                product_df, excel_path, is_last_product_slide
+                            )
+
+                            if product_payload:
+                                autopptx_payloads.append(product_payload)
+
+                        logger.info(f"Generated {len(product_splits)} slide(s) for product: {product_name}")
 
         # ORIGINAL CONTENT POPULATION CODE MOVED TO _populate_slide_content() FUNCTION
         # (This section was deleted to prevent empty slides)
