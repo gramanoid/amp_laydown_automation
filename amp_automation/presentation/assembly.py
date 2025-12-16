@@ -1,6 +1,6 @@
 LEGEND_GROUPS_CONFIG: dict[str, object] = {}
 SUMMARY_TILE_CONFIG: dict[str, object] = {}
-FONT_FAMILY_LEGEND = "Calibri"
+FONT_FAMILY_LEGEND = "Verdana"
 
 LEGEND_COLOR_WIDTH_IN = 24.84 / 96.0
 LEGEND_COLOR_HEIGHT_IN = 13.37 / 96.0
@@ -450,6 +450,480 @@ def _set_legend_text(shape, template_shape, text):
     run.font.name = FONT_FAMILY_LEGEND
     run.font.size = FONT_SIZE_LEGEND
     run.font.bold = True
+
+
+def _add_breadcrumb_to_slide(slide, breadcrumb_text: str, slide_width, slide_height):
+    """
+    Add a breadcrumb navigation text to the top of a data slide.
+
+    Args:
+        slide: Target slide
+        breadcrumb_text: The breadcrumb path (e.g., "1. SAUDI ARABIA › 1.1 SENSODYNE")
+        slide_width: Width of slide
+        slide_height: Height of slide
+    """
+    if not breadcrumb_text:
+        return
+
+    # Small breadcrumb text box at top-left
+    breadcrumb_box = slide.shapes.add_textbox(
+        left=Inches(0.2),
+        top=Inches(0.08),
+        width=slide_width - Inches(0.4),
+        height=Inches(0.25)
+    )
+    tf = breadcrumb_box.text_frame
+    tf.text = breadcrumb_text
+    tf.word_wrap = False
+
+    for para in tf.paragraphs:
+        para.alignment = PP_ALIGN.LEFT
+        for run in para.runs:
+            run.font.size = Pt(8)
+            run.font.bold = False
+            run.font.name = FONT_FAMILY_LEGEND
+            run.font.color.rgb = RGBColor(128, 128, 128)  # Gray
+
+
+def _create_toc_placeholder(prs):
+    """
+    Create a TOC slide placeholder. Content will be populated later.
+    Returns the slide reference for later population.
+    """
+    from pptx.enum.shapes import MSO_SHAPE
+
+    try:
+        blank_layout = prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0]
+        toc_slide = prs.slides.add_slide(blank_layout)
+    except:
+        toc_slide = prs.slides.add_slide(prs.slide_layouts[0])
+
+    slide_width = prs.slide_width
+    slide_height = prs.slide_height
+
+    # Black background
+    bg = toc_slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        left=0, top=0,
+        width=slide_width, height=slide_height
+    )
+    bg.fill.solid()
+    bg.fill.fore_color.rgb = RGBColor(0, 0, 0)
+    bg.line.fill.background()
+
+    # Title: "CONTENTS" - large and prominent
+    title_box = toc_slide.shapes.add_textbox(
+        left=Inches(0.25),
+        top=Inches(0.2),
+        width=slide_width - Inches(0.5),
+        height=Inches(0.7)
+    )
+    title_tf = title_box.text_frame
+    title_tf.text = "CONTENTS"
+    title_tf.word_wrap = False
+
+    for para in title_tf.paragraphs:
+        para.alignment = PP_ALIGN.LEFT
+        for run in para.runs:
+            run.font.size = Pt(32)
+            run.font.bold = True
+            run.font.name = FONT_FAMILY_LEGEND
+            run.font.color.rgb = RGBColor(48, 234, 3)
+
+    # Green accent line under title
+    accent_line = toc_slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        left=Inches(0.25),
+        top=Inches(0.75),
+        width=Inches(2.0),
+        height=Inches(0.03)
+    )
+    accent_line.fill.solid()
+    accent_line.fill.fore_color.rgb = RGBColor(48, 234, 3)
+    accent_line.line.fill.background()
+
+    return toc_slide
+
+
+def _populate_toc_slide(toc_slide, prs, toc_entries: list):
+    """
+    Populate a TOC slide with market/brand entries in multi-column layout.
+    Shows ALL brands for each market with clean formatting.
+    """
+    if not toc_entries:
+        logger.warning("No TOC entries to populate")
+        return
+
+    slide_width = prs.slide_width
+    slide_height = prs.slide_height
+
+    # Group entries by market
+    markets = []
+    current_market = None
+    for entry in toc_entries:
+        if entry.get("level") == 1:
+            current_market = {
+                "number": entry.get("number", ""),
+                "title": entry.get("title", ""),
+                "brands": []
+            }
+            markets.append(current_market)
+        elif entry.get("level") == 2 and current_market:
+            current_market["brands"].append({
+                "number": entry.get("number", ""),
+                "title": entry.get("title", "")
+            })
+
+    # Multi-column layout - 3 columns
+    num_columns = 3
+    column_width = (slide_width - Inches(0.5)) / num_columns
+    start_y = Inches(0.9)
+    column_height = slide_height - Inches(1.0)
+
+    # Distribute markets across columns evenly
+    markets_per_column = (len(markets) + num_columns - 1) // num_columns
+
+    for col_idx in range(num_columns):
+        col_markets = markets[col_idx * markets_per_column:(col_idx + 1) * markets_per_column]
+        if not col_markets:
+            continue
+
+        col_x = Inches(0.25) + (col_idx * column_width)
+
+        col_box = toc_slide.shapes.add_textbox(
+            left=int(col_x),
+            top=int(start_y),
+            width=int(column_width - Inches(0.15)),
+            height=int(column_height)
+        )
+        col_tf = col_box.text_frame
+        col_tf.word_wrap = True
+
+        first_para = True
+        for market in col_markets:
+            if first_para:
+                para = col_tf.paragraphs[0]
+                first_para = False
+            else:
+                para = col_tf.add_paragraph()
+
+            # Market header - number in GREEN, name in WHITE
+            para.alignment = PP_ALIGN.LEFT
+            para.space_before = Pt(14)
+            para.space_after = Pt(3)
+
+            # Add number run (green)
+            num_run = para.add_run()
+            num_run.text = f"{market['number']} "
+            num_run.font.size = Pt(14)
+            num_run.font.bold = True
+            num_run.font.name = FONT_FAMILY_LEGEND
+            num_run.font.color.rgb = RGBColor(48, 234, 3)  # Green number
+
+            # Add name run (white)
+            name_run = para.add_run()
+            name_run.text = market['title']
+            name_run.font.size = Pt(14)
+            name_run.font.bold = True
+            name_run.font.name = FONT_FAMILY_LEGEND
+            name_run.font.color.rgb = RGBColor(255, 255, 255)  # White name
+
+            # Show ALL brands - Title Case for readability
+            all_brands = [b["title"].title() for b in market["brands"]]
+            brands_text = ", ".join(all_brands)
+
+            if brands_text:
+                brand_para = col_tf.add_paragraph()
+                brand_para.text = brands_text
+                brand_para.alignment = PP_ALIGN.LEFT
+                brand_para.space_before = Pt(2)
+                brand_para.space_after = Pt(10)  # More space after brands
+
+                for run in brand_para.runs:
+                    run.font.size = Pt(10)  # Slightly larger for readability
+                    run.font.bold = False
+                    run.font.name = FONT_FAMILY_LEGEND
+                    run.font.color.rgb = RGBColor(160, 160, 160)  # Lighter gray for contrast
+
+    logger.info(f"Populated TOC slide with {len(markets)} markets")
+
+
+def _create_info_slide(prs):
+    """
+    Create the HOW TO USE THIS DECK info slide with enhanced content.
+    """
+    from pptx.enum.shapes import MSO_SHAPE
+
+    try:
+        blank_layout = prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0]
+        info_slide = prs.slides.add_slide(blank_layout)
+    except:
+        info_slide = prs.slides.add_slide(prs.slide_layouts[0])
+
+    slide_width = prs.slide_width
+    slide_height = prs.slide_height
+
+    # Black background
+    bg = info_slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        left=0, top=0,
+        width=slide_width, height=slide_height
+    )
+    bg.fill.solid()
+    bg.fill.fore_color.rgb = RGBColor(0, 0, 0)
+    bg.line.fill.background()
+
+    # Title - large and prominent
+    title_box = info_slide.shapes.add_textbox(
+        left=Inches(0.25),
+        top=Inches(0.2),
+        width=slide_width - Inches(0.5),
+        height=Inches(0.7)
+    )
+    title_tf = title_box.text_frame
+    title_tf.text = "HOW TO USE THIS DECK"
+    for para in title_tf.paragraphs:
+        para.alignment = PP_ALIGN.LEFT
+        for run in para.runs:
+            run.font.size = Pt(32)
+            run.font.bold = True
+            run.font.name = FONT_FAMILY_LEGEND
+            run.font.color.rgb = RGBColor(48, 234, 3)
+
+    # Green accent line under title
+    accent_line = info_slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        left=Inches(0.25),
+        top=Inches(0.75),
+        width=Inches(3.5),
+        height=Inches(0.03)
+    )
+    accent_line.fill.solid()
+    accent_line.fill.fore_color.rgb = RGBColor(48, 234, 3)
+    accent_line.line.fill.background()
+
+    # ═══ LEFT COLUMN: NAVIGATION ═══
+    nav_box = info_slide.shapes.add_textbox(
+        left=Inches(0.25),
+        top=Inches(0.95),
+        width=Inches(4.6),
+        height=Inches(3.2)
+    )
+    nav_tf = nav_box.text_frame
+    nav_tf.word_wrap = True
+
+    nav_tf.paragraphs[0].text = "NAVIGATION"
+    for run in nav_tf.paragraphs[0].runs:
+        run.font.size = Pt(16)
+        run.font.bold = True
+        run.font.color.rgb = RGBColor(48, 234, 3)
+        run.font.name = FONT_FAMILY_LEGEND
+
+    nav_items = [
+        ("Section Numbers", "Each section has a unique ID (e.g., 1.2.3)"),
+        ("Breadcrumbs", "Gray path at top shows your location"),
+        ("Delimiter Slides", "Black/gray dividers mark boundaries"),
+        ("Color Coding", "Black = Market, Gray = Brand, Light = Product"),
+    ]
+
+    for label, desc in nav_items:
+        p = nav_tf.add_paragraph()
+        p.space_before = Pt(10)
+        # Green bullet
+        bullet_run = p.add_run()
+        bullet_run.text = "▸ "
+        bullet_run.font.size = Pt(12)
+        bullet_run.font.bold = True
+        bullet_run.font.color.rgb = RGBColor(48, 234, 3)
+        bullet_run.font.name = FONT_FAMILY_LEGEND
+        # White label
+        label_run = p.add_run()
+        label_run.text = label
+        label_run.font.size = Pt(12)
+        label_run.font.bold = True
+        label_run.font.color.rgb = RGBColor(255, 255, 255)
+        label_run.font.name = FONT_FAMILY_LEGEND
+
+        p2 = nav_tf.add_paragraph()
+        p2.text = f"    {desc}"
+        p2.space_before = Pt(2)
+        for run in p2.runs:
+            run.font.size = Pt(10)
+            run.font.bold = False
+            run.font.color.rgb = RGBColor(140, 140, 140)
+            run.font.name = FONT_FAMILY_LEGEND
+
+    # ═══ RIGHT COLUMN: DATA ═══
+    data_box = info_slide.shapes.add_textbox(
+        left=Inches(5.0),
+        top=Inches(0.95),
+        width=Inches(4.6),
+        height=Inches(3.2)
+    )
+    data_tf = data_box.text_frame
+    data_tf.word_wrap = True
+
+    data_tf.paragraphs[0].text = "DATA EXPLAINED"
+    for run in data_tf.paragraphs[0].runs:
+        run.font.size = Pt(16)
+        run.font.bold = True
+        run.font.color.rgb = RGBColor(48, 234, 3)
+        run.font.name = FONT_FAMILY_LEGEND
+
+    data_items = [
+        ("Source", "Lumina BulkPlanData export (Excel)"),
+        ("Table", "Monthly spend by campaign & channel"),
+        ("Media Share", "TV / Digital / OOH / Other %"),
+        ("Quarterly Split", "Q1-Q4 budget distribution"),
+        ("Funnel Stage", "Upper / Mid / Lower funnel allocation"),
+    ]
+
+    for label, desc in data_items:
+        p = data_tf.add_paragraph()
+        p.space_before = Pt(10)
+        # Green bullet
+        bullet_run = p.add_run()
+        bullet_run.text = "▸ "
+        bullet_run.font.size = Pt(12)
+        bullet_run.font.bold = True
+        bullet_run.font.color.rgb = RGBColor(48, 234, 3)
+        bullet_run.font.name = FONT_FAMILY_LEGEND
+        # White label
+        label_run = p.add_run()
+        label_run.text = label
+        label_run.font.size = Pt(12)
+        label_run.font.bold = True
+        label_run.font.color.rgb = RGBColor(255, 255, 255)
+        label_run.font.name = FONT_FAMILY_LEGEND
+
+        p2 = data_tf.add_paragraph()
+        p2.text = f"    {desc}"
+        p2.space_before = Pt(2)
+        for run in p2.runs:
+            run.font.size = Pt(10)
+            run.font.bold = False
+            run.font.color.rgb = RGBColor(140, 140, 140)
+            run.font.name = FONT_FAMILY_LEGEND
+
+    # ═══ BOTTOM: HIERARCHY LEGEND ═══
+    legend_box = info_slide.shapes.add_textbox(
+        left=Inches(0.25),
+        top=slide_height - Inches(0.85),
+        width=slide_width - Inches(0.5),
+        height=Inches(0.6)
+    )
+    legend_tf = legend_box.text_frame
+    legend_tf.word_wrap = True
+
+    # Build hierarchy with colored numbers
+    legend_para = legend_tf.paragraphs[0]
+    legend_para.alignment = PP_ALIGN.CENTER
+
+    hierarchy_parts = [
+        ("HIERARCHY:  ", RGBColor(100, 100, 100), False),
+        ("1.", RGBColor(48, 234, 3), True),
+        (" MARKET  →  ", RGBColor(140, 140, 140), False),
+        ("1.1", RGBColor(48, 234, 3), True),
+        (" BRAND  →  ", RGBColor(140, 140, 140), False),
+        ("1.1.1", RGBColor(48, 234, 3), True),
+        (" PRODUCT SUMMARY  →  ", RGBColor(140, 140, 140), False),
+        ("1.1.2", RGBColor(48, 234, 3), True),
+        (" BRAND TOTAL  →  ", RGBColor(140, 140, 140), False),
+        ("1.1.3+", RGBColor(48, 234, 3), True),
+        (" PRODUCTS", RGBColor(140, 140, 140), False),
+    ]
+
+    for text, color, bold in hierarchy_parts:
+        run = legend_para.add_run()
+        run.text = text
+        run.font.size = Pt(10)
+        run.font.bold = bold
+        run.font.color.rgb = color
+        run.font.name = FONT_FAMILY_LEGEND
+
+    logger.info("Created info slide")
+    return info_slide
+
+
+def _create_thank_you_slide(prs):
+    """
+    Create a thank you / end slide.
+    """
+    from pptx.enum.shapes import MSO_SHAPE
+    from datetime import datetime
+
+    try:
+        blank_layout = prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0]
+        ty_slide = prs.slides.add_slide(blank_layout)
+    except:
+        ty_slide = prs.slides.add_slide(prs.slide_layouts[0])
+
+    slide_width = prs.slide_width
+    slide_height = prs.slide_height
+
+    # Black background
+    bg = ty_slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        left=0, top=0,
+        width=slide_width, height=slide_height
+    )
+    bg.fill.solid()
+    bg.fill.fore_color.rgb = RGBColor(0, 0, 0)
+    bg.line.fill.background()
+
+    # Main title
+    title_box = ty_slide.shapes.add_textbox(
+        left=Inches(0.5),
+        top=int(slide_height * 0.35),
+        width=slide_width - Inches(1),
+        height=Inches(1)
+    )
+    title_tf = title_box.text_frame
+    title_tf.text = "END OF PRESENTATION"
+    for para in title_tf.paragraphs:
+        para.alignment = PP_ALIGN.CENTER
+        for run in para.runs:
+            run.font.size = Pt(36)
+            run.font.bold = True
+            run.font.name = FONT_FAMILY_LEGEND
+            run.font.color.rgb = RGBColor(48, 234, 3)
+
+    # Subtitle
+    sub_box = ty_slide.shapes.add_textbox(
+        left=Inches(0.5),
+        top=int(slide_height * 0.50),
+        width=slide_width - Inches(1),
+        height=Inches(0.5)
+    )
+    sub_tf = sub_box.text_frame
+    sub_tf.text = "Annual Marketing Plan Laydowns"
+    for para in sub_tf.paragraphs:
+        para.alignment = PP_ALIGN.CENTER
+        for run in para.runs:
+            run.font.size = Pt(18)
+            run.font.bold = False
+            run.font.name = FONT_FAMILY_LEGEND
+            run.font.color.rgb = RGBColor(180, 180, 180)
+
+    # Generation info
+    gen_box = ty_slide.shapes.add_textbox(
+        left=Inches(0.5),
+        top=slide_height - Inches(0.8),
+        width=slide_width - Inches(1),
+        height=Inches(0.5)
+    )
+    gen_tf = gen_box.text_frame
+    gen_tf.text = f"Generated: {datetime.now().strftime('%d %B %Y')}  •  Data: Lumina BulkPlanData"
+    for para in gen_tf.paragraphs:
+        para.alignment = PP_ALIGN.CENTER
+        for run in para.runs:
+            run.font.size = Pt(9)
+            run.font.italic = True
+            run.font.name = FONT_FAMILY_LEGEND
+            run.font.color.rgb = RGBColor(80, 80, 80)
+
+    logger.info("Created thank you slide")
+    return ty_slide
 
 
 def _ensure_title_shape(slide, slide_layout, template_slide=None):
@@ -1312,7 +1786,7 @@ def _build_tv_metric_rows(
     ots_row_idx = start_row_idx + len(rows)
     ots_row: list[str] = ["-", "-", "OTS@3+"]
     for month_idx, value in enumerate(freq_totals):
-        formatted = format_number(value, is_grp=False)
+        formatted = format_number(value, is_ots=True)  # OTS is a frequency metric, not currency
         if not formatted:
             formatted = "-"
         ots_row.append(formatted)
@@ -2537,7 +3011,7 @@ def is_empty_formatted_value(formatted_value):
         
     return False
 
-def format_number(value, is_budget=False, is_percentage=False, is_grp=False, is_monthly_column=False):
+def format_number(value, is_budget=False, is_percentage=False, is_grp=False, is_monthly_column=False, is_ots=False):
     """Formats numbers for display in tables, with improved accuracy for budgets and enhanced zero handling."""
     if pd.isna(value):
         if is_percentage:
@@ -2578,6 +3052,13 @@ def format_number(value, is_budget=False, is_percentage=False, is_grp=False, is_
         else:
             # For values less than 1000, show as integer
             return f"{int(numeric_value)}"
+
+    # Handle OTS (Opportunity To See) - plain decimal, no currency/suffix
+    if is_ots:
+        # OTS is typically a small decimal like 3.2 (frequency metric)
+        if numeric_value == 0 or abs(numeric_value) < 0.1:
+            return "-"  # Show dash for zero/near-zero OTS
+        return f"{numeric_value:.1f}"  # Plain number with 1 decimal
 
     # IMPROVED BUDGET FORMATTING: More accurate representation
     if is_budget:
@@ -3814,6 +4295,33 @@ def create_presentation(template_path, excel_path, output_path):
 
         autopptx_payloads: list[dict[str, object]] = []
 
+        # ═══════════════════════════════════════════════════════════════
+        # SECTION NUMBERING TRACKING
+        # Format: {market_idx}.{brand_idx}.{subsection_idx}
+        # e.g., "1.2.3" = Market 1, Brand 2, Subsection 3
+        # ═══════════════════════════════════════════════════════════════
+        market_idx = 0
+        brand_idx = 0
+        subsection_idx = 0
+
+        # Breadcrumb tracking - shows hierarchy path on data slides
+        # Format: "1. MARKET > 1.1 BRAND > 1.1.1 SECTION"
+        current_breadcrumb = ""
+        breadcrumb_market = ""  # e.g., "1. SAUDI ARABIA"
+        breadcrumb_brand = ""   # e.g., "1.1 SENSODYNE"
+
+        # TOC data collection - will be used to populate TOC slide content
+        toc_entries = []  # List of (level, number, title, slide_index)
+
+        # ═══════════════════════════════════════════════════════════════
+        # CREATE FRONT MATTER SLIDES (TOC + INFO) BEFORE CONTENT
+        # These are created first so they appear at the beginning
+        # TOC content will be populated after all slides are generated
+        # ═══════════════════════════════════════════════════════════════
+        toc_slide = _create_toc_placeholder(prs)
+        info_slide = _create_info_slide(prs)
+        logger.info("Created front matter slides (TOC + Info)")
+
         current_market = None
         current_brand = None
         for idx, combination_row in enumerate(ordered_combinations):
@@ -3822,14 +4330,34 @@ def create_presentation(template_path, excel_path, output_path):
                 current_market = combination_row[0]
                 current_brand = None  # Reset brand when market changes
 
+                # Update section numbering
+                market_idx += 1
+                brand_idx = 0  # Reset brand counter for new market
+                subsection_idx = 0
+
                 # Fix market name display
                 display_market_name = "Morocco" if current_market == "MOR" else current_market
+                market_section_num = f"{market_idx}."
+
+                # Update breadcrumb for market level
+                breadcrumb_market = f"{market_section_num} {str(display_market_name).upper()}"
+                breadcrumb_brand = ""  # Reset brand breadcrumb
+                current_breadcrumb = breadcrumb_market
+
                 # Add a clean minimal market delimiter slide
                 try:
                     blank_layout = prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0]
                     delimiter_slide = prs.slides.add_slide(blank_layout)
                 except:
                     delimiter_slide = prs.slides.add_slide(prs.slide_layouts[0])
+
+                # Record TOC entry
+                toc_entries.append({
+                    "level": 1,
+                    "number": market_section_num,
+                    "title": str(display_market_name).upper(),
+                    "slide_index": len(prs.slides)
+                })
 
                 slide_width = prs.slide_width
                 slide_height = prs.slide_height
@@ -3848,7 +4376,26 @@ def create_presentation(template_path, excel_path, output_path):
                 black_bg.fill.fore_color.rgb = RGBColor(0, 0, 0)  # Black
                 black_bg.line.fill.background()
 
-                # Market name - large, centered, white text with subtle green accent
+                # Section number - smaller, above market name
+                section_num_box = delimiter_slide.shapes.add_textbox(
+                    left=Inches(1),
+                    top=int(slide_height * 0.35),
+                    width=slide_width - Inches(2),
+                    height=Inches(0.6)
+                )
+                section_num_frame = section_num_box.text_frame
+                section_num_frame.text = market_section_num
+                section_num_frame.word_wrap = False
+
+                for paragraph in section_num_frame.paragraphs:
+                    paragraph.alignment = PP_ALIGN.CENTER
+                    for run in paragraph.runs:
+                        run.font.size = Pt(24)
+                        run.font.bold = False
+                        run.font.name = FONT_FAMILY_LEGEND
+                        run.font.color.rgb = RGBColor(128, 128, 128)  # Gray
+
+                # Market name - large, centered, green text
                 text_box = delimiter_slide.shapes.add_textbox(
                     left=Inches(1),
                     top=int(slide_height * 0.45),
@@ -3869,16 +4416,25 @@ def create_presentation(template_path, excel_path, output_path):
                         run.font.name = FONT_FAMILY_LEGEND
                         run.font.color.rgb = RGBColor(0x30, 0xea, 0x03)  # Haleon green
 
-                logger.info(f"Added market delimiter slide for: {display_market_name}")
+                logger.info(f"Added market delimiter slide for: {market_section_num} {display_market_name}")
 
             # Check if we're starting a new brand
             brand_key = (combination_row[0], combination_row[1])  # (market, brand) tuple
             if brand_key != current_brand:
                 current_brand = brand_key
 
+                # Update section numbering
+                brand_idx += 1
+                subsection_idx = 0  # Reset subsection counter for new brand
+
                 # Fix display names
                 display_market_name = "Morocco" if combination_row[0] == "MOR" else combination_row[0]
                 display_brand_name = combination_row[1]
+                brand_section_num = f"{market_idx}.{brand_idx}"
+
+                # Update breadcrumb for brand level
+                breadcrumb_brand = f"{brand_section_num} {display_brand_name.upper()}"
+                current_breadcrumb = f"{breadcrumb_market}  ›  {breadcrumb_brand}"
 
                 # Add a clean minimal brand delimiter slide
                 try:
@@ -3886,6 +4442,14 @@ def create_presentation(template_path, excel_path, output_path):
                     brand_delimiter_slide = prs.slides.add_slide(blank_layout)
                 except:
                     brand_delimiter_slide = prs.slides.add_slide(prs.slide_layouts[0])
+
+                # Record TOC entry
+                toc_entries.append({
+                    "level": 2,
+                    "number": brand_section_num,
+                    "title": display_brand_name.upper(),
+                    "slide_index": len(prs.slides)
+                })
 
                 slide_width = prs.slide_width
                 slide_height = prs.slide_height
@@ -3903,6 +4467,25 @@ def create_presentation(template_path, excel_path, output_path):
                 gray_bg.fill.solid()
                 gray_bg.fill.fore_color.rgb = RGBColor(35, 35, 35)  # Very dark gray
                 gray_bg.line.fill.background()
+
+                # Section number - smaller, above brand name
+                brand_section_box = brand_delimiter_slide.shapes.add_textbox(
+                    left=Inches(1),
+                    top=int(slide_height * 0.35),
+                    width=slide_width - Inches(2),
+                    height=Inches(0.6)
+                )
+                brand_section_frame = brand_section_box.text_frame
+                brand_section_frame.text = brand_section_num
+                brand_section_frame.word_wrap = False
+
+                for paragraph in brand_section_frame.paragraphs:
+                    paragraph.alignment = PP_ALIGN.CENTER
+                    for run in paragraph.runs:
+                        run.font.size = Pt(20)
+                        run.font.bold = False
+                        run.font.name = FONT_FAMILY_LEGEND
+                        run.font.color.rgb = RGBColor(128, 128, 128)  # Gray
 
                 # Brand name - large, centered, white text
                 brand_title = f"{display_brand_name}".upper()
@@ -3926,7 +4509,7 @@ def create_presentation(template_path, excel_path, output_path):
                         run.font.name = FONT_FAMILY_LEGEND
                         run.font.color.rgb = RGBColor(255, 255, 255)  # White
 
-                logger.info(f"Added brand delimiter slide for: {brand_title}")
+                logger.info(f"Added brand delimiter slide for: {brand_section_num} {brand_title}")
 
                 # ═══════════════════════════════════════════════════════════════
                 # PRODUCT SUMMARY SLIDES: Aggregated view with products as rows
@@ -3937,6 +4520,13 @@ def create_presentation(template_path, excel_path, output_path):
 
                 if product_summary_enabled and display_brand_name in product_summary_brands:
                     logger.info(f"Generating product summary slides for {display_market_name} - {display_brand_name}")
+
+                    # Update section numbering for Product Summary
+                    subsection_idx += 1
+                    ps_section_num = f"{market_idx}.{brand_idx}.{subsection_idx}"
+
+                    # Update breadcrumb for product summary level
+                    current_breadcrumb = f"{breadcrumb_market}  ›  {breadcrumb_brand}  ›  {ps_section_num} PRODUCT SUMMARY"
 
                     # Add product summary delimiter slide
                     ps_delimiter_style = product_summary_config.get("delimiter_style", {})
@@ -3963,6 +4553,25 @@ def create_presentation(template_path, excel_path, output_path):
                     ps_bg.fill.fore_color.rgb = RGBColor(ps_bg_color[0], ps_bg_color[1], ps_bg_color[2])
                     ps_bg.line.fill.background()
 
+                    # Section number - smaller, above title
+                    ps_section_box = ps_delimiter_slide.shapes.add_textbox(
+                        left=Inches(1),
+                        top=int(slide_height * 0.35),
+                        width=slide_width - Inches(2),
+                        height=Inches(0.6)
+                    )
+                    ps_section_frame = ps_section_box.text_frame
+                    ps_section_frame.text = ps_section_num
+                    ps_section_frame.word_wrap = False
+
+                    for paragraph in ps_section_frame.paragraphs:
+                        paragraph.alignment = PP_ALIGN.CENTER
+                        for run in paragraph.runs:
+                            run.font.size = Pt(18)
+                            run.font.bold = False
+                            run.font.name = FONT_FAMILY_LEGEND
+                            run.font.color.rgb = RGBColor(128, 128, 128)  # Gray
+
                     # Title text
                     ps_text_box = ps_delimiter_slide.shapes.add_textbox(
                         left=Inches(1),
@@ -3983,7 +4592,7 @@ def create_presentation(template_path, excel_path, output_path):
                             run.font.name = FONT_FAMILY_LEGEND
                             run.font.color.rgb = RGBColor(ps_text_color[0], ps_text_color[1], ps_text_color[2])
 
-                    logger.info(f"Added product summary delimiter slide for: {display_brand_name}")
+                    logger.info(f"Added product summary delimiter slide for: {ps_section_num} {display_brand_name}")
 
                     # Generate product summary content slides
                     market = combination_row[0]
@@ -4022,12 +4631,106 @@ def create_presentation(template_path, excel_path, output_path):
                                 df, excel_path, ps_is_last
                             )
 
+                            # Add breadcrumb to product summary data slide
+                            _add_breadcrumb_to_slide(ps_slide, current_breadcrumb, prs.slide_width, prs.slide_height)
+
                             if ps_payload:
                                 autopptx_payloads.append(ps_payload)
 
                         logger.info(f"Generated {len(ps_splits)} product summary slide(s) for {display_brand_name}")
                     else:
                         logger.warning(f"No product summary data for {display_brand_name}")
+
+                    # ═══════════════════════════════════════════════════════════════
+                    # ADD TRANSITION SLIDE: "{BRAND} TOTAL (All Products/Campaigns)"
+                    # This provides visual separation between Product Summary and Brand Total
+                    # ═══════════════════════════════════════════════════════════════
+
+                    # Increment subsection counter for brand total
+                    subsection_idx += 1
+                    btd_section_num = f"{market_idx}.{brand_idx}.{subsection_idx}"
+
+                    # Update breadcrumb for brand total level
+                    current_breadcrumb = f"{breadcrumb_market}  ›  {breadcrumb_brand}  ›  {btd_section_num} TOTAL"
+
+                    try:
+                        blank_layout = prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0]
+                        brand_total_delimiter = prs.slides.add_slide(blank_layout)
+                    except:
+                        brand_total_delimiter = prs.slides.add_slide(prs.slide_layouts[0])
+
+                    # Background - same as brand delimiter (dark)
+                    btd_bg = brand_total_delimiter.shapes.add_shape(
+                        MSO_SHAPE.RECTANGLE,
+                        left=0,
+                        top=0,
+                        width=slide_width,
+                        height=slide_height
+                    )
+                    btd_bg.fill.solid()
+                    btd_bg.fill.fore_color.rgb = RGBColor(0, 0, 0)  # Black background
+                    btd_bg.line.fill.background()
+
+                    # Section number text box - gray, above title
+                    btd_section_box = brand_total_delimiter.shapes.add_textbox(
+                        left=Inches(1),
+                        top=int(slide_height * 0.25),
+                        width=slide_width - Inches(2),
+                        height=Inches(0.6)
+                    )
+                    btd_section_frame = btd_section_box.text_frame
+                    btd_section_frame.text = btd_section_num
+                    btd_section_frame.word_wrap = False
+
+                    for paragraph in btd_section_frame.paragraphs:
+                        paragraph.alignment = PP_ALIGN.CENTER
+                        for run in paragraph.runs:
+                            run.font.size = Pt(18)
+                            run.font.bold = False
+                            run.font.name = FONT_FAMILY_LEGEND
+                            run.font.color.rgb = RGBColor(128, 128, 128)  # Gray
+
+                    # Main title: "{BRAND} TOTAL"
+                    btd_title_box = brand_total_delimiter.shapes.add_textbox(
+                        left=Inches(1),
+                        top=int(slide_height * 0.38),
+                        width=slide_width - Inches(2),
+                        height=Inches(1)
+                    )
+                    btd_title_frame = btd_title_box.text_frame
+                    btd_title_frame.text = f"{display_brand_name.upper()} TOTAL"
+                    btd_title_frame.word_wrap = False
+                    btd_title_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+
+                    for paragraph in btd_title_frame.paragraphs:
+                        paragraph.alignment = PP_ALIGN.CENTER
+                        for run in paragraph.runs:
+                            run.font.size = Pt(44)
+                            run.font.bold = True
+                            run.font.name = FONT_FAMILY_LEGEND
+                            run.font.color.rgb = RGBColor(255, 255, 255)  # White
+
+                    # Subtitle: "(All Products/Campaigns)"
+                    btd_subtitle_box = brand_total_delimiter.shapes.add_textbox(
+                        left=Inches(1),
+                        top=int(slide_height * 0.55),
+                        width=slide_width - Inches(2),
+                        height=Inches(0.8)
+                    )
+                    btd_subtitle_frame = btd_subtitle_box.text_frame
+                    btd_subtitle_frame.text = "(All Products/Campaigns)"
+                    btd_subtitle_frame.word_wrap = False
+                    btd_subtitle_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+
+                    for paragraph in btd_subtitle_frame.paragraphs:
+                        paragraph.alignment = PP_ALIGN.CENTER
+                        for run in paragraph.runs:
+                            run.font.size = Pt(28)
+                            run.font.bold = False
+                            run.font.name = FONT_FAMILY_LEGEND
+                            run.font.color.rgb = RGBColor(48, 234, 3)  # Green accent
+
+                    logger.info(f"Added brand total transition slide for: {display_brand_name}")
 
             logger.info(f"Processing combination {idx+1}/{len(ordered_combinations)}: {combination_row[0]} - {combination_row[1]} - {combination_row[2]}")
             
@@ -4063,6 +4766,9 @@ def create_presentation(template_path, excel_path, output_path):
                     new_slide, prs, combination_row, slide_title_suffix,
                     split_table_data, split_metadata, split_idx, df, excel_path, is_last_slide
                 )
+
+                # Add breadcrumb to brand-level data slide
+                _add_breadcrumb_to_slide(new_slide, current_breadcrumb, prs.slide_width, prs.slide_height)
 
                 if payload:
                     autopptx_payloads.append(payload)
@@ -4153,6 +4859,14 @@ def create_presentation(template_path, excel_path, output_path):
                                 display_product_name = display_product_name[len(brand_prefix):].strip()
 
                         # Add product delimiter slide
+
+                        # Increment subsection counter for each product
+                        subsection_idx += 1
+                        prod_section_num = f"{market_idx}.{brand_idx}.{subsection_idx}"
+
+                        # Update breadcrumb for product level
+                        current_breadcrumb = f"{breadcrumb_market}  ›  {breadcrumb_brand}  ›  {prod_section_num} {display_product_name.upper()}"
+
                         try:
                             blank_layout = prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[0]
                             product_delimiter_slide = prs.slides.add_slide(blank_layout)
@@ -4175,6 +4889,25 @@ def create_presentation(template_path, excel_path, output_path):
                         product_bg.fill.solid()
                         product_bg.fill.fore_color.rgb = RGBColor(bg_color[0], bg_color[1], bg_color[2])
                         product_bg.line.fill.background()
+
+                        # Section number text box - gray, at top
+                        prod_section_box = product_delimiter_slide.shapes.add_textbox(
+                            left=Inches(1),
+                            top=int(slide_height * 0.08),
+                            width=slide_width - Inches(2),
+                            height=Inches(0.5)
+                        )
+                        prod_section_frame = prod_section_box.text_frame
+                        prod_section_frame.text = prod_section_num
+                        prod_section_frame.word_wrap = False
+
+                        for paragraph in prod_section_frame.paragraphs:
+                            paragraph.alignment = PP_ALIGN.CENTER
+                            for run in paragraph.runs:
+                                run.font.size = Pt(16)
+                                run.font.bold = False
+                                run.font.name = FONT_FAMILY_LEGEND
+                                run.font.color.rgb = RGBColor(160, 160, 160)  # Light gray on dark bg
 
                         # Brand title at top
                         if show_brand_title:
@@ -4264,6 +4997,9 @@ def create_presentation(template_path, excel_path, output_path):
                                 product_df, excel_path, is_last_product_slide
                             )
 
+                            # Add breadcrumb to product-level data slide
+                            _add_breadcrumb_to_slide(product_slide, current_breadcrumb, prs.slide_width, prs.slide_height)
+
                             if product_payload:
                                 autopptx_payloads.append(product_payload)
 
@@ -4271,6 +5007,12 @@ def create_presentation(template_path, excel_path, output_path):
 
         # ORIGINAL CONTENT POPULATION CODE MOVED TO _populate_slide_content() FUNCTION
         # (This section was deleted to prevent empty slides)
+
+        # Add thank you slide BEFORE template removal (to avoid save corruption bug)
+        logger.info(f"Adding thank you slide before template removal (current slides: {len(prs.slides)})")
+        _create_thank_you_slide(prs)
+        logger.info(f"Thank you slide added (now {len(prs.slides)} slides)")
+
         # Remove the original template slide (slide 1) which shows "Region / Global Masterbrand"
         if len(prs.slides) > 1: # Only remove if we have other slides
             logger.info(f"Removing template slide from presentation (total slides: {len(prs.slides)}).")
@@ -4284,6 +5026,10 @@ def create_presentation(template_path, excel_path, output_path):
                 logger.warning(f"Could not remove template slide: {e}")
         else:
             logger.warning(f"Not removing template slide - only {len(prs.slides)} slides found.")
+
+        # Populate TOC slide content (created at start, populated now with all entries)
+        if toc_entries and toc_slide:
+            _populate_toc_slide(toc_slide, prs, toc_entries)
 
         # Change-tracking metadata references the removed template slide and breaks COM automation
         for rel_id, rel in list(prs.part.rels.items()):
@@ -4306,6 +5052,8 @@ def create_presentation(template_path, excel_path, output_path):
         if not output_path.lower().endswith('.pptx'):
             output_path = output_path + '.pptx'
             logger.info(f"Added .pptx extension: {output_path}")
+
+        logger.info(f"Total slides before save: {len(prs.slides)}")
 
         # Save with proper error handling
         try:

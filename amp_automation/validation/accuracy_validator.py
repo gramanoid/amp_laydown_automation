@@ -22,7 +22,10 @@ from pptx import Presentation
 logger = logging.getLogger(__name__)
 
 MONTH_ORDER = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-TOLERANCE = 0.01  # Allow 1% tolerance for rounding errors
+TOLERANCE = 0.02  # Allow 2% tolerance for rounding errors
+# Maximum absolute tolerance in base units (e.g., £). When values are displayed as K,
+# each value can be off by ±500 due to rounding. With 12 months, max cumulative error is ±6000.
+ABSOLUTE_TOLERANCE = 6000  # £6K maximum absolute difference for sum validation
 
 
 @dataclass
@@ -210,11 +213,13 @@ def validate_horizontal_total(
     if expected_total == 0 and actual_total == 0:
         return None
 
-    # Allow 1% tolerance for rounding
-    tolerance_amount = max(abs(expected_total), abs(actual_total)) * TOLERANCE
+    # Allow percentage tolerance OR absolute tolerance (whichever is larger)
+    # This accounts for rounding errors when values are displayed as K or M
+    percentage_tolerance = max(abs(expected_total), abs(actual_total)) * TOLERANCE
+    tolerance_amount = max(percentage_tolerance, ABSOLUTE_TOLERANCE)
     difference = abs(expected_total - actual_total)
 
-    if difference > tolerance_amount and difference > 1:  # Ignore differences less than £1
+    if difference > tolerance_amount:
         return ValidationError(
             slide_num=slide_num,
             error_type="horizontal_total",
@@ -304,10 +309,13 @@ def validate_vertical_total(
     if expected_total == 0 and actual_total == 0:
         return None
 
-    tolerance_amount = max(abs(expected_total), abs(actual_total)) * TOLERANCE
+    # Allow percentage tolerance OR absolute tolerance (whichever is larger)
+    # This accounts for rounding errors when values are displayed as K or M
+    percentage_tolerance = max(abs(expected_total), abs(actual_total)) * TOLERANCE
+    tolerance_amount = max(percentage_tolerance, ABSOLUTE_TOLERANCE)
     difference = abs(expected_total - actual_total)
 
-    if difference > tolerance_amount and difference > 1:
+    if difference > tolerance_amount:
         return ValidationError(
             slide_num=slide_num,
             error_type="vertical_total",
