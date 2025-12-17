@@ -737,9 +737,9 @@ def main():
     st.markdown("""
     <div class="guide-box">
         <div class="guide-title">How to Use</div>
-        <div class="guide-step"><span class="num">1.</span> Export <span class="hl">BulkPlanData</span> from Lumina</div>
-        <div class="guide-step"><span class="num">2.</span> Delete <span class="hl">Media Plans</span> and <span class="hl">Vendor Detail</span> tabs (keep only <span class="hl">Flight</span>)</div>
-        <div class="guide-step"><span class="num">3.</span> Upload the Excel file below</div>
+        <div class="guide-step"><span class="num">1.</span> Export from Lumina: <span class="hl">Flowplan Report</span> or <span class="hl">BulkPlanData</span></div>
+        <div class="guide-step"><span class="num">2.</span> For BulkPlanData: delete <span class="hl">Media Plans</span> and <span class="hl">Vendor Detail</span> tabs (keep <span class="hl">Flight</span>)</div>
+        <div class="guide-step"><span class="num">3.</span> Upload the Excel file below (format auto-detected)</div>
         <div class="guide-step"><span class="num">4.</span> Click <span class="hl">Generate Presentation</span> and download your deck</div>
     </div>
     """, unsafe_allow_html=True)
@@ -762,9 +762,9 @@ def main():
 
     # File upload
     uploaded_file = st.file_uploader(
-        "Upload BulkPlanData Excel file",
+        "Upload Lumina Excel file",
         type=["xlsx"],
-        help="Lumina export file (BulkPlanData_YYYY_MM_DD.xlsx)"
+        help="Flowplan Report or BulkPlanData export (format auto-detected)"
     )
 
     if uploaded_file:
@@ -956,13 +956,16 @@ def main():
             - **GNE Pan Asian TV** rows filtered
             """)
 
-        with st.expander("📄 Required Excel columns"):
-            st.code("""Country / Geography
-Global Masterbrand
-Plan Name
-Media Type
-Net Cost
-Flight Start Date""", language=None)
+        with st.expander("📄 Supported input formats"):
+            st.markdown("""
+            **Flowplan Report** (recommended)
+            - Sheet: `Flowplan` or `Sheet1`
+            - Columns: Country, Global Masterbrand, Campaign Name, Media Type, Cost To Client [Current]
+
+            **BulkPlanData Export**
+            - Sheet: `Flight`
+            - Columns: Plan - Geography, Plan - Brand, Campaign Name(s), Media Type, Net Cost
+            """)
 
     # Footer (always visible - outside if/else block)
     st.markdown("""
