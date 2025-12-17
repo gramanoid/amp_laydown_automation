@@ -339,7 +339,9 @@ class BulkPlanAdapter(InputAdapter):
             for _, month_row in group.iterrows():
                 month = month_row["Month"]
                 if month in MONTHS_ORDER:
-                    row[month] = month_row["Total Cost"]
+                    # BUG FIX: Accumulate monthly values instead of overwriting
+                    # This ensures monthly columns match Total Cost when same month appears multiple times
+                    row[month] += month_row["Total Cost"]
                     total_cost += month_row["Total Cost"]
 
                     if pd.notna(month_row["GRP"]):
@@ -441,6 +443,9 @@ class FlowplanAdapter(InputAdapter):
         # Pivot to final row-per-campaign format
         result_df = self._pivot_to_final_format(agg_df)
 
+        # Filter out zero-cost brand/country combinations
+        result_df = self._exclude_zero_cost_brands(result_df)
+
         return self._ensure_output_schema(result_df)
 
     def _exclude_expert_campaigns(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -464,6 +469,23 @@ class FlowplanAdapter(InputAdapter):
         excluded = initial_count - len(df)
         if excluded > 0:
             self.logger.info("Excluded %s placeholder brand rows (matching %s)", excluded, self.BRAND_FILTER_PATTERN)
+        return df
+
+    def _exclude_zero_cost_brands(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Exclude brand/country combinations where total cost is zero."""
+        if "Total Cost" not in df.columns or "Country" not in df.columns or "Brand" not in df.columns:
+            return df
+
+        # Calculate total cost per brand/country
+        brand_totals = df.groupby(["Country", "Brand"])["Total Cost"].transform("sum")
+
+        # Filter out rows where brand/country total is zero
+        initial_count = len(df)
+        df = df[brand_totals > 0]
+        excluded = initial_count - len(df)
+
+        if excluded > 0:
+            self.logger.info("Excluded %s rows from zero-cost brand/country combinations", excluded)
         return df
 
     def _convert_month_format(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -574,7 +596,9 @@ class FlowplanAdapter(InputAdapter):
             for _, month_row in group.iterrows():
                 month = month_row["Month"]
                 if month in MONTHS_ORDER:
-                    row[month] = month_row["Total Cost"]
+                    # BUG FIX: Accumulate monthly values instead of overwriting
+                    # This ensures monthly columns match Total Cost when same month appears multiple times
+                    row[month] += month_row["Total Cost"]
                     total_cost += month_row["Total Cost"]
 
                     if pd.notna(month_row["GRP"]):

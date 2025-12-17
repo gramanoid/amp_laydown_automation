@@ -169,12 +169,18 @@ def _populate_summary_tiles(slide, template_slide, df, combination_row, excel_pa
     # Note: display product names may be:
     #   1. Renamed (e.g., "Sensodyne Product" from "Sensodyne")
     #   2. Stripped of brand prefix (e.g., "Mouthwash" from "Parodontax Mouthwash")
+    #   3. "Product Summary" - special case, use ALL products for the brand (no product filter)
     product_filter = None
     if " - " in str(brand):
         parts = str(brand).split(" - ", 1)
         actual_brand = parts[0].strip()
         display_product_name = parts[1].strip() if len(parts) > 1 else None
-        if display_product_name:
+
+        # Special case: "Product Summary" is NOT a product - it's the brand aggregate
+        # Skip product filter to include ALL products for this brand
+        if display_product_name and display_product_name.upper() == "PRODUCT SUMMARY":
+            product_filter = None  # Use all products for the brand
+        elif display_product_name:
             # Reverse-map renamed products back to original names for DataFrame filtering
             # e.g., "Parodontax Product" -> "Parodontax"
             product_rename_map = PRODUCT_SPLIT_CONFIG.get("product_rename", {})
@@ -565,6 +571,7 @@ def _populate_toc_slide(toc_slide, prs, toc_entries: list):
             current_market = {
                 "number": entry.get("number", ""),
                 "title": entry.get("title", ""),
+                "spend": entry.get("spend", 0),
                 "brands": []
             }
             markets.append(current_market)
@@ -607,7 +614,7 @@ def _populate_toc_slide(toc_slide, prs, toc_entries: list):
             else:
                 para = col_tf.add_paragraph()
 
-            # Market header - number and name in GREEN
+            # Market header - number and name in GREEN with spend
             para.alignment = PP_ALIGN.LEFT
             para.space_before = Pt(8)
             para.space_after = Pt(1)
@@ -627,6 +634,21 @@ def _populate_toc_slide(toc_slide, prs, toc_entries: list):
             name_run.font.bold = True
             name_run.font.name = FONT_FAMILY_LEGEND
             name_run.font.color.rgb = RGBColor(48, 234, 3)  # Green name
+
+            # Add spend amount (gray, after market name)
+            if market.get('spend', 0) > 0:
+                spend_run = para.add_run()
+                spend_value = market['spend']
+                # Format as £X.XM or £XXXk
+                if spend_value >= 1_000_000:
+                    spend_text = f" (£{spend_value/1_000_000:.1f}M)"
+                else:
+                    spend_text = f" (£{spend_value/1_000:.0f}k)"
+                spend_run.text = spend_text
+                spend_run.font.size = Pt(8)
+                spend_run.font.bold = False
+                spend_run.font.name = FONT_FAMILY_LEGEND
+                spend_run.font.color.rgb = RGBColor(140, 140, 140)  # Gray
 
             # Show ALL brands - Title Case for readability
             all_brands = [b["title"].title() for b in market["brands"]]
@@ -3074,9 +3096,16 @@ def format_number(value, is_budget=False, is_percentage=False, is_grp=False, is_
                 return f"£{int(rounded)}M"
             return f"£{rounded:.2f}M"
 
-        # Values >= 1K expressed in thousands (always whole numbers to minimize width)
+        # Values >= 1K expressed in thousands
+        # Show 1 decimal place for values < 10K when fractional part is significant
+        # to avoid visual inconsistency (e.g., 11 × £2K = £22K but actual TOTAL is £17K)
         if abs_value >= 1_000:
             formatted_val = numeric_value / 1_000.0
+            fractional = abs(formatted_val - round(formatted_val))
+            # Show decimal when: value < 10K AND fractional part >= 0.25
+            if abs_value < 10_000 and fractional >= 0.25:
+                return f"£{formatted_val:.1f}K"
+            # Otherwise round to whole number
             rounded = round(formatted_val)
             return f"£{int(rounded)}K"
 
@@ -4366,12 +4395,13 @@ def create_presentation(template_path, excel_path, output_path, format_type: Inp
                 except:
                     delimiter_slide = prs.slides.add_slide(prs.slide_layouts[0])
 
-                # Record TOC entry
+                # Record TOC entry with spend data
                 toc_entries.append({
                     "level": 1,
                     "number": market_section_num,
                     "title": str(display_market_name).upper(),
-                    "slide_index": len(prs.slides)
+                    "slide_index": len(prs.slides),
+                    "spend": market_investments.get(current_market, {}).get('total', 0)
                 })
 
                 slide_width = prs.slide_width
