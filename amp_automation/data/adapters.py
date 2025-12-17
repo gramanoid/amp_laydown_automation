@@ -374,6 +374,7 @@ class FlowplanAdapter(InputAdapter):
         "Panadol (Adult Cold)": "Panadol C&F",
         "Panadol (Child Pain)": "Panadol Child",
         "Pronamel": "Sensodyne Pronamel",
+        "CAC": "Cac-1000",  # Combine CAC variants into single brand
     }
 
     @classmethod
