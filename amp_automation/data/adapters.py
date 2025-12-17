@@ -377,6 +377,19 @@ class FlowplanAdapter(InputAdapter):
         "CAC": "Cac-1000",  # Combine CAC variants into single brand
     }
 
+    # Country normalization - combine Gulf countries into GNE region
+    COUNTRY_NORMALIZATIONS = {
+        "United Arab Emirates": "GNE",
+        "Kuwait": "GNE",
+        "Qatar": "GNE",
+        "Bahrain": "GNE",
+        "Oman": "GNE",
+        "Iraq": "GNE",
+        "Jordan": "GNE",
+        "Lebanon": "GNE",
+        # Saudi Arabia stays separate
+    }
+
     @classmethod
     def can_handle(cls, excel_path: Path) -> bool:
         """Check if file has Flowplan characteristics (Country.1 and [Current] columns)."""
@@ -433,6 +446,10 @@ class FlowplanAdapter(InputAdapter):
         """Normalize brand name to match config expectations."""
         return self.BRAND_NORMALIZATIONS.get(brand, brand)
 
+    def _normalize_country(self, country: str) -> str:
+        """Normalize country name (e.g., combine Gulf countries into GNE)."""
+        return self.COUNTRY_NORMALIZATIONS.get(country, country)
+
     def _aggregate_to_monthly(self, df: pd.DataFrame) -> pd.DataFrame:
         """Aggregate raw data to monthly level."""
         group_cols = [
@@ -449,7 +466,8 @@ class FlowplanAdapter(InputAdapter):
         for name, group in df.groupby(group_cols):
             country, brand, campaign, year, month, media_type, product = name
 
-            # Normalize brand name to match config expectations
+            # Normalize country and brand names to match config expectations
+            country = self._normalize_country(country)
             brand = self._normalize_brand(brand)
             month = MONTH_ALIAS_MAP.get(month, month)
 
