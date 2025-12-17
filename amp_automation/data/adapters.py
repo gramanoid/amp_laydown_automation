@@ -375,6 +375,8 @@ class FlowplanAdapter(InputAdapter):
         "Panadol (Child Pain)": "Panadol Child",
         "Pronamel": "Sensodyne Pronamel",
         "CAC": "Cac-1000",  # Combine CAC variants into single brand
+        "Corega": "Polident",  # Same product, different regional name
+        # Calpol stays separate (South Africa regional branding)
     }
 
     # Country normalization - combine Gulf countries into GNE region
@@ -387,6 +389,7 @@ class FlowplanAdapter(InputAdapter):
         "Iraq": "GNE",
         "Jordan": "GNE",
         "Lebanon": "GNE",
+        "Morocco": "Maghreb",  # Regional grouping
         # Saudi Arabia stays separate
     }
 
