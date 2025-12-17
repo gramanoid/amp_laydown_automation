@@ -362,21 +362,32 @@ def extract_slide_data(slide, slide_num: int) -> Optional[ExtractedSlideData]:
 # EXPECTED VALUE COMPUTATION
 # ============================================================================
 
-def load_and_prepare_source_data(excel_path: Path) -> pd.DataFrame:
+def load_and_prepare_source_data(excel_path: Path, format_type: str = "auto") -> pd.DataFrame:
     """
     Load source Excel data and prepare for validation.
 
     Applies the same transformations as the presentation generator.
+    Supports both BulkPlanData and Flowplan_Summaries formats.
     """
     from amp_automation.config.loader import load_master_config
     from amp_automation.data.ingestion import load_and_prepare_data
+    from amp_automation.data.adapters import InputFormat
+
+    # Map format string to enum
+    format_map = {
+        "auto": InputFormat.AUTO,
+        "bulkplan": InputFormat.BULK_PLAN,
+        "flowplan": InputFormat.FLOWPLAN,
+    }
+    input_format = format_map.get(format_type.lower(), InputFormat.AUTO)
 
     # Load config using the helper function
     config_path = Path(__file__).parent.parent.parent / "config" / "master_config.json"
     config = load_master_config(config_path)
 
-    # Load data using the ingestion module
-    dataset = load_and_prepare_data(str(excel_path), config, logger)
+    # Load data using the ingestion module with format type
+    dataset = load_and_prepare_data(str(excel_path), config, logger, format_type=input_format)
+    logger.info(f"Source format detected: {dataset.source_format}")
 
     return dataset.frame
 

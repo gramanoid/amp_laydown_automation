@@ -525,7 +525,7 @@ def _create_toc_placeholder(prs):
     for para in title_tf.paragraphs:
         para.alignment = PP_ALIGN.LEFT
         for run in para.runs:
-            run.font.size = Pt(32)
+            run.font.size = Pt(36)
             run.font.bold = True
             run.font.name = FONT_FAMILY_LEGEND
             run.font.color.rgb = RGBColor(48, 234, 3)
@@ -534,9 +534,9 @@ def _create_toc_placeholder(prs):
     accent_line = toc_slide.shapes.add_shape(
         MSO_SHAPE.RECTANGLE,
         left=Inches(0.25),
-        top=Inches(0.75),
-        width=Inches(2.0),
-        height=Inches(0.03)
+        top=Inches(0.85),
+        width=Inches(2.5),
+        height=Inches(0.04)
     )
     accent_line.fill.solid()
     accent_line.fill.fore_color.rgb = RGBColor(48, 234, 3)
@@ -577,8 +577,8 @@ def _populate_toc_slide(toc_slide, prs, toc_entries: list):
     # Multi-column layout - 3 columns
     num_columns = 3
     column_width = (slide_width - Inches(0.5)) / num_columns
-    start_y = Inches(0.9)
-    column_height = slide_height - Inches(1.0)
+    start_y = Inches(1.0)  # Below title and accent line
+    column_height = slide_height - Inches(1.1)
 
     # Distribute markets across columns evenly
     markets_per_column = (len(markets) + num_columns - 1) // num_columns
@@ -607,26 +607,26 @@ def _populate_toc_slide(toc_slide, prs, toc_entries: list):
             else:
                 para = col_tf.add_paragraph()
 
-            # Market header - number in GREEN, name in WHITE
+            # Market header - number and name in GREEN
             para.alignment = PP_ALIGN.LEFT
-            para.space_before = Pt(14)
-            para.space_after = Pt(3)
+            para.space_before = Pt(8)
+            para.space_after = Pt(1)
 
-            # Add number run (green)
+            # Add number run (green) - number already has period from source
             num_run = para.add_run()
             num_run.text = f"{market['number']} "
-            num_run.font.size = Pt(14)
+            num_run.font.size = Pt(9)
             num_run.font.bold = True
             num_run.font.name = FONT_FAMILY_LEGEND
             num_run.font.color.rgb = RGBColor(48, 234, 3)  # Green number
 
-            # Add name run (white)
+            # Add name run (green, uppercase)
             name_run = para.add_run()
             name_run.text = market['title']
-            name_run.font.size = Pt(14)
+            name_run.font.size = Pt(9)
             name_run.font.bold = True
             name_run.font.name = FONT_FAMILY_LEGEND
-            name_run.font.color.rgb = RGBColor(255, 255, 255)  # White name
+            name_run.font.color.rgb = RGBColor(48, 234, 3)  # Green name
 
             # Show ALL brands - Title Case for readability
             all_brands = [b["title"].title() for b in market["brands"]]
@@ -636,14 +636,14 @@ def _populate_toc_slide(toc_slide, prs, toc_entries: list):
                 brand_para = col_tf.add_paragraph()
                 brand_para.text = brands_text
                 brand_para.alignment = PP_ALIGN.LEFT
-                brand_para.space_before = Pt(2)
-                brand_para.space_after = Pt(10)  # More space after brands
+                brand_para.space_before = Pt(0)
+                brand_para.space_after = Pt(4)  # Compact spacing
 
                 for run in brand_para.runs:
-                    run.font.size = Pt(10)  # Slightly larger for readability
+                    run.font.size = Pt(7)  # Compact for dense content
                     run.font.bold = False
                     run.font.name = FONT_FAMILY_LEGEND
-                    run.font.color.rgb = RGBColor(160, 160, 160)  # Lighter gray for contrast
+                    run.font.color.rgb = RGBColor(180, 180, 180)  # Light gray
 
     logger.info(f"Populated TOC slide with {len(markets)} markets")
 
@@ -685,7 +685,7 @@ def _create_info_slide(prs):
     for para in title_tf.paragraphs:
         para.alignment = PP_ALIGN.LEFT
         for run in para.runs:
-            run.font.size = Pt(32)
+            run.font.size = Pt(36)
             run.font.bold = True
             run.font.name = FONT_FAMILY_LEGEND
             run.font.color.rgb = RGBColor(48, 234, 3)
@@ -694,9 +694,9 @@ def _create_info_slide(prs):
     accent_line = info_slide.shapes.add_shape(
         MSO_SHAPE.RECTANGLE,
         left=Inches(0.25),
-        top=Inches(0.75),
-        width=Inches(3.5),
-        height=Inches(0.03)
+        top=Inches(0.85),
+        width=Inches(4.0),
+        height=Inches(0.04)
     )
     accent_line.fill.solid()
     accent_line.fill.fore_color.rgb = RGBColor(48, 234, 3)
@@ -705,9 +705,9 @@ def _create_info_slide(prs):
     # ═══ LEFT COLUMN: NAVIGATION ═══
     nav_box = info_slide.shapes.add_textbox(
         left=Inches(0.25),
-        top=Inches(0.95),
+        top=Inches(1.05),
         width=Inches(4.6),
-        height=Inches(3.2)
+        height=Inches(3.0)
     )
     nav_tf = nav_box.text_frame
     nav_tf.word_wrap = True
@@ -756,9 +756,9 @@ def _create_info_slide(prs):
     # ═══ RIGHT COLUMN: DATA ═══
     data_box = info_slide.shapes.add_textbox(
         left=Inches(5.0),
-        top=Inches(0.95),
+        top=Inches(1.05),
         width=Inches(4.6),
-        height=Inches(3.2)
+        height=Inches(3.0)
     )
     data_tf = data_box.text_frame
     data_tf.word_wrap = True
@@ -771,7 +771,7 @@ def _create_info_slide(prs):
         run.font.name = FONT_FAMILY_LEGEND
 
     data_items = [
-        ("Source", "Lumina BulkPlanData export (Excel)"),
+        ("Source", "Lumina export (Excel)"),
         ("Table", "Monthly spend by campaign & channel"),
         ("Media Share", "TV / Digital / OOH / Other %"),
         ("Quarterly Split", "Q1-Q4 budget distribution"),
@@ -1419,6 +1419,7 @@ from amp_automation.data import (
     get_month_specific_tv_metrics,
     load_and_prepare_data as modular_load_and_prepare_data,
 )
+from amp_automation.data.adapters import InputFormat
 from amp_automation.presentation.charts import (
     ChartStyleContext,
     add_pie_chart as presentation_add_pie_chart,
@@ -3104,9 +3105,20 @@ def format_number(value, is_budget=False, is_percentage=False, is_grp=False, is_
     formatted_str = f"{formatted_val:.1f}{suffix}"
     return formatted_str
 
-def load_and_prepare_data(excel_path):  # backward compatibility proxy
+# Module-level format type for the current session
+_CURRENT_FORMAT_TYPE: InputFormat = InputFormat.AUTO
+
+
+def set_input_format(format_type: InputFormat) -> None:
+    """Set the input format type for the current session."""
+    global _CURRENT_FORMAT_TYPE
+    _CURRENT_FORMAT_TYPE = format_type
+
+
+def load_and_prepare_data(excel_path, format_type: InputFormat = None):  # backward compatibility proxy
     active_logger = logger if 'logger' in globals() and logger is not None else logging.getLogger("amp_automation.data")
-    data_set = modular_load_and_prepare_data(excel_path, MASTER_CONFIG, active_logger)
+    effective_format = format_type if format_type is not None else _CURRENT_FORMAT_TYPE
+    data_set = modular_load_and_prepare_data(excel_path, MASTER_CONFIG, active_logger, format_type=effective_format)
     return data_set.frame
 
 def _prepare_main_table_data_detailed(df, region, masterbrand, year=None, excel_path=None):
@@ -4187,8 +4199,11 @@ def _populate_slide_content(new_slide, prs, combination_row, slide_title_suffix,
         "notes": None,
     }
 
-def create_presentation(template_path, excel_path, output_path):
+def create_presentation(template_path, excel_path, output_path, format_type: InputFormat = None):
     """Creates a PowerPoint presentation based on a template and Excel data."""
+    # Set module-level format type for this session
+    if format_type is not None:
+        set_input_format(format_type)
     logger.info(f"Starting presentation creation using template: {template_path}")
     try:
         prs = Presentation(template_path)
@@ -5462,7 +5477,7 @@ def _unit_test__no_orphan_self():
 _unit_test__no_orphan_self()
 
 
-def build_presentation(template_path, excel_path, output_path):
+def build_presentation(template_path, excel_path, output_path, format_type: InputFormat = None):
     """Backward-compatible wrapper around ``create_presentation``."""
 
-    return create_presentation(template_path, excel_path, output_path)
+    return create_presentation(template_path, excel_path, output_path, format_type=format_type)

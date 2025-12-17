@@ -12,6 +12,7 @@ from typing import Iterable, Sequence
 from amp_automation.config import Config, load_master_config
 from amp_automation.utils import configure_logger
 from amp_automation.presentation.postprocess.cli import PostProcessorCLI
+from amp_automation.data.adapters import InputFormat
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -52,6 +53,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override the log directory base defined in the configuration.",
     )
     parser.add_argument(
+        "--format",
+        choices=["auto", "bulkplan", "flowplan"],
+        default="auto",
+        help="Input file format: 'auto' (detect), 'bulkplan' (BulkPlanData), 'flowplan' (Flowplan_Summaries). Default: auto.",
+    )
+    parser.add_argument(
         "--list-templates",
         action="store_true",
         help="List available .pptx templates from configured directories and exit.",
@@ -66,6 +73,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional output path (CSV) for reconciliation results. Defaults to the run directory.",
     )
     return parser
+
+
+def _parse_format(format_str: str) -> InputFormat:
+    """Convert format string to InputFormat enum."""
+    format_map = {
+        "auto": InputFormat.AUTO,
+        "bulkplan": InputFormat.BULK_PLAN,
+        "flowplan": InputFormat.FLOWPLAN,
+    }
+    return format_map.get(format_str, InputFormat.AUTO)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -118,7 +135,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     presentation_assembly.logger = logger
     presentation_assembly.configure(config)
 
+    # Parse input format
+    format_type = _parse_format(args.format)
     logger.info("Starting presentation build")
+    logger.info("Input format: %s", format_type.value)
     logger.debug("Excel path: %s", paths.excel)
     logger.debug("Template path: %s", paths.template)
     logger.debug("Output file: %s", paths.output_file)
@@ -127,6 +147,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         template_path=str(paths.template),
         excel_path=str(paths.excel),
         output_path=str(paths.output_file),
+        format_type=format_type,
     )
 
     if success:
