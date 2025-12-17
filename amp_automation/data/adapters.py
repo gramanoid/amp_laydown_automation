@@ -390,8 +390,19 @@ class FlowplanAdapter(InputAdapter):
         "Jordan": "GNE",
         "Lebanon": "GNE",
         "Morocco": "Maghreb",  # Regional grouping
+        # Small African markets → SSA
+        "Cameroon": "SSA",
+        "Senegal": "SSA",
+        "Mauritius": "SSA",
+        "Uganda": "SSA",
+        "Mozambique": "SSA",
+        # Ivory Coast naming
+        "Cote D'Ivoire": "Ivory Coast",
         # Saudi Arabia stays separate
     }
+
+    # Brands to filter out (Expert/placeholder brands with -X suffix)
+    BRAND_FILTER_PATTERN = r'\([A-Z]+-X\)$'  # Matches (OH-X), (RH-X), (PM-X), (W-X), etc.
 
     @classmethod
     def can_handle(cls, excel_path: Path) -> bool:
@@ -418,6 +429,9 @@ class FlowplanAdapter(InputAdapter):
         # Filter out Expert campaigns
         raw_df = self._exclude_expert_campaigns(raw_df)
 
+        # Filter out placeholder brands with (-X) suffix
+        raw_df = self._exclude_placeholder_brands(raw_df)
+
         # Convert Month datetime to string format
         raw_df = self._convert_month_format(raw_df)
 
@@ -437,6 +451,19 @@ class FlowplanAdapter(InputAdapter):
         df = df[df["Expert"].astype(str).str.lower() != "yes"]
         excluded = initial_count - len(df)
         self.logger.info("Excluded %s Expert campaign rows", excluded)
+        return df
+
+    def _exclude_placeholder_brands(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Exclude brands with (-X) suffix pattern like (OH-X), (RH-X), (PM-X)."""
+        import re
+        if "Brand" not in df.columns:
+            return df
+        initial_count = len(df)
+        pattern = re.compile(self.BRAND_FILTER_PATTERN)
+        df = df[~df["Brand"].astype(str).apply(lambda x: bool(pattern.search(x)))]
+        excluded = initial_count - len(df)
+        if excluded > 0:
+            self.logger.info("Excluded %s placeholder brand rows (matching %s)", excluded, self.BRAND_FILTER_PATTERN)
         return df
 
     def _convert_month_format(self, df: pd.DataFrame) -> pd.DataFrame:
