@@ -368,6 +368,14 @@ class BulkPlanAdapter(InputAdapter):
 class FlowplanAdapter(InputAdapter):
     """Adapter for Flowplan_Summaries Excel exports."""
 
+    # Brand normalization mapping - aligns Flowplan names with config expectations
+    BRAND_NORMALIZATIONS = {
+        "Panadol (Adult Pain)": "Panadol Pain",
+        "Panadol (Adult Cold)": "Panadol C&F",
+        "Panadol (Child Pain)": "Panadol Child",
+        "Pronamel": "Sensodyne Pronamel",
+    }
+
     @classmethod
     def can_handle(cls, excel_path: Path) -> bool:
         """Check if file has Flowplan characteristics (Country.1 and [Current] columns)."""
@@ -420,6 +428,10 @@ class FlowplanAdapter(InputAdapter):
             df["Month"] = pd.to_datetime(df["Month"]).dt.strftime("%b")
         return df
 
+    def _normalize_brand(self, brand: str) -> str:
+        """Normalize brand name to match config expectations."""
+        return self.BRAND_NORMALIZATIONS.get(brand, brand)
+
     def _aggregate_to_monthly(self, df: pd.DataFrame) -> pd.DataFrame:
         """Aggregate raw data to monthly level."""
         group_cols = [
@@ -436,6 +448,8 @@ class FlowplanAdapter(InputAdapter):
         for name, group in df.groupby(group_cols):
             country, brand, campaign, year, month, media_type, product = name
 
+            # Normalize brand name to match config expectations
+            brand = self._normalize_brand(brand)
             month = MONTH_ALIAS_MAP.get(month, month)
 
             if not country or not brand or not campaign:
