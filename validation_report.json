@@ -1,0 +1,11 @@
+{
+  "timestamp": "2025-12-16T17:19:40.914496",
+  "pptx_path": "output/presentations/run_20251216_165857/AMP_Laydowns_161225.pptx",
+  "excel_path": "input/BulkPlanData_2025_12_11.xlsx",
+  "total_slides": 290,
+  "slides_validated": 141,
+  "fields_checked": 198,
+  "errors": [],
+  "warnings": [],
+  "sampling_strategy": {}
+}
