@@ -1,0 +1,11 @@
+{
+  "timestamp": "2025-12-17T12:26:39.572790",
+  "pptx_path": "output/presentations/run_20251217_121749/AMP_Laydowns_171225.pptx",
+  "excel_path": "input/Flowplan_Summaries_MEA_2025_12_17.xlsx",
+  "total_slides": 316,
+  "slides_validated": 148,
+  "fields_checked": 195,
+  "errors": [],
+  "warnings": [],
+  "sampling_strategy": {}
+}

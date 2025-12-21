@@ -1145,13 +1145,16 @@ def _format_quarterly_budget(value_in_thousands):
     Format quarterly budget value intelligently.
 
     Converts values >= 1000K to M format (e.g., 1211K -> 1.2M).
-    Keeps values < 1000K in K format (e.g., 300K -> 300K).
+    Keeps values < 1000K in K format with appropriate precision:
+    - Values >= 10K: show as integer (e.g., 300K)
+    - Values 1K-10K: show one decimal (e.g., 4.5K)
+    - Values < 1K: show one decimal (e.g., 0.2K)
 
     Args:
         value_in_thousands: Value already scaled to thousands (e.g., 1211 for £1,211K)
 
     Returns:
-        Formatted string (e.g., "£1.2M" or "£300K")
+        Formatted string (e.g., "£1.2M" or "£300K" or "£4.5K")
     """
     try:
         numeric_value = float(value_in_thousands)
@@ -1164,9 +1167,18 @@ def _format_quarterly_budget(value_in_thousands):
             if rounded == int(rounded):
                 return f"£{int(rounded)}M"
             return f"£{rounded}M"
-        else:
-            # Otherwise display as K
+        elif numeric_value >= 10:
+            # Values 10K-999K: show as integer K
             return f"£{int(round(numeric_value))}K"
+        elif numeric_value >= 0.05:
+            # Values 0.05K-10K: show one decimal place for precision
+            rounded = round(numeric_value, 1)
+            if rounded == int(rounded):
+                return f"£{int(rounded)}K"
+            return f"£{rounded}K"
+        else:
+            # Very small values (< £50): show as £0K
+            return "£0K"
     except (ValueError, TypeError):
         return f"£{value_in_thousands}K"
 

@@ -1,11 +1,15 @@
 {
-  "timestamp": "2025-12-17T10:19:11.078886",
-  "pptx_path": "/Users/alexgrama/Downloads/AMP_Laydowns_Flowplan_171225.pptx",
-  "excel_path": "input/Flowplan_Summaries_MEA_2025_12_17.xlsx",
-  "total_slides": 274,
-  "slides_validated": 127,
-  "fields_checked": 187,
+  "timestamp": "2025-12-17T12:23:58.021990",
+  "pptx_path": "output/presentations/run_20251217_121749/AMP_Laydowns_171225.pptx",
+  "total_slides": 316,
+  "slides_with_media_shares": 143,
+  "fields_checked": 429,
   "errors": [],
   "warnings": [],
-  "sampling_strategy": {}
+  "test_results": {
+    "no_template_defaults": true,
+    "all_sums_100": true,
+    "no_negative_values": true,
+    "product_summary_computed": true
+  }
 }

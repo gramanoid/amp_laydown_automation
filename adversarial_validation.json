@@ -1,0 +1,24 @@
+{
+  "timestamp": "2025-12-17T13:07:52.060016",
+  "pptx_path": "output/presentations/run_20251217_130600/AMP_Laydowns_171225.pptx",
+  "excel_path": "input/Flowplan_Summaries_MEA_2025_12_17.xlsx",
+  "total_slides": 316,
+  "slides_validated": 148,
+  "total_fields": 43647,
+  "total_discrepancies": 0,
+  "errors": [],
+  "warnings": [],
+  "slide_results": [],
+  "sampling_coverage": {
+    "source_combinations": 54,
+    "validated_combinations": 61,
+    "coverage_percent": 113.0
+  },
+  "adversarial_tests": {
+    "template_defaults": 0,
+    "percentage_sums": 0,
+    "negative_values": 0,
+    "table_consistency": 0
+  },
+  "passed": true
+}

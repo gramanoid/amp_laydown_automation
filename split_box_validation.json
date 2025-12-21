@@ -1,0 +1,58 @@
+{
+  "timestamp": "2025-12-17T17:32:41.213644",
+  "pptx_path": "output/presentations/run_20251217_172239/AMP_Laydowns_171225.pptx",
+  "excel_path": "input/Flowplan_Summaries_MEA_2025_12_17.xlsx",
+  "summary": {
+    "total_slides": 316,
+    "slides_with_split_boxes": 143,
+    "fields_checked": 1430,
+    "errors": 0,
+    "warnings": 1,
+    "passed": 1429,
+    "status": "PASSED"
+  },
+  "errors": [],
+  "warnings": [
+    {
+      "slide": 223,
+      "title": "EGYPT - SENSODYNE - RAPID",
+      "category": "quarter",
+      "field": "q3",
+      "actual": 300.0,
+      "expected": 318.22435897435895,
+      "diff": -18.22435897435895,
+      "unit": "\u00a3",
+      "source": {
+        "market": "EGYPT",
+        "brand": "SENSODYNE",
+        "product": "RAPID",
+        "rows_matched": 1
+      }
+    }
+  ],
+  "sampling_coverage": {
+    "unique_combinations": 143,
+    "combinations": [
+      "TURKEY|SENSODYNE|KIDS",
+      "SOUTH AFRICA|CALPOL (ADULT PAIN)|",
+      "TURKEY|SENSODYNE|CLINICAL REPAIR",
+      "KENYA|SENSODYNE|",
+      "SOUTH AFRICA|CALPOL (ADULT PAIN)|CALPOL PRODUCT",
+      "EGYPT|PANADOL C&F|PRODUCT SUMMARY",
+      "SAUDI ARABIA|SENSODYNE|COMPLETE PROTECTION",
+      "SAUDI ARABIA|OTRIVIN|",
+      "GNE|SENSODYNE PRONAMEL|",
+      "IVORY COAST|PANADOL PAIN|PRODUCT SUMMARY",
+      "PAKISTAN|PANADOL PAIN|PANADOL",
+      "SAUDI ARABIA|SENSODYNE|CLINICAL WHITE",
+      "PAKISTAN|PANADOL PAIN|PANADOL EXTRA",
+      "EGYPT|SENSODYNE|SENSODYNE PRODUCT",
+      "KENYA|SENSODYNE|REPAIR AND PROTECT",
+      "GNE|PANADOL PAIN|PANADOL MIGRAINE",
+      "TURKEY|SENSODYNE|SENSITIVITY AND ENAMEL",
+      "EGYPT|SENSODYNE|",
+      "KENYA|SENSODYNE|SENSODYNE PRODUCT",
+      "IVORY COAST|SENSODYNE|"
+    ]
+  }
+}

@@ -582,12 +582,15 @@
         "Panadol C&F",
         "Parodontax",
         "Sensodyne",
-        "Sensodyne Pronamel"
+        "Sensodyne Pronamel",
+        "Calpol (Adult Pain)",
+        "Calpol (Child Pain)"
       ],
       "product_rename": {
         "_comment": "Rename products that have same name as brand to avoid confusion",
         "Parodontax": "Parodontax Product",
-        "Sensodyne": "Sensodyne Product"
+        "Sensodyne": "Sensodyne Product",
+        "Calpol": "Calpol Product"
       },
       "delimiter_style": {
         "background_color": [85, 85, 85],
